@@ -1,0 +1,35 @@
+# Development-specific docker-compose override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  # Override app service for development
+  app:
+    build:
+      context: .
+      target: development
+    command: npm run dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+    environment:
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port
+    
+  # Add database admin tool
+  adminer:
+    image: adminer:latest
+    container_name: dms-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - dms-network
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
