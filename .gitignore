@@ -103,3 +103,7 @@ temp/
 # Local storage (uploaded files)
 storage/
 uploads/
+
+# Test files
+test-report.json
+tests/temp-storage/
