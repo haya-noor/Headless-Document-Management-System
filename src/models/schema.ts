@@ -32,8 +32,8 @@ export const documents = pgTable('documents', {
   originalName: varchar('original_name', { length: 255 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
   size: integer('size').notNull(),
-  s3Key: varchar('s3_key', { length: 500 }).notNull(), // S3 object key
-  s3Bucket: varchar('s3_bucket', { length: 100 }).notNull(),
+  storageKey: varchar('storage_key', { length: 500 }).notNull(), // Storage key/path
+  storageProvider: varchar('storage_provider', { length: 20 }).notNull().default('local'), // Storage provider type
   checksum: varchar('checksum', { length: 64 }), // SHA-256 hash
   tags: jsonb('tags').$type<string[]>().default([]), // Array of tags
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}), // Key-value metadata
@@ -55,8 +55,8 @@ export const documentVersions = pgTable('document_versions', {
   filename: varchar('filename', { length: 255 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
   size: integer('size').notNull(),
-  s3Key: varchar('s3_key', { length: 500 }).notNull(),
-  s3Bucket: varchar('s3_bucket', { length: 100 }).notNull(),
+  storageKey: varchar('storage_key', { length: 500 }).notNull(),
+  storageProvider: varchar('storage_provider', { length: 20 }).notNull().default('local'),
   checksum: varchar('checksum', { length: 64 }),
   tags: jsonb('tags').$type<string[]>().default([]),
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}),

@@ -13,6 +13,9 @@ cp env.example .env
 
 # Configure your environment variables in .env
 
+# Start PostgreSQL (optional - you can use local PostgreSQL too)
+docker-compose up -d postgres
+
 # Generate and run database migrations
 npm run db:generate
 npm run db:migrate
@@ -37,15 +40,16 @@ Server will be available at `http://localhost:3000`
 - **🔧 Configuration Management**: Environment-based configuration with validation
 - **📊 Health Checks**: System health monitoring endpoints
 - **🚦 Error Handling**: Centralized error handling with consistent API responses
+- **📁 Local File Storage**: Secure local file storage with scalable architecture
 - **📚 API Documentation**: Comprehensive documentation with examples
 
 ### 🚧 To Be Implemented
 
-- **📁 Document Upload & Storage**: S3-compatible file upload with metadata
+- **📁 Document Upload & Storage**: Complete file upload API with metadata
 - **🔍 Advanced Search**: Filter by tags, metadata, filename, content-type
 - **📄 Document Versioning**: Immutable file versions with audit trail
 - **🔒 Document Permissions**: Granular read/write/delete permissions
-- **🔗 Pre-signed URLs**: Secure, time-limited download links
+- **🔗 Download Links**: Secure, time-limited download links
 - **📊 Pagination**: Efficient data retrieval with sorting
 
 ## 🏗️ Architecture
@@ -57,6 +61,8 @@ src/
 ├── config/           # Configuration and database setup
 ├── controllers/      # Thin controllers (validate input, call services)
 ├── services/         # Business logic layer
+│   ├── interfaces/   # Service interfaces for scalability
+│   └── *.service.ts  # Service implementations
 ├── repositories/     # Data access layer
 │   ├── interfaces/   # Repository contracts
 │   └── implementations/ # Concrete implementations
@@ -71,16 +77,16 @@ src/
 
 - **Repository Pattern**: Clean data access abstraction
 - **Service Layer**: Business logic separation
+- **Factory Pattern**: Scalable storage service creation
 - **Dependency Injection**: Loose coupling between components
-- **Factory Pattern**: Instance creation management
-- **Singleton Pattern**: Database connection management
+- **Interface Segregation**: Easy switching between implementations
 
 ## 🛠️ Technology Stack
 
 - **Runtime**: Node.js / Bun.js
 - **Framework**: Express.js with TypeScript
 - **Database**: PostgreSQL with Drizzle ORM
-- **Storage**: S3-compatible (AWS S3, MinIO, GCS)
+- **Storage**: Local filesystem (easily replaceable with S3/MinIO/GCS)
 - **Authentication**: JWT with bcrypt password hashing
 - **Validation**: Zod schemas
 - **Security**: Helmet.js, CORS, rate limiting
@@ -96,13 +102,18 @@ src/
 - `PUT /api/v1/auth/password` - Change password
 - `POST /api/v1/auth/logout` - User logout
 
+### File Operations
+- `GET /api/v1/files/:key` - Serve file
+- `GET /api/v1/files/download/:key` - Download file with custom filename
+- `GET /api/v1/files/:key/info` - Get file information
+- `DELETE /api/v1/files/:key` - Delete file (admin only)
+
 ### Documents (Planned)
 - `GET /api/v1/documents` - List documents with pagination
 - `POST /api/v1/documents` - Upload document
 - `GET /api/v1/documents/:id` - Get document details
 - `PUT /api/v1/documents/:id` - Update document metadata
 - `DELETE /api/v1/documents/:id` - Delete document
-- `GET /api/v1/documents/:id/download` - Download document
 
 ### System
 - `GET /health` - Health check endpoint
@@ -124,12 +135,9 @@ DATABASE_URL=postgresql://user:password@localhost:5432/document_management
 JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRES_IN=24h
 
-# AWS S3
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_REGION=us-east-1
-AWS_S3_BUCKET=your-bucket-name
-AWS_S3_ENDPOINT=http://localhost:9000  # For MinIO
+# Storage
+STORAGE_PROVIDER=local
+LOCAL_STORAGE_PATH=./storage
 
 # File Upload
 MAX_FILE_SIZE=10485760  # 10MB
@@ -142,16 +150,50 @@ MAX_PAGE_SIZE=100
 
 ## 🗄️ Database Setup
 
+### Option 1: Docker PostgreSQL (Recommended)
+```bash
+# Start PostgreSQL with Docker
+docker-compose up -d postgres
+
+# Optional: Start database admin tool
+docker-compose --profile admin up -d adminer
+# Access at http://localhost:8081
+```
+
+### Option 2: Local PostgreSQL
 1. **Install PostgreSQL**
 2. **Create database**:
    ```sql
    CREATE DATABASE document_management;
    ```
-3. **Run migrations**:
-   ```bash
-   npm run db:generate
-   npm run db:migrate
-   ```
+3. **Update DATABASE_URL in .env**
+
+### Run Migrations
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+## 📁 File Storage
+
+The system uses **local file storage** by default, which stores files in the `./storage` directory. The architecture is designed to be easily scalable to cloud storage:
+
+### Current Implementation
+- **Local Storage**: Files stored in `./storage/documents/`
+- **Metadata**: JSON metadata files alongside each file
+- **Security**: File serving through controlled API endpoints
+
+### Future Scalability
+The storage service uses an interface-based design that allows easy switching to:
+- **AWS S3**: Amazon Simple Storage Service
+- **MinIO**: S3-compatible object storage
+- **Google Cloud Storage**: Google's cloud storage
+- **Azure Blob Storage**: Microsoft's cloud storage
+
+To switch storage providers in the future, simply:
+1. Implement the `IStorageService` interface
+2. Update the `StorageServiceFactory`
+3. Change `STORAGE_PROVIDER` environment variable
 
 ## 🔐 Security Features
 
@@ -161,7 +203,7 @@ MAX_PAGE_SIZE=100
 - **RBAC**: Role-based access control (Admin, User)
 - **Security Headers**: Helmet.js for security headers
 - **CORS Protection**: Configurable cross-origin requests
-- **Request Timeout**: Protection against hanging requests
+- **File Access Control**: Secure file serving through API endpoints
 - **Audit Logging**: Complete audit trail for security events
 
 ## 📊 Available Scripts
@@ -218,16 +260,16 @@ curl http://localhost:3000/health
 This project teaches:
 
 ### TypeScript & Node.js
-- Advanced TypeScript features (generics, utility types, decorators)
-- Node.js concurrency and event loop understanding
-- File and stream handling
+- Advanced TypeScript features (generics, utility types, interfaces)
+- Node.js file system operations and streams
 - Error handling and debugging
+- Async/await patterns
 
 ### Clean Architecture
 - Separation of concerns
 - Dependency inversion principle
 - Repository and service patterns
-- Domain-driven design principles
+- Interface-based design for scalability
 
 ### Database & ORM
 - PostgreSQL database design
@@ -245,31 +287,29 @@ This project teaches:
 - RESTful API principles
 - Request/response patterns
 - Error handling standards
-- API documentation
+- File serving and downloads
 
-### DevOps & Deployment
-- Environment configuration
-- Database migrations
-- Production deployment considerations
-- Monitoring and logging
+### Storage Architecture
+- Local file storage implementation
+- Interface-based design for scalability
+- Metadata management
+- File access control
 
 ## 🚀 Next Steps
 
-1. **Implement Document Upload**: Add file upload functionality with S3 storage
-2. **Add Document Search**: Implement advanced filtering and search
-3. **Document Permissions**: Add granular permission system
-4. **File Versioning**: Implement immutable file versions
-5. **Pre-signed URLs**: Add secure download links
+1. **Fix App Startup**: Resolve database connection timing issue
+2. **Implement Document Upload**: Add complete file upload API
+3. **Add Document Search**: Implement advanced filtering and search
+4. **Document Permissions**: Add granular permission system
+5. **File Versioning**: Implement immutable file versions
 6. **Admin Dashboard**: Create admin management endpoints
 7. **Testing Suite**: Add comprehensive test coverage
-8. **API Rate Limiting**: Implement request rate limiting
-9. **Caching Layer**: Add Redis caching for performance
-10. **Monitoring**: Add metrics and monitoring
+8. **Cloud Storage**: Migrate to S3-compatible storage when needed
 
 ## 📝 Prerequisites Knowledge
 
 - **TypeScript**: Custom types, interfaces, generics, utility types
-- **Node.js**: Event loop, concurrency, file/stream handling
+- **Node.js**: File system, streams, event loop, concurrency
 - **Functional Programming**: Composition, currying, higher-order functions
 - **12 Factor App**: Configuration, dependencies, processes
 - **Database Design**: Normalization, relationships, indexing
@@ -286,8 +326,7 @@ This project teaches:
 ## 📄 Documentation
 
 - [API Documentation](./API_DOCUMENTATION.md) - Complete API reference
-- [Architecture Guide](./docs/architecture.md) - System architecture details
-- [Deployment Guide](./docs/deployment.md) - Production deployment guide
+- [Git Strategy](./GIT_STRATEGY.md) - Branching and development workflow
 
 ## 📞 Support
 
@@ -298,3 +337,5 @@ This project teaches:
 ---
 
 **Built with ❤️ for learning Clean Architecture and Modern TypeScript Development**
+
+*Ready for local development with easy scalability to cloud storage when needed.*

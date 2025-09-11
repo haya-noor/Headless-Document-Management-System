@@ -46,14 +46,19 @@ export const config = {
     expiresIn: getEnvVar('JWT_EXPIRES_IN', '24h'),
   },
 
-  // AWS S3 configuration
-  aws: {
-    accessKeyId: getEnvVar('AWS_ACCESS_KEY_ID'),
-    secretAccessKey: getEnvVar('AWS_SECRET_ACCESS_KEY'),
-    region: getEnvVar('AWS_REGION', 'us-east-1'),
+  // Storage configuration
+  storage: {
+    provider: getEnvVar('STORAGE_PROVIDER', 'local') as 'local' | 's3' | 'gcs' | 'azure',
+    local: {
+      storagePath: getEnvVar('LOCAL_STORAGE_PATH', './storage'),
+    },
+    // Future S3 configuration (not used currently)
     s3: {
-      bucket: getEnvVar('AWS_S3_BUCKET'),
-      endpoint: process.env.AWS_S3_ENDPOINT, // Optional for local development
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+      region: process.env.AWS_REGION || 'us-east-1',
+      bucket: process.env.AWS_S3_BUCKET || '',
+      endpoint: process.env.AWS_S3_ENDPOINT, // For MinIO compatibility
     },
   },
 
@@ -87,9 +92,6 @@ export function validateConfig(): void {
   const requiredVars = [
     'DATABASE_URL',
     'JWT_SECRET',
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS_S3_BUCKET',
   ];
 
   const missingVars = requiredVars.filter(
@@ -115,4 +117,4 @@ export function validateConfig(): void {
 }
 
 // Export individual config sections for convenience
-export const { server, database, jwt, aws, upload, pagination, security } = config;
+export const { server, database, jwt, storage, upload, pagination, security } = config;

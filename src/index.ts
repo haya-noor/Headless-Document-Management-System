@@ -17,6 +17,7 @@ import {
 } from './middleware';
 import { authenticate, adminOnly, authenticatedUsers } from './middleware/auth';
 import { authRoutes } from './controllers/auth.controller';
+import { fileRoutes } from './controllers/file.controller';
 import { Logger } from './middleware/logging';
 
 /**
@@ -111,6 +112,12 @@ class Application {
     apiRouter.put('/auth/profile', authenticate, authRoutes.updateProfile);
     apiRouter.put('/auth/password', authenticate, ...authRoutes.changePassword);
     apiRouter.post('/auth/refresh', authenticate, authRoutes.refreshToken);
+
+    // File serving routes (public for file access)
+    apiRouter.get('/files/:key', fileRoutes.serveFile);
+    apiRouter.get('/files/download/:key', fileRoutes.downloadFile);
+    apiRouter.get('/files/:key/info', authenticate, fileRoutes.getFileInfo);
+    apiRouter.delete('/files/:key', authenticate, adminOnly, fileRoutes.deleteFile);
 
     // Document routes (will be implemented)
     apiRouter.get('/documents', authenticate, this.placeholderHandler('GET /documents'));

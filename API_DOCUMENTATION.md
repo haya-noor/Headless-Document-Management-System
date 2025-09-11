@@ -25,7 +25,7 @@ This is a headless document management system built with TypeScript, Express.js,
 - **Framework**: Express.js
 - **Database ORM**: Drizzle ORM
 - **Database**: PostgreSQL
-- **Storage**: S3-compatible (AWS S3, MinIO, GCS)
+- **Storage**: Local filesystem (scalable to S3-compatible storage)
 - **Authentication**: JWT with RBAC
 - **Validation**: Zod schemas
 - **Architecture**: Clean Architecture with Repository Pattern

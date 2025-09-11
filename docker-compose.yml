@@ -22,141 +22,24 @@ services:
     networks:
       - dms-network
 
-  # MinIO S3-compatible storage
-  minio:
-    image: minio/minio:latest
-    container_name: dms-minio
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+  # Database admin tool (optional)
+  adminer:
+    image: adminer:latest
+    container_name: dms-adminer
     ports:
-      - "9000:9000"  # API port
-      - "9001:9001"  # Console port
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    networks:
-      - dms-network
-
-  # Document Management System Application
-  app:
-    build: .
-    container_name: dms-app
-    environment:
-      # Server Configuration
-      PORT: 3000
-      NODE_ENV: development
-      
-      # Database Configuration
-      DATABASE_URL: postgresql://dms_user:dms_password@postgres:5432/document_management
-      
-      # JWT Configuration
-      JWT_SECRET: super-secret-jwt-key-for-development-change-in-production
-      JWT_EXPIRES_IN: 24h
-      
-      # AWS S3 Configuration (MinIO)
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
-      AWS_REGION: us-east-1
-      AWS_S3_BUCKET: documents
-      AWS_S3_ENDPOINT: http://minio:9000
-      
-      # File Upload Configuration
-      MAX_FILE_SIZE: 10485760
-      ALLOWED_FILE_TYPES: image/jpeg,image/png,image/gif,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document
-      
-      # Pagination Configuration
-      DEFAULT_PAGE_SIZE: 10
-      MAX_PAGE_SIZE: 100
-    ports:
-      - "3000:3000"
+      - "8081:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
+      - postgres
     networks:
       - dms-network
-    restart: unless-stopped
-
-  # Database migration service (runs once)
-  migrate:
-    build:
-      context: .
-      target: development
-    container_name: dms-migrate
     environment:
-      DATABASE_URL: postgresql://dms_user:dms_password@postgres:5432/document_management
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: sh -c "npm run db:migrate"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    networks:
-      - dms-network
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: nette
     profiles:
-      - migration
-
-  # Development service with hot reload
-  dev:
-    build: .
-    container_name: dms-dev
-    environment:
-      # Server Configuration
-      PORT: 3000
-      NODE_ENV: development
-      
-      # Database Configuration
-      DATABASE_URL: postgresql://dms_user:dms_password@postgres:5432/document_management
-      
-      # JWT Configuration
-      JWT_SECRET: super-secret-jwt-key-for-development-change-in-production
-      JWT_EXPIRES_IN: 24h
-      
-      # AWS S3 Configuration (MinIO)
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
-      AWS_REGION: us-east-1
-      AWS_S3_BUCKET: documents
-      AWS_S3_ENDPOINT: http://minio:9000
-      
-      # File Upload Configuration
-      MAX_FILE_SIZE: 10485760
-      ALLOWED_FILE_TYPES: image/jpeg,image/png,image/gif,application/pdf,text/plain
-      
-      # Pagination Configuration
-      DEFAULT_PAGE_SIZE: 10
-      MAX_PAGE_SIZE: 100
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm run dev
-    networks:
-      - dms-network
-    profiles:
-      - development
+      - admin
 
 volumes:
   postgres_data:
-    driver: local
-  minio_data:
     driver: local
 
 networks:

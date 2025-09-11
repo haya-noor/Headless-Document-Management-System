@@ -1,14 +1,12 @@
-# 🚀 Quick Setup Guide
+# 🚀 Setup Guide - Local Development
 
 ## Prerequisites
 
-Before running the application, ensure you have:
-
 - **Node.js 18+** installed
-- **PostgreSQL** database running
-- **S3-compatible storage** (AWS S3 or MinIO for local development)
+- **PostgreSQL** database (local or Docker)
+- **Git** for version control
 
-## Step-by-Step Setup
+## Quick Setup
 
 ### 1. Install Dependencies
 
@@ -18,16 +16,12 @@ npm install
 
 ### 2. Environment Configuration
 
-Copy the example environment file and configure it:
-
 ```bash
-# Copy the example file
+# Copy environment template
 cp env.example .env
-
-# Edit the .env file with your actual values
 ```
 
-**Required Environment Variables:**
+Edit `.env` with your configuration:
 
 ```env
 # Server Configuration
@@ -35,18 +29,15 @@ PORT=3000
 NODE_ENV=development
 
 # Database Configuration
-DATABASE_URL=postgresql://username:password@localhost:5432/document_management
+DATABASE_URL=postgresql://dms_user:dms_password@localhost:5432/document_management
 
 # JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_SECRET=your-super-secret-jwt-key-change-this
 JWT_EXPIRES_IN=24h
 
-# AWS S3 Configuration
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_REGION=us-east-1
-AWS_S3_BUCKET=your-bucket-name
-AWS_S3_ENDPOINT=http://localhost:9000  # For MinIO local development
+# Storage Configuration
+STORAGE_PROVIDER=local
+LOCAL_STORAGE_PATH=./storage
 
 # File Upload Configuration
 MAX_FILE_SIZE=10485760
@@ -59,75 +50,48 @@ MAX_PAGE_SIZE=100
 
 ### 3. Database Setup
 
-#### Option A: Local PostgreSQL
+#### Option A: Docker PostgreSQL (Recommended)
 
-1. Install PostgreSQL
+```bash
+# Start PostgreSQL
+docker-compose up -d postgres
+
+# Optional: Start database admin tool
+docker-compose --profile admin up -d adminer
+# Access at http://localhost:8081 (postgres/dms_user/dms_password)
+```
+
+#### Option B: Local PostgreSQL
+
+1. Install PostgreSQL locally
 2. Create database:
    ```sql
    CREATE DATABASE document_management;
+   CREATE USER dms_user WITH PASSWORD 'dms_password';
+   GRANT ALL PRIVILEGES ON DATABASE document_management TO dms_user;
    ```
-3. Update `DATABASE_URL` in `.env`
 
-#### Option B: Docker PostgreSQL
-
-```bash
-docker run --name postgres-dms \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_USER=username \
-  -e POSTGRES_DB=document_management \
-  -p 5432:5432 \
-  -d postgres:15
-```
-
-### 4. Storage Setup
-
-#### Option A: MinIO (Local Development)
+### 4. Run Database Migrations
 
 ```bash
-# Start MinIO server
-docker run -p 9000:9000 -p 9001:9001 \
-  -e "MINIO_ROOT_USER=minioadmin" \
-  -e "MINIO_ROOT_PASSWORD=minioadmin" \
-  minio/minio server /data --console-address ":9001"
-```
-
-Then:
-1. Open http://localhost:9001
-2. Login with `minioadmin` / `minioadmin`
-3. Create a bucket named `documents`
-4. Update `.env` with MinIO credentials
-
-#### Option B: AWS S3
-
-1. Create an S3 bucket
-2. Create IAM user with S3 permissions
-3. Update `.env` with AWS credentials
-
-### 5. Database Migrations
-
-```bash
-# Generate migration files
+# Generate migrations (if schema changed)
 npm run db:generate
 
-# Apply migrations to database
+# Apply migrations
 npm run db:migrate
 ```
 
-### 6. Start the Application
+### 5. Start Development Server
 
 ```bash
-# Development server with hot reload
 npm run dev
-
-# Or build and start production server
-npm run build
-npm start
 ```
+
+The server will start at `http://localhost:3000`
 
 ## 🧪 Testing the Setup
 
 ### Health Check
-
 ```bash
 curl http://localhost:3000/health
 ```
@@ -140,18 +104,12 @@ Expected response:
   "data": {
     "timestamp": "2023-01-01T00:00:00.000Z",
     "uptime": 1.234,
-    "environment": "development",
-    "version": "1.0.0"
+    "environment": "development"
   }
 }
 ```
 
-### API Documentation
-
-Visit: http://localhost:3000/api
-
-### Register a Test User
-
+### Register Test User
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
@@ -164,7 +122,6 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
 ```
 
 ### Login Test
-
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
@@ -174,58 +131,120 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
   }'
 ```
 
-## 🐛 Troubleshooting
+## 📁 File Storage
 
-### Common Issues
+Files are stored locally in the `./storage` directory:
 
-1. **Database Connection Error**
-   - Check PostgreSQL is running
-   - Verify DATABASE_URL is correct
-   - Ensure database exists
+```
+storage/
+└── documents/
+    └── users/
+        └── {userId}/
+            └── documents/
+                └── {documentId}/
+                    ├── {timestamp}_{filename}.ext
+                    └── {timestamp}_{filename}.ext.meta.json
+```
 
-2. **Environment Variable Errors**
-   - Ensure .env file exists
-   - Check all required variables are set
-   - No spaces around = in .env file
+## 🗄️ Database Access
 
-3. **Port Already in Use**
-   - Change PORT in .env file
-   - Kill process using port 3000: `lsof -ti:3000 | xargs kill -9`
+### Using Adminer (Web Interface)
+1. Start: `docker-compose --profile admin up -d adminer`
+2. Open: http://localhost:8081
+3. Login:
+   - System: PostgreSQL
+   - Server: postgres
+   - Username: dms_user
+   - Password: dms_password
+   - Database: document_management
 
-4. **S3 Connection Issues**
-   - Verify AWS credentials
-   - Check bucket exists and permissions
-   - For MinIO, ensure it's running and accessible
+### Using Command Line
+```bash
+# Connect to database
+docker-compose exec postgres psql -U dms_user -d document_management
 
-### Development Scripts
+# List tables
+\dt
+
+# Exit
+\q
+```
+
+## 🛠️ Development Commands
 
 ```bash
-npm run dev          # Start development server
-npm run build        # Build TypeScript to JavaScript
-npm run start        # Start production server
-npm run db:generate  # Generate database migrations
-npm run db:migrate   # Apply database migrations
-npm run db:studio    # Open Drizzle Studio (database GUI)
+# Development
+npm run dev          # Start with hot reload
+npm run build        # Build TypeScript
+npm run start        # Start production build
+
+# Database
+npm run db:generate  # Generate migrations
+npm run db:migrate   # Apply migrations
+npm run db:studio    # Open database studio
+
+# Code Quality
 npm run lint         # Lint code
 npm run lint:fix     # Fix linting issues
 ```
 
-## 📚 Next Steps
+## 🔧 Troubleshooting
 
-Once the setup is complete:
+### Database Connection Issues
+```bash
+# Check if PostgreSQL is running
+docker-compose ps postgres
 
-1. **Explore the API** - Check out the endpoints at http://localhost:3000/api
-2. **Read the Documentation** - See `API_DOCUMENTATION.md` for detailed API reference
-3. **Implement Features** - Start adding document upload and management features
-4. **Test the System** - Try the authentication endpoints with Postman or curl
+# View logs
+docker-compose logs postgres
 
-## 🆘 Need Help?
+# Restart database
+docker-compose restart postgres
+```
 
-- Check the main `README.md` for architecture details
-- Review `API_DOCUMENTATION.md` for endpoint specifications
-- Look at the code examples in the controllers and services
-- Create an issue if you encounter problems
+### Storage Issues
+```bash
+# Check storage directory
+ls -la storage/
+
+# Create storage directory manually
+mkdir -p storage/documents
+```
+
+### Port Issues
+```bash
+# Check what's using port 3000
+netstat -ano | findstr :3000
+
+# Change port in .env file
+PORT=3001
+```
+
+## 🚀 Next Steps
+
+1. **Test Authentication**: Try the register/login endpoints
+2. **Implement Document Upload**: Add file upload functionality
+3. **Add Document Management**: CRUD operations for documents
+4. **Implement Search**: Advanced filtering and search
+5. **Add Permissions**: Granular access control
+6. **Testing**: Add comprehensive test suite
+
+## 🎯 Architecture Benefits
+
+### Current (Local Storage)
+- ✅ Simple setup and development
+- ✅ No external dependencies
+- ✅ Fast local development
+- ✅ Complete control over files
+
+### Future (Cloud Storage)
+- 🔄 Easy migration to S3/MinIO/GCS
+- 🔄 Scalable for production
+- 🔄 CDN integration ready
+- 🔄 Distributed storage support
+
+The architecture is designed to make this transition seamless when needed!
 
 ---
 
-**The system is now ready for development! 🎉**
+**Your local development environment is ready! 🎉**

@@ -99,3 +99,7 @@ drizzle/
 # Temp files
 tmp/
 temp/
+
+# Local storage (uploaded files)
+storage/
+uploads/

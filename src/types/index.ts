@@ -58,8 +58,8 @@ export interface Document {
   originalName: string;
   mimeType: string;
   size: number;
-  s3Key: string;
-  s3Bucket: string;
+  storageKey: string;
+  storageProvider: string;
   checksum?: string;
   tags: string[];
   metadata: Record<string, any>;
@@ -80,8 +80,8 @@ export interface DocumentVersion {
   filename: string;
   mimeType: string;
   size: number;
-  s3Key: string;
-  s3Bucket: string;
+  storageKey: string;
+  storageProvider: string;
   checksum?: string;
   tags: string[];
   metadata: Record<string, any>;
