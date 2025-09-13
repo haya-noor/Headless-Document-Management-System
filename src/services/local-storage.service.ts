@@ -193,7 +193,7 @@ export class LocalStorageService {
 
       return {
         size: stats.size,
-        lastModified: stats.mtime,
+        lastModified: new Date(stats.mtime),
         contentType: metadata.contentType || 'application/octet-stream',
         metadata: metadata.metadata || {},
       };

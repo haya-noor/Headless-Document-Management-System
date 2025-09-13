@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals';
+import * as jwt from 'jsonwebtoken';
 import { generateId, isValidId } from '../src/utils/uuid';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../src/utils/password';
 import { generateToken, verifyToken, extractTokenFromHeader, isTokenExpired } from '../src/utils/jwt';
@@ -135,18 +136,19 @@ describe('Utility Functions', () => {
     });
 
     test('should detect expired tokens', () => {
-      // Create token with short expiry
-      process.env.JWT_EXPIRES_IN = '1ms';
-      const token = generateToken(testPayload);
+      // Create token that's already expired (exp in the past)
+      const expiredPayload = {
+        ...testPayload,
+        exp: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
+      };
       
-      // Wait for expiration
-      setTimeout(() => {
-        const isExpired = isTokenExpired(token);
-        expect(isExpired).toBe(true);
-      }, 10);
-
-      // Reset expiry
-      process.env.JWT_EXPIRES_IN = '24h';
+      const expiredToken = jwt.sign(expiredPayload, process.env.JWT_SECRET || 'test-secret', {
+        issuer: 'document-management-system',
+        audience: 'document-management-users',
+      });
+      
+      const isExpired = isTokenExpired(expiredToken);
+      expect(isExpired).toBe(true);
     });
 
     test('should handle invalid tokens gracefully', () => {
@@ -254,6 +256,8 @@ describe('Utility Functions', () => {
       // Test connection method exists and returns boolean
       const isConnected = await databaseConfig.testConnection();
       expect(typeof isConnected).toBe('boolean');
+      // In test environment without DB, this should return false
+      expect(isConnected).toBe(false);
     });
 
     test('should report connection status correctly', () => {
