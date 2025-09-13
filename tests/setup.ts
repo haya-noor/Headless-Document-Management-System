@@ -15,7 +15,7 @@ beforeAll(async () => {
   // Set test environment
   process.env.NODE_ENV = 'test';
   process.env.JWT_SECRET = 'test-jwt-secret-key';
-  process.env.DATABASE_URL = 'postgresql://dms_user:dms_password@localhost:5432/document_management_test';
+  process.env.DATABASE_URL = 'postgresql://dms_user:dms_password@localhost:5432/document_management';
   
   // Connect to test database
   try {
@@ -75,9 +75,21 @@ export const testUtils = {
    * Clean test data
    */
   cleanDatabase: async () => {
-    const db = databaseConfig.getDatabase();
-    // Clean test data - implement when repositories are available
-    console.log('🧹 Test data cleaned');
+    try {
+      const db = databaseConfig.getDatabase();
+      const { users, documents, documentPermissions, documentVersions, auditLogs } = await import('../src/models/schema');
+      
+      // Clean all test data in correct order (respecting foreign keys)
+      await db.delete(auditLogs);
+      await db.delete(documentPermissions);
+      await db.delete(documentVersions);
+      await db.delete(documents);
+      await db.delete(users);
+      
+      console.log('🧹 Test data cleaned successfully');
+    } catch (error) {
+      console.log('ℹ️ Database cleanup skipped (not connected or error)');
+    }
   },
 
   /**

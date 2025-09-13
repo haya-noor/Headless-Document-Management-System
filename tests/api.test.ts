@@ -5,8 +5,10 @@
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import app from '../src/index';
+import app from './test-app';
 import { testUtils } from './setup';
+import { LocalStorageService } from '../src/services/local-storage.service';
+import { FileUpload } from '../src/types';
 
 describe('API Integration Tests', () => {
   beforeEach(async () => {
@@ -280,13 +282,14 @@ describe('API Integration Tests', () => {
         };
 
         const key = `test/concurrent/file-${i}.txt`;
-        operations.push(storageService.uploadFile(testFile, key));
+        const service = new LocalStorageService();
+        operations.push(service.uploadFile(testFile, key));
       }
 
       const results = await Promise.all(operations);
       
       expect(results).toHaveLength(5);
-      results.forEach((result, index) => {
+      results.forEach((result: any, index: number) => {
         expect(result.key).toBe(`test/concurrent/file-${index}.txt`);
         expect(result.checksum).toBeDefined();
       });
@@ -302,13 +305,14 @@ describe('API Integration Tests', () => {
       };
 
       const key = 'test/large/big-file.txt';
-      const result = await storageService.uploadFile(testFile, key);
+      const service = new LocalStorageService();
+      const result = await service.uploadFile(testFile, key);
 
       expect(result.key).toBe(key);
       expect(result.checksum).toBeDefined();
 
       // Verify file was stored correctly
-      const content = await storageService.readFile(key);
+      const content = await service.readFile(key);
       expect(content.toString()).toBe(largeContent);
     });
   });

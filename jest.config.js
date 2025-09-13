@@ -19,16 +19,12 @@ module.exports = {
   // Module file extensions
   moduleFileExtensions: ['ts', 'js', 'json'],
 
-  // Transform files
-  transform: {
-    '^.+\\.ts$': 'ts-jest',
-  },
 
   // Setup files
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 
   // Module name mapping for path aliases
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
@@ -65,6 +61,9 @@ module.exports = {
   // Test timeout (30 seconds)
   testTimeout: 30000,
 
+  // Test environment variables
+  setupFiles: ['<rootDir>/tests/jest.env.js'],
+
   // Clear mocks between tests
   clearMocks: true,
 
@@ -86,10 +85,10 @@ module.exports = {
   // Error handling
   errorOnDeprecated: true,
 
-  // Global variables
-  globals: {
-    'ts-jest': {
+  // Transform configuration
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
-    },
+    }],
   },
 };

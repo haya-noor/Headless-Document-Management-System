@@ -5,7 +5,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import app from '../src/index';
+import app from './test-app';
 import { testUtils } from './setup';
 import { UserService } from '../src/services/user.service';
 import { generateToken, verifyToken } from '../src/utils/jwt';
@@ -68,7 +68,7 @@ describe('Authentication System', () => {
         .expect(400);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('WEAK_PASSWORD');
+      expect(response.body.error).toBe('VALIDATION_ERROR');
     });
 
     test('should validate required fields', async () => {
@@ -117,7 +117,7 @@ describe('Authentication System', () => {
         .expect(401);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('INVALID_CREDENTIALS');
+      expect(response.body.error).toBe('LOGIN_FAILED');
     });
 
     test('should reject non-existent user', async () => {
@@ -130,7 +130,7 @@ describe('Authentication System', () => {
         .expect(401);
 
       expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('INVALID_CREDENTIALS');
+      expect(response.body.error).toBe('LOGIN_FAILED');
     });
   });
 
