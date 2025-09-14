@@ -6,9 +6,9 @@
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { LocalStorageService } from '../src/services/local-storage.service';
-import { StorageServiceFactory } from '../src/services/storage.factory';
-import { FileUpload } from '../src/types';
+import { LocalStorageService } from '../../src/services/local-storage.service';
+import { StorageServiceFactory } from '../../src/services/storage.factory';
+import { FileUpload } from '../../src/types';
 
 describe('Storage Service', () => {
   let storageService: LocalStorageService;

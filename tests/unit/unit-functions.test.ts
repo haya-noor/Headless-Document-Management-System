@@ -6,7 +6,7 @@
 import { describe, test, expect, jest } from '@jest/globals';
 
 // Mock external dependencies for pure unit testing
-jest.mock('../src/config/database', () => ({
+jest.mock('../../src/config/database', () => ({
   databaseConfig: {
     connect: jest.fn(),
     disconnect: jest.fn(),
@@ -18,7 +18,7 @@ jest.mock('../src/config/database', () => ({
 describe('Unit Tests - Pure Functions', () => {
   describe('UUID Utility Functions', () => {
     test('should generate valid UUID v4', async () => {
-      const { generateId, isValidId } = await import('../src/utils/uuid');
+      const { generateId, isValidId } = await import('../../src/utils/uuid');
       
       const id = generateId();
       
@@ -29,7 +29,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should validate UUID format correctly', async () => {
-      const { isValidId } = await import('../src/utils/uuid');
+      const { isValidId } = await import('../../src/utils/uuid');
       
       // Valid UUIDs
       expect(isValidId('123e4567-e89b-12d3-a456-426614174000')).toBe(true);
@@ -43,7 +43,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should generate unique UUIDs consistently', async () => {
-      const { generateId } = await import('../src/utils/uuid');
+      const { generateId } = await import('../../src/utils/uuid');
       
       const ids = Array.from({ length: 1000 }, () => generateId());
       const uniqueIds = new Set(ids);
@@ -54,7 +54,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Password Utility Functions', () => {
     test('should validate strong passwords', async () => {
-      const { validatePasswordStrength } = await import('../src/utils/password');
+      const { validatePasswordStrength } = await import('../../src/utils/password');
       
       const strongPasswords = [
         'StrongPass123!',
@@ -69,7 +69,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should reject weak passwords with specific errors', async () => {
-      const { validatePasswordStrength } = await import('../src/utils/password');
+      const { validatePasswordStrength } = await import('../../src/utils/password');
       
       const weakPasswords = [
         { password: 'short', expectedError: 'at least 8 characters' },
@@ -88,7 +88,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should handle edge cases in password validation', async () => {
-      const { validatePasswordStrength } = await import('../src/utils/password');
+      const { validatePasswordStrength } = await import('../../src/utils/password');
       
       // Very long password
       const longPassword = 'A'.repeat(200) + '1!';
@@ -103,7 +103,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should hash and verify passwords correctly', async () => {
-      const { hashPassword, verifyPassword } = await import('../src/utils/password');
+      const { hashPassword, verifyPassword } = await import('../../src/utils/password');
       
       const password = 'TestPassword123!';
       const hash = await hashPassword(password);
@@ -125,7 +125,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('JWT Utility Functions', () => {
     test('should generate and verify JWT tokens', async () => {
-      const { generateToken, verifyToken } = await import('../src/utils/jwt');
+      const { generateToken, verifyToken } = await import('../../src/utils/jwt');
       
       const payload = {
         userId: 'test-user-123',
@@ -147,7 +147,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should extract tokens from authorization headers', async () => {
-      const { extractTokenFromHeader } = await import('../src/utils/jwt');
+      const { extractTokenFromHeader } = await import('../../src/utils/jwt');
       
       const token = 'test-token-12345';
       
@@ -162,7 +162,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should handle JWT errors gracefully', async () => {
-      const { verifyToken, isTokenExpired } = await import('../src/utils/jwt');
+      const { verifyToken, isTokenExpired } = await import('../../src/utils/jwt');
       
       // Invalid token
       expect(() => verifyToken('invalid-token')).toThrow();
@@ -187,9 +187,9 @@ describe('Unit Tests - Pure Functions', () => {
       };
 
       // Clear require cache to reload config
-      delete require.cache[require.resolve('../src/config/index')];
+      delete require.cache[require.resolve('../../src/config/index')];
       
-      const { config } = await import('../src/config/index');
+      const { config } = await import('../../src/config/index');
 
       expect(config.server.port).toBe(3001); // Test environment port
       expect(config.server.nodeEnv).toBe('test');
@@ -203,7 +203,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should validate required environment variables', async () => {
-      const { validateConfig } = await import('../src/config/index');
+      const { validateConfig } = await import('../../src/config/index');
       
       // Should not throw with current environment
       expect(() => validateConfig()).not.toThrow();
@@ -212,7 +212,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Validation Schema Functions', () => {
     test('should validate user registration data', async () => {
-      const { registerSchema } = await import('../src/schemas/auth.schemas');
+      const { registerSchema } = await import('../../src/schemas/auth.schemas');
 
       const validData = {
         email: 'valid@example.com',
@@ -233,7 +233,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should validate login data', async () => {
-      const { loginSchema } = await import('../src/schemas/auth.schemas');
+      const { loginSchema } = await import('../../src/schemas/auth.schemas');
 
       const validLogin = {
         email: 'user@example.com',
@@ -250,7 +250,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should validate password change data', async () => {
-      const { changePasswordSchema } = await import('../src/schemas/auth.schemas');
+      const { changePasswordSchema } = await import('../../src/schemas/auth.schemas');
 
       const validChange = {
         currentPassword: 'OldPass123!',
@@ -271,7 +271,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Error Handling Functions', () => {
     test('should create custom application errors', async () => {
-      const { AppError } = await import('../src/middleware/error');
+      const { AppError } = await import('../../src/middleware/error');
 
       const error = new AppError('Test error', 400, 'TEST_ERROR');
 
@@ -283,7 +283,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should handle async errors with wrapper', async () => {
-      const { asyncHandler } = await import('../src/middleware/error');
+      const { asyncHandler } = await import('../../src/middleware/error');
 
       const throwingFunction = async () => {
         throw new Error('Async error');
@@ -303,7 +303,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Storage Service Functions', () => {
     test('should create storage service factory', async () => {
-      const { StorageServiceFactory } = await import('../src/services/storage.factory');
+      const { StorageServiceFactory } = await import('../../src/services/storage.factory');
       
       const service = StorageServiceFactory.getInstance();
       expect(service).toBeDefined();
@@ -316,7 +316,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should generate file keys correctly', async () => {
-      const { LocalStorageService } = await import('../src/services/local-storage.service');
+      const { LocalStorageService } = await import('../../src/services/local-storage.service');
       
       const service = new LocalStorageService();
       const key = service.generateFileKey('user-123', 'My Document.pdf', 'doc-456');
@@ -328,7 +328,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should generate version keys correctly', async () => {
-      const { LocalStorageService } = await import('../src/services/local-storage.service');
+      const { LocalStorageService } = await import('../../src/services/local-storage.service');
       
       const service = new LocalStorageService();
       const baseKey = 'users/user123/documents/doc456/file.pdf';
@@ -345,7 +345,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Type Definitions', () => {
     test('should have correct enum values', async () => {
-      const { UserRole, Permission, AuditAction } = await import('../src/types');
+      const { UserRole, Permission, AuditAction } = await import('../../src/types');
 
       expect(UserRole.ADMIN).toBe('admin');
       expect(UserRole.USER).toBe('user');
@@ -363,7 +363,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Middleware Functions', () => {
     test('should format log messages correctly', async () => {
-      const { Logger } = await import('../src/middleware/logging');
+      const { Logger } = await import('../../src/middleware/logging');
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -383,7 +383,7 @@ describe('Unit Tests - Pure Functions', () => {
     });
 
     test('should handle different log levels', async () => {
-      const { Logger } = await import('../src/middleware/logging');
+      const { Logger } = await import('../../src/middleware/logging');
 
       const infoSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -405,7 +405,7 @@ describe('Unit Tests - Pure Functions', () => {
 
   describe('Validation Middleware Functions', () => {
     test('should create validation middleware', async () => {
-      const { validateRequest } = await import('../src/middleware/validation');
+      const { validateRequest } = await import('../../src/middleware/validation');
       const { z } = await import('zod');
 
       const schema = z.object({

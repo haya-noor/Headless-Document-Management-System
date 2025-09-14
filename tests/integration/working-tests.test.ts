@@ -5,13 +5,13 @@
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import app from './test-app';
-import { testUtils } from './setup';
-import { generateId } from '../src/utils/uuid';
-import { hashPassword, validatePasswordStrength } from '../src/utils/password';
-import { generateToken, verifyToken } from '../src/utils/jwt';
-import { LocalStorageService } from '../src/services/local-storage.service';
-import { UserRole, FileUpload } from '../src/types';
+import app from '../test-app';
+import { testUtils } from '../setup';
+import { generateId } from '../../src/utils/uuid';
+import { hashPassword, validatePasswordStrength } from '../../src/utils/password';
+import { generateToken, verifyToken } from '../../src/utils/jwt';
+import { LocalStorageService } from '../../src/services/local-storage.service';
+import { UserRole, FileUpload } from '../../src/types';
 
 describe('Working Tests - All Functionalities', () => {
   beforeEach(async () => {

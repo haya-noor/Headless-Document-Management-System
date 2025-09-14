@@ -1,137 +1,224 @@
-# Headless Document Management System
+# 🚀 Headless Document Management System
 
-A comprehensive backend training project that teaches clean architecture, domain-driven design, and modern TypeScript development through building a document management system.
+A comprehensive backend training project demonstrating **Clean Architecture**, **Domain-Driven Design**, and **modern TypeScript development** through building an enterprise-grade document management system.
 
-## 🚀 Quick Start
+## ✨ Features & Capabilities
 
+### ✅ **Implemented Core Features**
+- 🔐 **JWT Authentication** with role-based access control (Admin/User)
+- 👥 **User Management** - registration, login, profile management
+- 🗄️ **Database Schema** - users, documents, permissions, versions, audit logs
+- 🏗️ **Clean Architecture** - repository pattern, service layer, dependency injection
+- ✅ **Input Validation** - comprehensive Zod schema validation
+- 🛡️ **Security Middleware** - authentication, authorization, CORS, security headers
+- 📝 **Audit Logging** - complete audit trail for compliance
+- 🔧 **Configuration Management** - environment-based configuration
+- 📊 **Health Monitoring** - system health and metrics endpoints
+- 🚦 **Error Handling** - centralized error handling with standardized responses
+- 📁 **Local File Storage** - secure file storage with scalable architecture
+
+### 🚧 **Ready for Implementation**
+- 📄 **Document Upload & Management** - complete file upload API with metadata
+- 🔍 **Advanced Search** - filter by tags, metadata, filename, content-type
+- 📚 **Document Versioning** - immutable file versions with audit trail
+- 🔐 **Granular Permissions** - user-based document access control
+- ☁️ **Cloud Storage** - S3/MinIO/GCS integration ready
+
+## 🚀 **Quick Start Workflow**
+
+### **1. Prerequisites**
 ```bash
+# Required
+- Node.js 18+ 
+- PostgreSQL database
+- Git
+
+# Optional (for Docker setup)
+- Docker & Docker Compose
+```
+
+### **2. Installation & Setup**
+```bash
+# Clone repository
+git clone <repository-url>
+cd Headless-Document-Management-System
+
 # Install dependencies
 npm install
 
-# Copy environment file
+# Setup environment
 cp env.example .env
+# Edit .env with your database credentials and JWT secret
+```
 
-# Configure your environment variables in .env
+### **3. Database Setup**
 
-# Start PostgreSQL (optional - you can use local PostgreSQL too)
+**Option A: Docker (Recommended)**
+```bash
+# Start PostgreSQL with Docker
 docker-compose up -d postgres
 
-# Generate and run database migrations
+# Generate and run migrations
 npm run db:generate
 npm run db:migrate
-
-# Start development server
-npm run dev
 ```
 
-Server will be available at `http://localhost:3000`
+**Option B: Local PostgreSQL**
+```bash
+# Ensure PostgreSQL is running locally
+# Update DATABASE_URL in .env
 
-## 📋 Features
+# Generate and run migrations
+npm run db:generate
+npm run db:migrate
+```
 
-### ✅ Implemented Core Features
+### **4. Start Development Server**
+```bash
+# Development mode with hot reload
+npm run dev
 
-- **🔐 JWT Authentication**: Secure user authentication with role-based access control
-- **👥 User Management**: Registration, login, profile management, password change
-- **🗂️ Database Schema**: Complete schema with users, documents, permissions, versions, and audit logs
-- **🏗️ Clean Architecture**: Repository pattern, service layer, and dependency injection
-- **✅ Input Validation**: Comprehensive Zod schema validation
-- **🛡️ Security Middleware**: Authentication, authorization, CORS, helmet security headers
-- **📝 Audit Logging**: Complete audit trail for compliance and security
-- **🔧 Configuration Management**: Environment-based configuration with validation
-- **📊 Health Checks**: System health monitoring endpoints
-- **🚦 Error Handling**: Centralized error handling with consistent API responses
-- **📁 Local File Storage**: Secure local file storage with scalable architecture
-- **📚 API Documentation**: Comprehensive documentation with examples
+# Production build
+npm run build
+npm start
+```
 
-### 🚧 To Be Implemented
+Server will be available at **http://localhost:3000**
 
-- **📁 Document Upload & Storage**: Complete file upload API with metadata
-- **🔍 Advanced Search**: Filter by tags, metadata, filename, content-type
-- **📄 Document Versioning**: Immutable file versions with audit trail
-- **🔒 Document Permissions**: Granular read/write/delete permissions
-- **🔗 Download Links**: Secure, time-limited download links
-- **📊 Pagination**: Efficient data retrieval with sorting
+## 🧪 **Testing Workflow**
 
-## 🏗️ Architecture
+### **API Health Check**
+```bash
+curl http://localhost:3000/health
+```
 
-### Clean Architecture Structure
+### **User Registration & Authentication**
+```bash
+# Register new user
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!",
+    "firstName": "John",
+    "lastName": "Doe"
+  }'
 
+# Login user
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+  }'
+```
+
+### **Automated Testing**
+```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:unit      # Unit tests only
+npm run test:integration  # Integration tests only
+
+# Test with coverage
+npm run test:coverage
+```
+
+### **Manual API Testing**
+For comprehensive API testing examples, see the included PowerShell scripts:
+```powershell
+# See examples in tests/manual-test.ts for complete workflows
+```
+
+## 📚 **API Endpoints**
+
+### **Authentication**
+```
+POST   /api/v1/auth/register     # User registration
+POST   /api/v1/auth/login        # User login
+POST   /api/v1/auth/logout       # User logout
+GET    /api/v1/auth/me           # Get current user
+PUT    /api/v1/auth/profile      # Update profile
+PUT    /api/v1/auth/password     # Change password
+```
+
+### **Document Management** (Ready for Implementation)
+```
+GET    /api/v1/documents         # List user documents
+POST   /api/v1/documents         # Upload document
+GET    /api/v1/documents/:id     # Get document details
+PUT    /api/v1/documents/:id     # Update document
+DELETE /api/v1/documents/:id     # Delete document
+GET    /api/v1/documents/:id/download  # Download document
+```
+
+### **Admin Endpoints**
+```
+GET    /api/v1/admin/users       # List all users
+GET    /api/v1/admin/stats       # System statistics
+GET    /api/v1/admin/audit-logs  # Audit trail
+```
+
+### **System Endpoints**
+```
+GET    /health                   # Health check
+GET    /api                      # API documentation
+```
+
+## 🏗️ **Development Workflow**
+
+### **Project Structure**
 ```
 src/
-├── config/           # Configuration and database setup
-├── controllers/      # Thin controllers (validate input, call services)
-├── services/         # Business logic layer
-│   ├── interfaces/   # Service interfaces for scalability
-│   └── *.service.ts  # Service implementations
-├── repositories/     # Data access layer
-│   ├── interfaces/   # Repository contracts
-│   └── implementations/ # Concrete implementations
-├── middleware/       # Express middleware
-├── models/          # Database schema definitions
-├── schemas/         # Zod validation schemas
-├── types/           # TypeScript type definitions
-└── utils/           # Utility functions
+├── controllers/        # HTTP request handlers
+├── services/          # Business logic layer
+├── repositories/      # Data access layer
+├── middleware/        # Cross-cutting concerns
+├── models/           # Database schemas
+├── types/            # TypeScript type definitions
+├── utils/            # Shared utilities
+└── config/           # Configuration management
 ```
 
-### Key Design Patterns
+### **Adding New Features**
 
-- **Repository Pattern**: Clean data access abstraction
-- **Service Layer**: Business logic separation
-- **Factory Pattern**: Scalable storage service creation
-- **Dependency Injection**: Loose coupling between components
-- **Interface Segregation**: Easy switching between implementations
+1. **Define Types** (`src/types/`)
+2. **Create Repository Interface** (`src/repositories/interfaces/`)
+3. **Implement Repository** (`src/repositories/implementations/`)
+4. **Create Service** (`src/services/`)
+5. **Add Controller** (`src/controllers/`)
+6. **Define Routes** (`src/index.ts`)
+7. **Add Tests** (`tests/`)
 
-## 🛠️ Technology Stack
+### **Code Quality**
+```bash
+# Type checking
+npm run type-check
 
-- **Runtime**: Node.js / Bun.js
-- **Framework**: Express.js with TypeScript
-- **Database**: PostgreSQL with Drizzle ORM
-- **Storage**: Local filesystem (easily replaceable with S3/MinIO/GCS)
-- **Authentication**: JWT with bcrypt password hashing
-- **Validation**: Zod schemas
-- **Security**: Helmet.js, CORS, rate limiting
-- **Development**: tsx for hot reloading
+# Linting
+npm run lint
 
-## 📚 API Endpoints
+# Build verification
+npm run build
 
-### Authentication
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - User login
-- `GET /api/v1/auth/me` - Get current user profile
-- `PUT /api/v1/auth/profile` - Update user profile
-- `PUT /api/v1/auth/password` - Change password
-- `POST /api/v1/auth/logout` - User logout
+# Full quality check
+npm run test && npm run build
+```
 
-### File Operations
-- `GET /api/v1/files/:key` - Serve file
-- `GET /api/v1/files/download/:key` - Download file with custom filename
-- `GET /api/v1/files/:key/info` - Get file information
-- `DELETE /api/v1/files/:key` - Delete file (admin only)
+## 🔧 **Configuration**
 
-### Documents (Planned)
-- `GET /api/v1/documents` - List documents with pagination
-- `POST /api/v1/documents` - Upload document
-- `GET /api/v1/documents/:id` - Get document details
-- `PUT /api/v1/documents/:id` - Update document metadata
-- `DELETE /api/v1/documents/:id` - Delete document
-
-### System
-- `GET /health` - Health check endpoint
-- `GET /api` - API documentation endpoint
-
-## 🔧 Environment Configuration
-
-Copy `env.example` to `.env` and configure:
-
+### **Environment Variables**
 ```env
 # Server
 PORT=3000
 NODE_ENV=development
 
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/document_management
+DATABASE_URL=postgresql://user:password@localhost:5432/docdb
 
-# JWT
+# Authentication
 JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRES_IN=24h
 
@@ -142,200 +229,74 @@ LOCAL_STORAGE_PATH=./storage
 # File Upload
 MAX_FILE_SIZE=10485760  # 10MB
 ALLOWED_FILE_TYPES=image/jpeg,image/png,application/pdf
-
-# Pagination
-DEFAULT_PAGE_SIZE=10
-MAX_PAGE_SIZE=100
 ```
 
-## 🗄️ Database Setup
+### **Database Configuration**
+The system uses **Drizzle ORM** with PostgreSQL:
+- Automatic migration generation
+- Type-safe database queries
+- Connection pooling
+- Transaction support
 
-### Option 1: Docker PostgreSQL (Recommended)
+## 📊 **Monitoring & Health**
+
+### **Health Endpoints**
+- **`/health`** - Basic health check
+- **`/api`** - API documentation and status
+
+### **Logging**
+- Structured JSON logging
+- Request/response logging
+- Error tracking
+- Audit trail logging
+
+### **Error Handling**
+- Centralized error handling
+- Standardized API responses
+- Proper HTTP status codes
+- Detailed error messages in development
+
+## 🚀 **Deployment**
+
+### **Docker Deployment**
 ```bash
-# Start PostgreSQL with Docker
-docker-compose up -d postgres
+# Build and run with Docker
+docker-compose up -d
 
-# Optional: Start database admin tool
-docker-compose --profile admin up -d adminer
-# Access at http://localhost:8081
+# Production deployment
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-### Option 2: Local PostgreSQL
-1. **Install PostgreSQL**
-2. **Create database**:
-   ```sql
-   CREATE DATABASE document_management;
-   ```
-3. **Update DATABASE_URL in .env**
-
-### Run Migrations
+### **Manual Deployment**
 ```bash
-npm run db:generate
-npm run db:migrate
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Or with PM2
+pm2 start dist/index.js --name "doc-management"
 ```
 
-## 📁 File Storage
+## 📖 **Documentation**
 
-The system uses **local file storage** by default, which stores files in the `./storage` directory. The architecture is designed to be easily scalable to cloud storage:
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed architecture and design patterns
+- **[API Examples](./tests/manual-test.ts)** - Complete API usage examples
+- **[Environment Setup](./env.example)** - Configuration reference
 
-### Current Implementation
-- **Local Storage**: Files stored in `./storage/documents/`
-- **Metadata**: JSON metadata files alongside each file
-- **Security**: File serving through controlled API endpoints
+## 🤝 **Contributing**
 
-### Future Scalability
-The storage service uses an interface-based design that allows easy switching to:
-- **AWS S3**: Amazon Simple Storage Service
-- **MinIO**: S3-compatible object storage
-- **Google Cloud Storage**: Google's cloud storage
-- **Azure Blob Storage**: Microsoft's cloud storage
+1. Follow the established architecture patterns
+2. Add tests for new features
+3. Update documentation
+4. Ensure type safety
+5. Follow the coding standards
 
-To switch storage providers in the future, simply:
-1. Implement the `IStorageService` interface
-2. Update the `StorageServiceFactory`
-3. Change `STORAGE_PROVIDER` environment variable
+## 📄 **License**
 
-## 🔐 Security Features
-
-- **JWT Authentication**: Stateless authentication with configurable expiry
-- **Password Security**: bcrypt hashing with 12 salt rounds
-- **Input Validation**: Comprehensive Zod schema validation
-- **RBAC**: Role-based access control (Admin, User)
-- **Security Headers**: Helmet.js for security headers
-- **CORS Protection**: Configurable cross-origin requests
-- **File Access Control**: Secure file serving through API endpoints
-- **Audit Logging**: Complete audit trail for security events
-
-## 📊 Available Scripts
-
-```bash
-npm run dev          # Start development server with hot reload
-npm run build        # Build TypeScript to JavaScript
-npm run start        # Start production server
-npm run db:generate  # Generate database migrations
-npm run db:migrate   # Apply database migrations
-npm run db:studio    # Open Drizzle Studio (database GUI)
-npm run test         # Run tests (when implemented)
-npm run lint         # Lint TypeScript code
-npm run lint:fix     # Fix linting issues automatically
-```
-
-## 🧪 Testing the API
-
-### Register a new user
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe"
-  }'
-```
-
-### Login
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePass123!"
-  }'
-```
-
-### Get user profile (with token)
-```bash
-curl -X GET http://localhost:3000/api/v1/auth/me \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### Health check
-```bash
-curl http://localhost:3000/health
-```
-
-## 📖 Learning Objectives
-
-This project teaches:
-
-### TypeScript & Node.js
-- Advanced TypeScript features (generics, utility types, interfaces)
-- Node.js file system operations and streams
-- Error handling and debugging
-- Async/await patterns
-
-### Clean Architecture
-- Separation of concerns
-- Dependency inversion principle
-- Repository and service patterns
-- Interface-based design for scalability
-
-### Database & ORM
-- PostgreSQL database design
-- Drizzle ORM usage and migrations
-- Database relationships and constraints
-- Query optimization
-
-### Security
-- JWT authentication implementation
-- Password hashing and validation
-- Input validation and sanitization
-- Security headers and CORS
-
-### API Design
-- RESTful API principles
-- Request/response patterns
-- Error handling standards
-- File serving and downloads
-
-### Storage Architecture
-- Local file storage implementation
-- Interface-based design for scalability
-- Metadata management
-- File access control
-
-## 🚀 Next Steps
-
-1. **Fix App Startup**: Resolve database connection timing issue
-2. **Implement Document Upload**: Add complete file upload API
-3. **Add Document Search**: Implement advanced filtering and search
-4. **Document Permissions**: Add granular permission system
-5. **File Versioning**: Implement immutable file versions
-6. **Admin Dashboard**: Create admin management endpoints
-7. **Testing Suite**: Add comprehensive test coverage
-8. **Cloud Storage**: Migrate to S3-compatible storage when needed
-
-## 📝 Prerequisites Knowledge
-
-- **TypeScript**: Custom types, interfaces, generics, utility types
-- **Node.js**: File system, streams, event loop, concurrency
-- **Functional Programming**: Composition, currying, higher-order functions
-- **12 Factor App**: Configuration, dependencies, processes
-- **Database Design**: Normalization, relationships, indexing
-- **HTTP/REST**: Status codes, headers, methods, authentication
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-## 📄 Documentation
-
-- [API Documentation](./API_DOCUMENTATION.md) - Complete API reference
-- [Git Strategy](./GIT_STRATEGY.md) - Branching and development workflow
-
-## 📞 Support
-
-- 📧 Create an issue for bugs or feature requests
-- 💬 Join discussions for questions and help
-- 📖 Check the documentation for detailed guides
+This project is for educational purposes and demonstrates modern backend development practices.
 
 ---
 
-**Built with ❤️ for learning Clean Architecture and Modern TypeScript Development**
-
-*Ready for local development with easy scalability to cloud storage when needed.*
+🎯 **Goal**: Master clean architecture, domain-driven design, and TypeScript development through hands-on experience building a production-ready document management system.

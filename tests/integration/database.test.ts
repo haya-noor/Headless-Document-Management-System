@@ -4,10 +4,10 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { UserRepository } from '../src/repositories/implementations/user.repository';
-import { UserRole } from '../src/types';
-import { hashPassword } from '../src/utils/password';
-import { testUtils } from './setup';
+import { UserRepository } from '../../src/repositories/implementations/user.repository';
+import { UserRole } from '../../src/types';
+import { hashPassword } from '../../src/utils/password';
+import { testUtils } from '../setup';
 
 describe('Database Operations', () => {
   let userRepository: UserRepository;

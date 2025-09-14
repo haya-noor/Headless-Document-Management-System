@@ -7,10 +7,10 @@ import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import app from './test-app';
-import { testUtils } from './setup';
-import { LocalStorageService } from '../src/services/local-storage.service';
-import { FileUpload } from '../src/types';
+import app from '../test-app';
+import { testUtils } from '../setup';
+import { LocalStorageService } from '../../src/services/local-storage.service';
+import { FileUpload } from '../../src/types';
 
 describe('Document Management System', () => {
   let userToken: string;

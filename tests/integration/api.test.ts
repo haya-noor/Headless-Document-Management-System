@@ -5,10 +5,10 @@
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import app from './test-app';
-import { testUtils } from './setup';
-import { LocalStorageService } from '../src/services/local-storage.service';
-import { FileUpload } from '../src/types';
+import app from '../test-app';
+import { testUtils } from '../setup';
+import { LocalStorageService } from '../../src/services/local-storage.service';
+import { FileUpload } from '../../src/types';
 
 describe('API Integration Tests', () => {
   beforeEach(async () => {

@@ -4,10 +4,11 @@
  */
 
 import { describe, test, expect } from '@jest/globals';
-import { generateId, isValidId } from '../src/utils/uuid';
-import { hashPassword, verifyPassword, validatePasswordStrength } from '../src/utils/password';
-import { generateToken, verifyToken, extractTokenFromHeader, isTokenExpired } from '../src/utils/jwt';
-import { UserRole } from '../src/types';
+import * as jwt from 'jsonwebtoken';
+import { generateId, isValidId } from '../../src/utils/uuid';
+import { hashPassword, verifyPassword, validatePasswordStrength } from '../../src/utils/password';
+import { generateToken, verifyToken, extractTokenFromHeader, isTokenExpired } from '../../src/utils/jwt';
+import { UserRole } from '../../src/types';
 
 describe('Utility Functions', () => {
   describe('UUID Utils', () => {
@@ -135,18 +136,19 @@ describe('Utility Functions', () => {
     });
 
     test('should detect expired tokens', () => {
-      // Create token with short expiry
-      process.env.JWT_EXPIRES_IN = '1ms';
-      const token = generateToken(testPayload);
+      // Create token that's already expired (exp in the past)
+      const expiredPayload = {
+        ...testPayload,
+        exp: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
+      };
       
-      // Wait for expiration
-      setTimeout(() => {
-        const isExpired = isTokenExpired(token);
-        expect(isExpired).toBe(true);
-      }, 10);
-
-      // Reset expiry
-      process.env.JWT_EXPIRES_IN = '24h';
+      const expiredToken = jwt.sign(expiredPayload, process.env.JWT_SECRET || 'test-secret', {
+        issuer: 'document-management-system',
+        audience: 'document-management-users',
+      });
+      
+      const isExpired = isTokenExpired(expiredToken);
+      expect(isExpired).toBe(true);
     });
 
     test('should handle invalid tokens gracefully', () => {
@@ -157,7 +159,7 @@ describe('Utility Functions', () => {
 
   describe('Configuration', () => {
     test('should load configuration correctly', () => {
-      const { config } = require('../src/config');
+      const { config } = require('../../src/config');
 
       expect(config.server.port).toBeDefined();
       expect(config.database.url).toBeDefined();
@@ -166,7 +168,7 @@ describe('Utility Functions', () => {
     });
 
     test('should validate required environment variables', () => {
-      const { validateConfig } = require('../src/config');
+      const { validateConfig } = require('../../src/config');
 
       // Should not throw with proper config
       expect(() => validateConfig()).not.toThrow();
@@ -175,7 +177,7 @@ describe('Utility Functions', () => {
 
   describe('Middleware', () => {
     test('should format log messages correctly', () => {
-      const { Logger } = require('../src/middleware/logging');
+      const { Logger } = require('../../src/middleware/logging');
 
       // Capture console output
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -196,7 +198,7 @@ describe('Utility Functions', () => {
     });
 
     test('should validate request data with Zod schemas', async () => {
-      const { registerSchema } = require('../src/schemas/auth.schemas');
+      const { registerSchema } = require('../../src/schemas/auth.schemas');
 
       const validData = {
         email: 'valid@example.com',
@@ -218,7 +220,7 @@ describe('Utility Functions', () => {
 
   describe('Error Handling', () => {
     test('should create custom app errors', () => {
-      const { AppError } = require('../src/middleware/error');
+      const { AppError } = require('../../src/middleware/error');
 
       const error = new AppError('Test error', 400, 'TEST_ERROR');
 
@@ -229,7 +231,7 @@ describe('Utility Functions', () => {
     });
 
     test('should handle async errors', async () => {
-      const { asyncHandler } = require('../src/middleware/error');
+      const { asyncHandler } = require('../../src/middleware/error');
 
       const throwingFunction = async () => {
         throw new Error('Async error');
@@ -249,15 +251,17 @@ describe('Utility Functions', () => {
 
   describe('Database Connection', () => {
     test('should handle database connection testing', async () => {
-      const { databaseConfig } = require('../src/config/database');
+      const { databaseConfig } = require('../../src/config/database');
       
       // Test connection method exists and returns boolean
       const isConnected = await databaseConfig.testConnection();
       expect(typeof isConnected).toBe('boolean');
+      // In test environment without DB, this should return false
+      expect(isConnected).toBe(false);
     });
 
     test('should report connection status correctly', () => {
-      const { databaseConfig } = require('../src/config/database');
+      const { databaseConfig } = require('../../src/config/database');
       const isConnected = databaseConfig.isConnected();
       expect(typeof isConnected).toBe('boolean');
     });

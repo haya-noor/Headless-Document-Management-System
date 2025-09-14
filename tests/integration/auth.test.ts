@@ -5,11 +5,11 @@
 
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
-import app from './test-app';
-import { testUtils } from './setup';
-import { UserService } from '../src/services/user.service';
-import { generateToken, verifyToken } from '../src/utils/jwt';
-import { hashPassword, verifyPassword } from '../src/utils/password';
+import app from '../test-app';
+import { testUtils } from '../setup';
+import { UserService } from '../../src/services/user.service';
+import { generateToken, verifyToken } from '../../src/utils/jwt';
+import { hashPassword, verifyPassword } from '../../src/utils/password';
 
 describe('Authentication System', () => {
   let userService: UserService;

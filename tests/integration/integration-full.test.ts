@@ -7,8 +7,8 @@ import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } fr
 import request from 'supertest';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import app from './test-app';
-import { databaseConfig } from '../src/config/database';
+import app from '../test-app';
+import { databaseConfig } from '../../src/config/database';
 
 describe('Integration Tests - Full System', () => {
   let testUserToken: string;

@@ -12,7 +12,8 @@ module.exports = {
 
   // Test file patterns
   testMatch: [
-    '<rootDir>/tests/**/*.test.ts',
+    '<rootDir>/tests/unit/**/*.test.ts',
+    '<rootDir>/tests/integration/**/*.test.ts',
     '<rootDir>/src/**/*.test.ts',
   ],
 
