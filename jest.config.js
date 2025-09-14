@@ -20,7 +20,6 @@ module.exports = {
   // Module file extensions
   moduleFileExtensions: ['ts', 'js', 'json'],
 
-
   // Setup files
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 
