@@ -1,14 +1,18 @@
 # 🚀 Headless Document Management System
 
-A comprehensive backend training project demonstrating **Clean Architecture**, **Domain-Driven Design**, and **modern TypeScript development** through building an enterprise-grade document management system.
+A comprehensive backend training project demonstrating **Clean Architecture**, **Domain-Driven Design**, and **modern TypeScript development** through building an enterprise-grade document management system. Built with **Bun + Elysia** for maximum performance and developer experience.
 
 ## ✨ Features & Capabilities
+
+### 🚀 **Modern Technology Stack**
+- **Bun Runtime**: Ultra-fast JavaScript runtime (3-6x faster than Node.js)
+- **Elysia Framework**: TypeScript-first web framework with built-in validation
 
 ### ✅ **Implemented Core Features**
 - 🔐 **JWT Authentication** with role-based access control (Admin/User)
 - 👥 **User Management** - registration, login, profile management
 - 🗄️ **Database Schema** - users, documents, permissions, versions, audit logs
-- 🏗️ **Clean Architecture** - repository pattern, service layer, dependency injection
+- 🏗️ **Clean Architecture** - repository pattern.
 - ✅ **Input Validation** - comprehensive Zod schema validation
 - 🛡️ **Security Middleware** - authentication, authorization, CORS, security headers
 - 📝 **Audit Logging** - complete audit trail for compliance
@@ -29,7 +33,7 @@ A comprehensive backend training project demonstrating **Clean Architecture**, *
 ### **1. Prerequisites**
 ```bash
 # Required
-- Node.js 18+ 
+- Bun 1.0+ (JavaScript runtime)
 - PostgreSQL database
 - Git
 
@@ -43,8 +47,11 @@ A comprehensive backend training project demonstrating **Clean Architecture**, *
 git clone <repository-url>
 cd Headless-Document-Management-System
 
+# Install Bun (if not already installed)
+curl -fsSL https://bun.sh/install | bash
+
 # Install dependencies
-npm install
+bun install
 
 # Setup environment
 cp env.example .env
@@ -59,8 +66,8 @@ cp env.example .env
 docker-compose up -d postgres
 
 # Generate and run migrations
-npm run db:generate
-npm run db:migrate
+bun run db:generate
+bun run db:migrate
 ```
 
 **Option B: Local PostgreSQL**
@@ -69,21 +76,20 @@ npm run db:migrate
 # Update DATABASE_URL in .env
 
 # Generate and run migrations
-npm run db:generate
-npm run db:migrate
+bun run db:generate
+bun run db:migrate
 ```
 
 ### **4. Start Development Server**
 ```bash
 # Development mode with hot reload
-npm run dev
+bun run dev
 
 # Production build
-npm run build
-npm start
+bun run build
+bun run start
 ```
 
-Server will be available at **http://localhost:3000**
 
 ## 🧪 **Testing Workflow**
 
@@ -116,21 +122,16 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 ### **Automated Testing**
 ```bash
 # Run all tests
-npm test
+bun test
 
 # Run specific test suites
-npm run test:unit      # Unit tests only
-npm run test:integration  # Integration tests only
+bun test tests/unit/      # Unit tests only
+bun test tests/integration/  # Integration tests only
 
 # Test with coverage
-npm run test:coverage
+bun test --coverage
 ```
 
-### **Manual API Testing**
-For comprehensive API testing examples, see the included PowerShell scripts:
-```powershell
-# See examples in tests/manual-test.ts for complete workflows
-```
 
 ## 📚 **API Endpoints**
 
@@ -192,21 +193,6 @@ src/
 6. **Define Routes** (`src/index.ts`)
 7. **Add Tests** (`tests/`)
 
-### **Code Quality**
-```bash
-# Type checking
-npm run type-check
-
-# Linting
-npm run lint
-
-# Build verification
-npm run build
-
-# Full quality check
-npm run test && npm run build
-```
-
 ## 🔧 **Configuration**
 
 ### **Environment Variables**
@@ -266,32 +252,6 @@ docker-compose up -d
 # Production deployment
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
-
-### **Manual Deployment**
-```bash
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Or with PM2
-pm2 start dist/index.js --name "doc-management"
-```
-
-## 📖 **Documentation**
-
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed architecture and design patterns
-- **[API Examples](./tests/manual-test.ts)** - Complete API usage examples
-- **[Environment Setup](./env.example)** - Configuration reference
-
-## 🤝 **Contributing**
-
-1. Follow the established architecture patterns
-2. Add tests for new features
-3. Update documentation
-4. Ensure type safety
-5. Follow the coding standards
 
 ## 📄 **License**
 

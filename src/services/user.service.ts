@@ -3,7 +3,7 @@
  * Implements business logic for user management operations
  */
 
-import { User, UserRole, PaginationParams, PaginatedResponse, ApiResponse } from '../types';
+import { User, PaginationParams, PaginatedResponse, ApiResponse } from '../types';
 import { IUserRepository, CreateUserDTO, UpdateUserDTO, UserFiltersDTO } from '../repositories/interfaces/user.repository';
 import { UserRepository } from '../repositories/implementations/user.repository';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils/password';
@@ -160,9 +160,43 @@ export class UserService {
         };
       }
 
-      // TODO: Verify password - in a real implementation, you'd have a method to get user with password
-      // For now, we'll skip password verification in the service layer
-      // Password verification should be implemented in the repository layer
+      // Verify password
+      const userWithPassword = await this.userRepository.findOne({ email }, true);
+      if (!userWithPassword || !(userWithPassword as any).password) {
+        AuditLogger.logAuth({
+          action: 'login_failed' as any,
+          email,
+          ip: options.ipAddress,
+          userAgent: options.userAgent,
+          success: false,
+          reason: 'Password verification failed',
+        });
+
+        return {
+          success: false,
+          message: 'Invalid email or password',
+          error: 'INVALID_CREDENTIALS',
+        };
+      }
+
+      const isPasswordValid = await verifyPassword(password, (userWithPassword as any).password);
+      if (!isPasswordValid) {
+        AuditLogger.logAuth({
+          action: 'login_failed' as any,
+          userId: user.id,
+          email,
+          ip: options.ipAddress,
+          userAgent: options.userAgent,
+          success: false,
+          reason: 'Invalid password',
+        });
+
+        return {
+          success: false,
+          message: 'Invalid email or password',
+          error: 'INVALID_CREDENTIALS',
+        };
+      }
 
       // Generate JWT token
       const token = generateToken({
@@ -359,7 +393,16 @@ export class UserService {
   ): Promise<ApiResponse<void>> {
     try {
       // Get user with password
-      const user = await this.userRepository.findOne({ email: (await this.userRepository.findById(userId))?.email || '' });
+      const existingUser = await this.userRepository.findById(userId);
+      if (!existingUser) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      const user = await this.userRepository.findOne({ email: existingUser.email }, true);
       if (!user) {
         return {
           success: false,

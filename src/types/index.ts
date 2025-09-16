@@ -3,8 +3,6 @@
  * Defines interfaces, types, and enums used throughout the application
  */
 
-import { Request } from 'express';
-
 /**
  * User role enumeration for RBAC
  */
@@ -128,10 +126,16 @@ export interface JWTPayload {
 }
 
 /**
- * Extended Express Request with authenticated user
+ * Authenticated request context for Elysia
  */
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedContext {
   user: JWTPayload;
+  request: {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    ip?: string;
+  };
 }
 
 /**
@@ -170,6 +174,11 @@ export interface DocumentSearchFilters {
   uploadedBy?: string;
   dateFrom?: Date;
   dateTo?: Date;
+  minSize?: number;
+  maxSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  documentIds?: string[];
 }
 
 /**
@@ -177,7 +186,8 @@ export interface DocumentSearchFilters {
  */
 export interface FileUpload {
   buffer: Buffer;
-  originalname: string;
+  originalname?: string;
+  filename: string;
   mimetype: string;
   size: number;
 }
@@ -188,6 +198,7 @@ export interface FileUpload {
 export interface PreSignedUrlResponse {
   url: string;
   expiresIn: number;
+  expiresAt: Date;
 }
 
 /**
@@ -204,11 +215,11 @@ export interface ApiResponse<T = any> {
  * Repository interface for generic CRUD operations
  */
 export interface Repository<T> {
-  findById(id: string): Promise<T | null>;
-  findMany(filters?: any): Promise<T[]>;
-  create(data: Partial<T>): Promise<T>;
-  update(id: string, data: Partial<T>): Promise<T | null>;
-  delete(id: string): Promise<boolean>;
+  findById(_id: string): Promise<T | null>;
+  findMany(_filters?: any): Promise<T[]>;
+  create(_data: Partial<T>): Promise<T>;
+  update(_id: string, _data: Partial<T>): Promise<T | null>;
+  delete(_id: string): Promise<boolean>;
 }
 
 /**

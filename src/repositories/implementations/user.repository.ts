@@ -105,9 +105,10 @@ export class UserRepository implements IUserRepository {
   /**
    * Find single user by filters
    * @param {UserFiltersDTO} filters - Filters to apply
+   * @param {boolean} includePassword - Whether to include password in result
    * @returns {Promise<User | null>} User or null if not found
    */
-  async findOne(filters: UserFiltersDTO): Promise<User | null> {
+  async findOne(filters: UserFiltersDTO, includePassword = false): Promise<User | null> {
     const conditions = this.buildWhereConditions(filters);
     if (!conditions) {
       return null;
@@ -119,7 +120,15 @@ export class UserRepository implements IUserRepository {
       .where(conditions)
       .limit(1);
 
-    return result[0] ? this.mapToUser(result[0]) : null;
+    if (!result[0]) {
+      return null;
+    }
+
+    const user = this.mapToUser(result[0]);
+    if (includePassword) {
+      (user as any).password = result[0].password;
+    }
+    return user;
   }
 
   /**

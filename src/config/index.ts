@@ -5,8 +5,8 @@
 
 import dotenv from 'dotenv';
 
-// Load environment variables from .env file
-dotenv.config();
+// Load environment variables from .env file (don't override existing env vars)
+dotenv.config({ override: false });
 
 /**
  * Validate required environment variables

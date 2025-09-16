@@ -3,7 +3,6 @@
  * Provides structured logging for the application
  */
 
-import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 
 /**
@@ -63,42 +62,50 @@ export class Logger {
 }
 
 /**
- * Request logging middleware
+ * Request logging utility for Elysia
  * Logs incoming requests with timing information
- * @param {Request} req - Express request object
- * @param {Response} res - Express response object
- * @param {NextFunction} next - Express next function
  */
-export function requestLogger(req: Request, res: Response, next: NextFunction): void {
-  const startTime = Date.now();
-  const requestId = req.headers['x-request-id'] as string;
+export function logRequest(context: {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  ip?: string;
+}) {
+  const requestId = context.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
   // Log incoming request
   Logger.info('Incoming request', {
     requestId,
-    method: req.method,
-    url: req.originalUrl,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
+    method: context.method,
+    url: context.url,
+    ip: context.ip,
+    userAgent: context.headers['user-agent'],
   });
 
-  // Log response when finished
-  res.on('finish', () => {
-    const duration = Date.now() - startTime;
-    const logLevel = res.statusCode >= 400 ? 'warn' : 'info';
-    
-    const logMethod = logLevel === 'warn' ? Logger.warn : Logger.info;
-    logMethod('Request completed', {
-      requestId,
-      method: req.method,
-      url: req.originalUrl,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      contentLength: res.get('Content-Length') || 0,
-    });
-  });
+  return requestId;
+}
 
-  next();
+/**
+ * Log response completion
+ */
+export function logResponse(requestId: string, context: {
+  method: string;
+  url: string;
+  statusCode: number;
+  duration: number;
+  contentLength?: number;
+}) {
+  const logLevel = context.statusCode >= 400 ? 'warn' : 'info';
+  
+  const logMethod = logLevel === 'warn' ? Logger.warn : Logger.info;
+  logMethod('Request completed', {
+    requestId,
+    method: context.method,
+    url: context.url,
+    statusCode: context.statusCode,
+    duration: `${context.duration}ms`,
+    contentLength: context.contentLength || 0,
+  });
 }
 
 /**

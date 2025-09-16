@@ -46,6 +46,13 @@ export interface UserFiltersDTO {
  */
 export interface IUserRepository extends BaseRepository<User, CreateUserDTO, UpdateUserDTO, UserFiltersDTO> {
   /**
+   * Find single user by filters
+   * @param {UserFiltersDTO} filters - Filters to apply
+   * @param {boolean} includePassword - Whether to include password in result
+   * @returns {Promise<User | null>} User or null if not found
+   */
+  findOne(filters: UserFiltersDTO, includePassword?: boolean): Promise<User | null>;
+  /**
    * Find user by email address
    * @param {string} email - User email address
    * @returns {Promise<User | null>} User or null if not found

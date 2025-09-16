@@ -9,6 +9,7 @@ import { createHash } from 'crypto';
 import { join, dirname, extname } from 'path';
 import { config } from '../config';
 import { FileUpload, PreSignedUrlResponse } from '../types';
+import { IStorageService } from './interfaces/storage.interface';
 import { Logger } from '../middleware/logging';
 
 /**
@@ -16,7 +17,7 @@ import { Logger } from '../middleware/logging';
  * Provides file storage operations with local filesystem
  * Interface designed to match future S3 implementation
  */
-export class LocalStorageService {
+export class LocalStorageService implements IStorageService {
   private storagePath: string;
 
   constructor() {
