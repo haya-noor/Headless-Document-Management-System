@@ -67,7 +67,7 @@ class BunTestRunner {
 
       // Run the test using Bun test
       const proc = spawn({
-        cmd: ['bun', 'test', testFile, '--reporter', 'json'],
+        cmd: ['bun', 'test', testFile],
         stdout: 'pipe',
         stderr: 'pipe',
       });
@@ -79,13 +79,19 @@ class BunTestRunner {
       const duration = Date.now() - startTime;
 
       if (exitCode === 0) {
-        // Parse JSON output if available
-        let testDetails = '';
-        try {
-          const jsonOutput = JSON.parse(output);
-          testDetails = `Tests: ${jsonOutput.tests || 'N/A'}, Failures: ${jsonOutput.failures || 0}`;
-        } catch {
-          testDetails = 'Completed successfully';
+        // Extract test info from Bun's default output
+        let testDetails = 'Completed successfully';
+        
+        // Try to extract pass/fail info from output
+        const passMatch = output.match(/(\d+)\s+pass/);
+        const failMatch = output.match(/(\d+)\s+fail/);
+        const totalMatch = output.match(/Ran\s+(\d+)\s+tests/);
+        
+        if (passMatch || failMatch || totalMatch) {
+          const passed = passMatch ? passMatch[1] : '0';
+          const failed = failMatch ? failMatch[1] : '0';
+          const total = totalMatch ? totalMatch[1] : 'N/A';
+          testDetails = `Tests: ${total}, Passed: ${passed}, Failed: ${failed}`;
         }
 
         this.results.push({

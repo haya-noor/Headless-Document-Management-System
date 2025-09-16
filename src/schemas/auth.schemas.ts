@@ -23,7 +23,7 @@ export const registerSchema = z.object({
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/\d/, 'Password must contain at least one number')
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, 'Password must contain at least one special character'),
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/, 'Password must contain at least one special character'),
   
   firstName: z
     .string()
@@ -69,7 +69,7 @@ export const changePasswordSchema = z.object({
     .regex(/[A-Z]/, 'New password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'New password must contain at least one lowercase letter')
     .regex(/\d/, 'New password must contain at least one number')
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, 'New password must contain at least one special character'),
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/, 'New password must contain at least one special character'),
   
   confirmPassword: z
     .string()

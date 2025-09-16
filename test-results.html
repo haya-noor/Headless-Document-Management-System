@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Results - Document Management System</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: #f8f9fa; padding: 20px; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #333; }
+        .stat-label { color: #666; margin-top: 5px; }
+        .test-suite { margin-bottom: 20px; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+        .test-header { padding: 15px; background: #f8f9fa; font-weight: bold; }
+        .test-body { padding: 15px; }
+        .status-pass { color: #28a745; }
+        .status-fail { color: #dc3545; }
+        .status-skip { color: #ffc107; }
+        .duration { color: #666; font-size: 0.9em; }
+        .details { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Test Results Report</h1>
+            <p>Document Management System - 9/16/2025, 7:03:01 PM</p>
+        </div>
+        
+        <div class="summary">
+            <div class="stat-card">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Total Suites</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value status-pass">3</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value status-fail">3</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">50%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">1347ms</div>
+                <div class="stat-label">Total Duration</div>
+            </div>
+        </div>
+        
+        <h2>Test Suite Results</h2>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-pass">✅</span>
+                    Setup Tests
+                    <span class="duration">(13ms)</span>
+                </div>
+                
+            </div>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-fail">❌</span>
+                    Authentication Tests
+                    <span class="duration">(1133ms)</span>
+                </div>
+                
+                    <div class="test-body">
+                        <div class="details">
+tests/auth.test.ts:
+(pass) Authentication System > JWT Utilities > should generate valid JWT tokens [32.00ms]
+(pass) Authentication System > JWT Utilities > should reject invalid tokens [2.00ms]
+(pass) Authentication System > JWT Utilities > should extract tokens from authorization headers
+(pass) Authentication System > Password Utilities > should hash and verify passwords correctly [632.00ms]
+67 | 
+68 |     it("should validate password strength", () => {
+69 |       const { validatePasswordStrength } = require("../src/utils/password");
+70 | 
+71 |       // Valid passwords
+72 |       expect(validatePasswordStrength("TestPass123!")).toBe(true);
+                                                            ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: {
+  isValid: true,
+  errors: [],
+}
+
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:72:56)
+(fail) Authentication System > Password Utilities > should validate password strength
+ 99 |       };
+100 | 
+101 |       const userService = new UserService(mockUserRepository);
+102 |       const userData = testUtils.generateTestUser();
+103 | 
+104 |       const result = await userService.register(userData, {});
+                                             ^
+TypeError: userService.register is not a function. (In 'userService.register(userData, {})', 'userService.register' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:104:40)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:85:38)
+(fail) Authentication System > User Service > should register a new user [25.00ms]
+119 |       };
+120 | 
+121 |       const userService = new UserService(mockUserRepository);
+122 |       const userData = testUtils.generateTestUser();
+123 | 
+124 |       const result = await userService.register(userData, {});
+                                             ^
+TypeError: userService.register is not a function. (In 'userService.register(userData, {})', 'userService.register' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:124:40)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:112:59)
+(fail) Authentication System > User Service > should reject registration with duplicate email
+142 |         updateLastLogin: async () => {},
+143 |       };
+144 | 
+145 |       const userService = new UserService(mockUserRepository);
+146 | 
+147 |       const result = await userService.login({
+                                             ^
+TypeError: new UserService({
+        findByEmail: async () => ({
+          ...mocks.mockDbResponses.user,
+          password: hashedPassword
+        }),
+        updateLastLogin: async () => {}
+      }).login is not a function. (In 'new UserService({
+        findByEmail: async () => ({
+          ...mocks.mockDbResponses.user,
+          password: hashedPassword
+        }),
+        updateLastLogin: async () => {}
+      }).login({
+        email: "test@example.com",
+        password: "TestPass123!"
+      }, {})', 'new UserService({
+        findByEmail: async () => ({
+          ...mocks.mockDbResponses.user,
+          password: hashedPassword
+        }),
+        updateLastLogin: async () => {}
+      }).login' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:147:40)
+(fail) Authentication System > User Service > should login with valid credentials [209.00ms]
+161 |         findByEmail: async () => null, // User not found
+162 |       };
+163 | 
+164 |       const userService = new UserService(mockUserRepository);
+165 | 
+166 |       const result = await userService.login({
+                                             ^
+TypeError: new UserService({
+        findByEmail: async () => null
+      }).login is not a function. (In 'new UserService({
+        findByEmail: async () => null
+      }).login({
+        email: "nonexistent@example.com",
+        password: "TestPass123!"
+      }, {})', 'new UserService({
+        findByEmail: async () => null
+      }).login' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:166:40)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:157:56)
+(fail) Authentication System > User Service > should reject login with invalid credentials
+(pass) Authentication System > Authentication Schemas > should validate registration data [6.00ms]
+(pass) Authentication System > Authentication Schemas > should reject invalid registration data
+(pass) Authentication System > Authentication Schemas > should validate login data
+233 |     };
+234 | 
+235 |     const { UserService } = require("../src/services/user.service");
+236 |     const userService = new UserService(mockRepository);
+237 | 
+238 |     const result = await userService.register(userData, {});
+                                           ^
+TypeError: new UserService(mockRepository).register is not a function. (In 'new UserService(mockRepository).register(userData, {})', 'new UserService(mockRepository).register' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:238:38)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:217:50)
+(fail) Authentication Integration > should handle complete registration flow
+263 |     };
+264 | 
+265 |     const { UserService } = require("../src/services/user.service");
+266 |     const userService = new UserService(mockRepository);
+267 | 
+268 |     const result = await userService.login({
+                                           ^
+TypeError: new UserService(mockRepository).login is not a function. (In 'new UserService(mockRepository).login({
+      email: "test@example.com",
+      password: "TestPass123!"
+    }, {})', 'new UserService(mockRepository).login' is undefined)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/auth.test.ts:268:38)
+(fail) Authentication Integration > should handle complete login flow [212.00ms]
+
+ 7 pass
+ 7 fail
+ 22 expect() calls
+Ran 14 tests across 1 file. [1128.00ms]
+</div>
+                    </div>
+                
+            </div>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-fail">❌</span>
+                    Document Management Tests
+                    <span class="duration">(68ms)</span>
+                </div>
+                
+                    <div class="test-body">
+                        <div class="details">
+tests/documents.test.ts:
+(pass) Document Management System > Document Service > should upload a document successfully [14.00ms]
+(pass) Document Management System > Document Service > should get document with proper permissions [1.00ms]
+(pass) Document Management System > Document Service > should deny access to unauthorized document [1.00ms]
+(pass) Document Management System > Document Service > should search documents with filters
+(pass) Document Management System > Document Service > should update document metadata
+(pass) Document Management System > Document Service > should generate download link [1.00ms]
+(pass) Document Management System > Document Service > should manage document permissions
+(pass) Document Management System > Document Service > should delete document
+(pass) Document Management System > Document Repository > should implement CRUD operations [25.00ms]
+(pass) Document Management System > Document Repository > should validate search filters
+(pass) Document Management System > Document Schemas > should validate document upload data [7.00ms]
+(pass) Document Management System > Document Schemas > should validate document search parameters [1.00ms]
+422 |         userId: "user-id-123",
+423 |         permission: "read",
+424 |       };
+425 | 
+426 |       const result = DocumentPermissionSchema.safeParse(validData);
+427 |       expect(result.success).toBe(true);
+                                   ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/documents.test.ts:427:30)
+(fail) Document Management System > Document Schemas > should validate permission data [1.00ms]
+(pass) Document Management System > Document Schemas > should reject invalid permission data
+(pass) Document Management System > Document Versioning > should create document versions [1.00ms]
+(pass) Document Management System > Document Versioning > should validate version data
+(pass) Document Management System > Document Permissions > should manage permissions correctly
+(pass) Document Management System > Document Permissions > should validate permission types
+
+ 17 pass
+ 1 fail
+ 48 expect() calls
+Ran 18 tests across 1 file. [63.00ms]
+</div>
+                    </div>
+                
+            </div>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-fail">❌</span>
+                    Storage Tests
+                    <span class="duration">(27ms)</span>
+                </div>
+                
+                    <div class="test-body">
+                        <div class="details">
+tests/storage.test.ts:
+(pass) Storage Service > Local Storage Service > should initialize storage directory [10.00ms]
+(pass) Storage Service > Local Storage Service > should generate unique file keys [1.00ms]
+41 |       const version = 2;
+42 | 
+43 |       const versionKey = storage.generateVersionKey(baseKey, version);
+44 | 
+45 |       expect(versionKey).toContain("v2");
+46 |       expect(versionKey).toContain(baseKey);
+                              ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "user-123/doc-456/document.pdf"
+Received: "user-123/doc-456/versions/document_v2.pdf"
+
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/storage.test.ts:46:26)
+(fail) Storage Service > Local Storage Service > should generate version-specific keys
+(pass) Storage Service > Local Storage Service > should create upload result with checksum
+72 |         url: `http://localhost:3001/download/${encodeURIComponent(key)}?filename=${filename}`,
+73 |         expiresIn,
+74 |         expiresAt: new Date(Date.now() + expiresIn * 1000),
+75 |       };
+76 | 
+77 |       expect(downloadUrl.url).toContain(key);
+                                   ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "test/document.pdf"
+Received: "http://localhost:3001/download/test%2Fdocument.pdf?filename=custom-name.pdf"
+
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/storage.test.ts:77:31)
+      at <anonymous> (/home/haya-noor/Headless-Document-Management-System/tests/storage.test.ts:65:41)
+(fail) Storage Service > Local Storage Service > should generate download URLs
+(pass) Storage Service > Local Storage Service > should handle file metadata
+(pass) Storage Service > Local Storage Service > should validate file operations [1.00ms]
+(pass) Storage Service > Storage Factory > should create local storage service by default
+(pass) Storage Service > Storage Factory > should return singleton instance
+(pass) Storage Service > Storage Factory > should throw error for unsupported providers
+(pass) Storage Service > Storage Factory > should throw error for S3 (not implemented)
+(pass) Storage Service > Storage Interface Compliance > should implement all required methods
+(pass) Storage Service > Storage Interface Compliance > should handle upload options correctly
+(pass) Storage Service > File Validation > should validate file upload data
+(pass) Storage Service > File Validation > should validate file size limits
+(pass) Storage Service > File Validation > should validate allowed file types
+(pass) Storage Service > File Validation > should reject invalid file types
+(pass) Storage Service > Storage Security > should sanitize file keys
+(pass) Storage Service > Storage Security > should generate secure checksums
+(pass) Storage Service > Storage Security > should handle file path validation [1.00ms]
+(pass) Storage Service > Storage Performance > should handle concurrent operations
+(pass) Storage Service > Storage Performance > should handle large file operations
+
+ 20 pass
+ 2 fail
+ 70 expect() calls
+Ran 22 tests across 1 file. [23.00ms]
+</div>
+                    </div>
+                
+            </div>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-pass">✅</span>
+                    Repository Tests
+                    <span class="duration">(56ms)</span>
+                </div>
+                
+            </div>
+        
+            <div class="test-suite">
+                <div class="test-header">
+                    <span class="status-pass">✅</span>
+                    API Integration Tests
+                    <span class="duration">(50ms)</span>
+                </div>
+                
+            </div>
+        
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; text-align: center;">
+            Generated by Bun Test Runner • Environment: development • Platform: linux
+        </div>
+    </div>
+</body>
+</html>
