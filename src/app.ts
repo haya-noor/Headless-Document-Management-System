@@ -11,9 +11,7 @@ import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
 import { databaseConfig } from './config/database';
 import { Logger } from './middleware/logging';
-import { authRoutes } from './controllers/auth.controller.elysia';
-import { fileRoutes } from './controllers/file.controller.elysia';
-import { documentRoutes } from './controllers/document.controller.elysia';
+import { authRoutes, documentRoutes, fileRoutes } from './routes';
 
 /**
  * Working Application class using Elysia
@@ -152,17 +150,20 @@ class WorkingApplication {
           .use(authRoutes.logout)
           .use(authRoutes.getProfile)
           .use(authRoutes.updateProfile)
-          .use(authRoutes.changePassword)
-          .use(authRoutes.refreshToken);
+          .use(authRoutes.changePassword);
       });
 
       // File serving routes
       app.group('/files', (filesApp) => {
         return filesApp
           .use(fileRoutes.serveFile)
+          .use(fileRoutes.uploadFile)
+          .use(fileRoutes.generateDownloadLink)
+          .use(fileRoutes.deleteFile)
+          .use(fileRoutes.getFileMetadata)
+          .use(fileRoutes.listFiles)
           .use(fileRoutes.downloadFile)
-          .use(fileRoutes.getFileInfo)
-          .use(fileRoutes.deleteFile);
+          .use(fileRoutes.getFileInfo);
       });
 
       // Document routes

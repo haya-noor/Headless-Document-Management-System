@@ -7,7 +7,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
 import { documentPermissions } from '../../models/schema';
-import { DocumentPermission, PaginationParams, PaginatedResponse } from '../../types';
+import { DocumentPermission, PaginationParams, PaginatedResponse, Permission } from '../../types';
 import { 
   IDocumentPermissionRepository, 
   CreateDocumentPermissionDTO,
@@ -17,11 +17,18 @@ import {
 
 export class DocumentPermissionRepository implements IDocumentPermissionRepository {
   /**
+   * Get database instance with null check
+   */
+  private getDb() {
+    return databaseConfig.getDatabase();
+  }
+
+  /**
    * Find document permission by ID
    */
   async findById(id: string): Promise<DocumentPermission | null> {
     try {
-      const [permission] = await databaseConfig.db
+      const [permission] = await this.getDb()
         .select()
         .from(documentPermissions)
         .where(eq(documentPermissions.id, id));
@@ -37,7 +44,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async findMany(filters?: DocumentPermissionFiltersDTO): Promise<DocumentPermission[]> {
     try {
-      const query = databaseConfig.db.select().from(documentPermissions);
+      const query = this.getDb().select().from(documentPermissions);
       const conditions: any[] = [];
 
       if (filters) {
@@ -76,8 +83,8 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
       const { page, limit } = pagination;
       const offset = (page - 1) * limit;
 
-      const query = databaseConfig.db.select().from(documentPermissions);
-      const countQuery = databaseConfig.db.select({ count: sql`count(*)` }).from(documentPermissions);
+      const query = this.getDb().select().from(documentPermissions);
+      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(documentPermissions);
       const conditions: any[] = [];
 
       if (filters) {
@@ -143,7 +150,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
       const permissionId = uuidv4();
       const now = new Date();
 
-      const [permission] = await databaseConfig.db
+      const [permission] = await this.getDb()
         .insert(documentPermissions)
         .values({
           id: permissionId,
@@ -178,7 +185,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
         updatedAt: now,
       }));
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .insert(documentPermissions)
         .values(permissionsToInsert)
         .returning();
@@ -194,7 +201,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async update(id: string, data: UpdateDocumentPermissionDTO): Promise<DocumentPermission | null> {
     try {
-      const [permission] = await databaseConfig.db
+      const [permission] = await this.getDb()
         .update(documentPermissions)
         .set({
           ...data,
@@ -214,7 +221,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async delete(id: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentPermissions)
         .where(eq(documentPermissions.id, id));
 
@@ -229,7 +236,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async exists(id: string): Promise<boolean> {
     try {
-      const [permission] = await databaseConfig.db
+      const [permission] = await this.getDb()
         .select({ id: documentPermissions.id })
         .from(documentPermissions)
         .where(eq(documentPermissions.id, id))
@@ -293,9 +300,10 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
   /**
    * Find permissions by document and user
    */
-  async findByDocumentAndUser(documentId: string, userId: string): Promise<DocumentPermission[]> {
+  async findByDocumentAndUser(documentId: string, userId: string): Promise<DocumentPermission | null> {
     try {
-      return await this.findMany({ documentId, userId });
+      const permissions = await this.findMany({ documentId, userId });
+      return permissions[0] || null;
     } catch (error) {
       throw new Error(`Failed to find permissions by document and user: ${error}`);
     }
@@ -316,25 +324,19 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
   /**
    * Grant permission to user for document
    */
-  async grantPermission(
-    documentId: string,
-    userId: string,
-    permission: string,
-    grantedBy: string
-  ): Promise<DocumentPermission> {
+  async grantPermission(permissionData: CreateDocumentPermissionDTO): Promise<DocumentPermission> {
     try {
       // Check if permission already exists
-      const existing = await this.findOne({ documentId, userId, permission });
+      const existing = await this.findOne({ 
+        documentId: permissionData.documentId, 
+        userId: permissionData.userId, 
+        permission: permissionData.permission 
+      });
       if (existing) {
         return existing;
       }
 
-      return await this.create({
-        documentId,
-        userId,
-        permission,
-        grantedBy,
-      });
+      return await this.create(permissionData);
     } catch (error) {
       throw new Error(`Failed to grant permission: ${error}`);
     }
@@ -361,7 +363,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async revokeAllPermissions(documentId: string, userId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentPermissions)
         .where(and(
           eq(documentPermissions.documentId, documentId),
@@ -379,7 +381,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async deleteByDocumentId(documentId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentPermissions)
         .where(eq(documentPermissions.documentId, documentId));
 
@@ -394,7 +396,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async deleteByUserId(userId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentPermissions)
         .where(eq(documentPermissions.userId, userId));
 
@@ -409,7 +411,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async getAccessibleDocuments(userId: string): Promise<string[]> {
     try {
-      const permissions = await databaseConfig.db
+      const permissions = await this.getDb()
         .selectDistinct({ documentId: documentPermissions.documentId })
         .from(documentPermissions)
         .where(eq(documentPermissions.userId, userId));
@@ -425,7 +427,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    */
   async getDocumentUsers(documentId: string): Promise<Array<{ userId: string; permission: string }>> {
     try {
-      const permissions = await databaseConfig.db
+      const permissions = await this.getDb()
         .select({
           userId: documentPermissions.userId,
           permission: documentPermissions.permission,
@@ -440,6 +442,204 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
   }
 
   /**
+   * Check if user has any permission for document
+   */
+  async hasAnyPermission(documentId: string, userId: string): Promise<boolean> {
+    try {
+      const permissions = await this.findMany({ documentId, userId });
+      return permissions.length > 0;
+    } catch (error) {
+      throw new Error(`Failed to check if user has any permission: ${error}`);
+    }
+  }
+
+  /**
+   * Get user's permissions for document
+   */
+  async getUserPermissions(documentId: string, userId: string): Promise<Permission[]> {
+    try {
+      const permissions = await this.findMany({ documentId, userId });
+      return permissions.map(p => p.permission as Permission);
+    } catch (error) {
+      throw new Error(`Failed to get user permissions: ${error}`);
+    }
+  }
+
+  /**
+   * Update user permission for document
+   */
+  async updatePermission(
+    documentId: string,
+    userId: string,
+    oldPermission: string,
+    newPermission: string,
+    grantedBy: string
+  ): Promise<boolean> {
+    try {
+      const existing = await this.findOne({ documentId, userId, permission: oldPermission });
+      if (!existing) {
+        return false;
+      }
+
+      const result = await this.getDb()
+        .update(documentPermissions)
+        .set({
+          permission: newPermission,
+          grantedBy,
+          updatedAt: new Date(),
+        })
+        .where(eq(documentPermissions.id, existing.id));
+
+      return result.rowCount > 0;
+    } catch (error) {
+      throw new Error(`Failed to update permission: ${error}`);
+    }
+  }
+
+  /**
+   * Find documents user has specific permission for
+   */
+  async findDocumentsByUserPermission(userId: string, permission: string): Promise<string[]> {
+    try {
+      const permissions = await this.findMany({ userId, permission });
+      return permissions.map(p => p.documentId);
+    } catch (error) {
+      throw new Error(`Failed to find documents by user permission: ${error}`);
+    }
+  }
+
+  /**
+   * Find users with specific permission for document
+   */
+  async findUsersByDocumentPermission(documentId: string, permission: string): Promise<string[]> {
+    try {
+      const permissions = await this.findMany({ documentId, permission });
+      return permissions.map(p => p.userId);
+    } catch (error) {
+      throw new Error(`Failed to find users by document permission: ${error}`);
+    }
+  }
+
+  /**
+   * Copy permissions from one document to another
+   */
+  async copyPermissions(sourceDocumentId: string, targetDocumentId: string, grantedBy: string): Promise<number> {
+    try {
+      const sourcePermissions = await this.findByDocumentId(sourceDocumentId);
+      
+      if (sourcePermissions.length === 0) {
+        return 0;
+      }
+
+      const permissionsToCopy = sourcePermissions.map(permission => ({
+        documentId: targetDocumentId,
+        userId: permission.userId,
+        permission: permission.permission,
+        grantedBy,
+      }));
+
+      const result = await this.createMany(permissionsToCopy);
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to copy permissions: ${error}`);
+    }
+  }
+
+  /**
+   * Remove all permissions for a document
+   */
+  async removeAllDocumentPermissions(documentId: string): Promise<number> {
+    try {
+      const result = await this.getDb()
+        .delete(documentPermissions)
+        .where(eq(documentPermissions.documentId, documentId));
+
+      return result.rowCount;
+    } catch (error) {
+      throw new Error(`Failed to remove all document permissions: ${error}`);
+    }
+  }
+
+  /**
+   * Remove all permissions for a user
+   */
+  async removeAllUserPermissions(userId: string): Promise<number> {
+    try {
+      const result = await this.getDb()
+        .delete(documentPermissions)
+        .where(eq(documentPermissions.userId, userId));
+
+      return result.rowCount;
+    } catch (error) {
+      throw new Error(`Failed to remove all user permissions: ${error}`);
+    }
+  }
+
+  /**
+   * Update multiple permissions by filters
+   */
+  async updateMany(filters: DocumentPermissionFiltersDTO, data: UpdateDocumentPermissionDTO): Promise<number> {
+    try {
+      const conditions: any[] = [];
+
+      if (filters.documentId) {
+        conditions.push(eq(documentPermissions.documentId, filters.documentId));
+      }
+      if (filters.userId) {
+        conditions.push(eq(documentPermissions.userId, filters.userId));
+      }
+      if (filters.permission) {
+        conditions.push(eq(documentPermissions.permission, filters.permission));
+      }
+      if (filters.grantedBy) {
+        conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
+      }
+
+      const result = await this.getDb()
+        .update(documentPermissions)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return result.rowCount;
+    } catch (error) {
+      throw new Error(`Failed to update multiple permissions: ${error}`);
+    }
+  }
+
+  /**
+   * Delete multiple permissions by filters
+   */
+  async deleteMany(filters: DocumentPermissionFiltersDTO): Promise<number> {
+    try {
+      const conditions: any[] = [];
+
+      if (filters.documentId) {
+        conditions.push(eq(documentPermissions.documentId, filters.documentId));
+      }
+      if (filters.userId) {
+        conditions.push(eq(documentPermissions.userId, filters.userId));
+      }
+      if (filters.permission) {
+        conditions.push(eq(documentPermissions.permission, filters.permission));
+      }
+      if (filters.grantedBy) {
+        conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
+      }
+
+      const result = await this.getDb()
+        .delete(documentPermissions)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return result.rowCount;
+    } catch (error) {
+      throw new Error(`Failed to delete multiple permissions: ${error}`);
+    }
+  }
+
+  /**
    * Get permission statistics
    */
   async getPermissionStats(): Promise<{
@@ -449,11 +649,11 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
     usersWithPermissions: number;
   }> {
     try {
-      const [totalCount] = await databaseConfig.db
+      const [totalCount] = await this.getDb()
         .select({ count: sql`count(*)` })
         .from(documentPermissions);
 
-      const permissionTypeStats = await databaseConfig.db
+      const permissionTypeStats = await this.getDb()
         .select({
           permission: documentPermissions.permission,
           count: sql`count(*)`
@@ -461,11 +661,11 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
         .from(documentPermissions)
         .groupBy(documentPermissions.permission);
 
-      const [documentsCount] = await databaseConfig.db
+      const [documentsCount] = await this.getDb()
         .selectDistinct({ count: sql`count(distinct ${documentPermissions.documentId})` })
         .from(documentPermissions);
 
-      const [usersCount] = await databaseConfig.db
+      const [usersCount] = await this.getDb()
         .selectDistinct({ count: sql`count(distinct ${documentPermissions.userId})` })
         .from(documentPermissions);
 

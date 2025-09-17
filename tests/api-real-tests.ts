@@ -1,3 +1,4 @@
+/// <reference types="@types/bun" />
 /**
  * Real API Tests
  * Tests actual HTTP endpoints with real server

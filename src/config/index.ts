@@ -29,7 +29,8 @@ function getEnvVar(key: string, defaultValue?: string): string {
 export const config = {
   // Server configuration
   server: {
-    port: parseInt(getEnvVar('PORT', '3000')),
+    //port: parseInt(getEnvVar('PORT', '3000')),
+    port: parseInt(getEnvVar('PORT', '3002')),
     nodeEnv: getEnvVar('NODE_ENV', 'development'),
     isDevelopment: getEnvVar('NODE_ENV', 'development') === 'development',
     isProduction: getEnvVar('NODE_ENV', 'development') === 'production',

@@ -54,7 +54,7 @@ export const DocumentSearchSchema = z.object({
  * Validates permission operations
  */
 export const DocumentPermissionSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().min(1, 'User ID is required'),
   permission: z.enum(['read', 'write', 'delete']),
 });
 

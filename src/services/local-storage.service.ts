@@ -281,6 +281,53 @@ export class LocalStorageService implements IStorageService {
   }
 
   /**
+   * List files in storage with optional prefix and limit
+   * @param {string} prefix - Optional prefix to filter files
+   * @param {number} limit - Optional limit on number of files to return
+   * @returns {Promise<Array<{key: string; size: number; lastModified: Date}>>} List of files
+   */
+  async listFiles(prefix?: string, limit?: number): Promise<Array<{key: string; size: number; lastModified: Date}>> {
+    try {
+      await this.ensureStorageDirectory();
+      
+      const files: Array<{key: string; size: number; lastModified: Date}> = [];
+      
+      const scanDirectory = async (dirPath: string, currentPrefix: string = ''): Promise<void> => {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dirPath, entry.name);
+          const relativePath = path.join(currentPrefix, entry.name);
+          
+          if (entry.isDirectory()) {
+            await scanDirectory(fullPath, relativePath);
+          } else {
+            // Check if file matches prefix filter
+            if (!prefix || relativePath.startsWith(prefix)) {
+              const stats = await fs.stat(fullPath);
+              files.push({
+                key: relativePath,
+                size: stats.size,
+                lastModified: stats.mtime
+              });
+            }
+          }
+        }
+      };
+      
+      await scanDirectory(this.storagePath);
+      
+      // Sort by lastModified descending (newest first)
+      files.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+      
+      // Apply limit if specified
+      return limit ? files.slice(0, limit) : files;
+    } catch (error) {
+      throw new Error(`Failed to list files: ${error}`);
+    }
+  }
+
+  /**
    * Get storage statistics
    * @returns {Promise<Object>} Storage statistics
    */

@@ -16,16 +16,37 @@ import {
 
 export class DocumentVersionRepository implements IDocumentVersionRepository {
   /**
+   * Get database instance with null check
+   */
+  private getDb() {
+    return databaseConfig.getDatabase();
+  }
+
+  /**
+   * Transform database result to DocumentVersion type
+   */
+  private transformVersion(version: any): DocumentVersion {
+    return {
+      ...version,
+      checksum: version.checksum ?? undefined,
+      tags: version.tags ?? undefined,
+      metadata: version.metadata ?? undefined,
+    };
+  }
+
+  /**
    * Find document version by ID
    */
   async findById(id: string): Promise<DocumentVersion | null> {
     try {
-      const [version] = await databaseConfig.db
+      const [version] = await this.getDb()
         .select()
         .from(documentVersions)
         .where(eq(documentVersions.id, id));
 
-      return version || null;
+      if (!version) return null;
+
+      return this.transformVersion(version);
     } catch (error) {
       throw new Error(`Failed to find document version by ID: ${error}`);
     }
@@ -36,7 +57,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async findMany(filters?: DocumentVersionFiltersDTO): Promise<DocumentVersion[]> {
     try {
-      const query = databaseConfig.db.select().from(documentVersions);
+      const query = this.getDb().select().from(documentVersions);
       const conditions: any[] = [];
 
       if (filters) {
@@ -61,7 +82,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
         ? await query.where(and(...conditions)).orderBy(desc(documentVersions.version))
         : await query.orderBy(desc(documentVersions.version));
 
-      return result;
+      return result.map(version => this.transformVersion(version));
     } catch (error) {
       throw new Error(`Failed to find document versions: ${error}`);
     }
@@ -78,8 +99,8 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
       const { page, limit } = pagination;
       const offset = (page - 1) * limit;
 
-      const query = databaseConfig.db.select().from(documentVersions);
-      const countQuery = databaseConfig.db.select({ count: sql`count(*)` }).from(documentVersions);
+      const query = this.getDb().select().from(documentVersions);
+      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(documentVersions);
       const conditions: any[] = [];
 
       if (filters) {
@@ -115,12 +136,14 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
       const totalPages = Math.ceil(total / limit);
 
       return {
-        data,
+        data: data.map(version => this.transformVersion(version)),
         pagination: {
           page,
           limit,
           total,
           totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
         },
       };
     } catch (error) {
@@ -148,7 +171,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
       const versionId = uuidv4();
       const now = new Date();
 
-      const [version] = await databaseConfig.db
+      const [version] = await this.getDb()
         .insert(documentVersions)
         .values({
           id: versionId,
@@ -157,8 +180,8 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
           filename: data.filename,
           mimeType: data.mimeType,
           size: data.size,
-          storageKey: data.storageKey,
-          storageProvider: data.storageProvider || 'local',
+          storageKey: data.s3Key,
+          storageProvider: 'local',
           checksum: data.checksum,
           tags: data.tags || [],
           metadata: data.metadata || {},
@@ -167,7 +190,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
         })
         .returning();
 
-      return version;
+      return this.transformVersion(version);
     } catch (error) {
       throw new Error(`Failed to create document version: ${error}`);
     }
@@ -186,8 +209,8 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
         filename: version.filename,
         mimeType: version.mimeType,
         size: version.size,
-        storageKey: version.storageKey,
-        storageProvider: version.storageProvider || 'local',
+        storageKey: version.s3Key,
+        storageProvider: 'local',
         checksum: version.checksum,
         tags: version.tags || [],
         metadata: version.metadata || {},
@@ -195,12 +218,12 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
         createdAt: now,
       }));
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .insert(documentVersions)
         .values(versionsToInsert)
         .returning();
 
-      return result;
+      return result.map(version => this.transformVersion(version));
     } catch (error) {
       throw new Error(`Failed to create multiple document versions: ${error}`);
     }
@@ -218,11 +241,11 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentVersions)
         .where(eq(documentVersions.id, id));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to delete document version: ${error}`);
     }
@@ -233,7 +256,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async exists(id: string): Promise<boolean> {
     try {
-      const [version] = await databaseConfig.db
+      const [version] = await this.getDb()
         .select({ id: documentVersions.id })
         .from(documentVersions)
         .where(eq(documentVersions.id, id))
@@ -250,7 +273,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async count(filters?: DocumentVersionFiltersDTO): Promise<number> {
     try {
-      const query = databaseConfig.db.select({ count: sql`count(*)` }).from(documentVersions);
+      const query = this.getDb().select({ count: sql`count(*)` }).from(documentVersions);
       const conditions: any[] = [];
 
       if (filters) {
@@ -299,14 +322,14 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async findLatestVersion(documentId: string): Promise<DocumentVersion | null> {
     try {
-      const [version] = await databaseConfig.db
+      const [version] = await this.getDb()
         .select()
         .from(documentVersions)
         .where(eq(documentVersions.documentId, documentId))
         .orderBy(desc(documentVersions.version))
         .limit(1);
 
-      return version || null;
+      return version ? this.transformVersion(version) : null;
     } catch (error) {
       throw new Error(`Failed to find latest document version: ${error}`);
     }
@@ -317,17 +340,14 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async getVersionHistory(documentId: string, limit?: number): Promise<DocumentVersion[]> {
     try {
-      const query = databaseConfig.db
+      const query = this.getDb()
         .select()
         .from(documentVersions)
         .where(eq(documentVersions.documentId, documentId))
         .orderBy(desc(documentVersions.version));
 
-      if (limit) {
-        return await query.limit(limit);
-      }
-
-      return await query;
+      const result = limit ? await query.limit(limit) : await query;
+      return result.map(version => this.transformVersion(version));
     } catch (error) {
       throw new Error(`Failed to get version history: ${error}`);
     }
@@ -338,7 +358,7 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async getNextVersionNumber(documentId: string): Promise<number> {
     try {
-      const [result] = await databaseConfig.db
+      const [result] = await this.getDb()
         .select({ maxVersion: sql`max(${documentVersions.version})` })
         .from(documentVersions)
         .where(eq(documentVersions.documentId, documentId));
@@ -377,47 +397,238 @@ export class DocumentVersionRepository implements IDocumentVersionRepository {
    */
   async deleteByDocumentId(documentId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documentVersions)
         .where(eq(documentVersions.documentId, documentId));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to delete versions by document ID: ${error}`);
     }
   }
 
   /**
-   * Get version statistics for a document
+   * Get version count for a document
    */
-  async getVersionStats(documentId: string): Promise<{
+  async getVersionCount(documentId: string): Promise<number> {
+    try {
+      return await this.count({ documentId });
+    } catch (error) {
+      throw new Error(`Failed to get version count: ${error}`);
+    }
+  }
+
+  /**
+   * Find versions by checksum
+   */
+  async findByChecksum(checksum: string): Promise<DocumentVersion[]> {
+    try {
+      const result = await this.getDb()
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.checksum, checksum));
+
+      return result.map(version => this.transformVersion(version));
+    } catch (error) {
+      throw new Error(`Failed to find versions by checksum: ${error}`);
+    }
+  }
+
+  /**
+   * Get total storage size for document versions
+   */
+  async getTotalStorageSize(documentId?: string): Promise<number> {
+    try {
+      const query = this.getDb()
+        .select({ totalSize: sql`sum(${documentVersions.size})` })
+        .from(documentVersions);
+
+      const [result] = documentId 
+        ? await query.where(eq(documentVersions.documentId, documentId))
+        : await query;
+
+      return Number(result?.totalSize || 0);
+    } catch (error) {
+      throw new Error(`Failed to get total storage size: ${error}`);
+    }
+  }
+
+  /**
+   * Find versions by tags
+   */
+  async findByTags(tags: string[], matchAll?: boolean): Promise<DocumentVersion[]> {
+    try {
+      const condition = matchAll
+        ? sql`${documentVersions.tags} @> ${JSON.stringify(tags)}`
+        : sql`${documentVersions.tags} && ${JSON.stringify(tags)}`;
+
+      const result = await this.getDb()
+        .select()
+        .from(documentVersions)
+        .where(condition);
+
+      return result.map(version => this.transformVersion(version));
+    } catch (error) {
+      throw new Error(`Failed to find versions by tags: ${error}`);
+    }
+  }
+
+  /**
+   * Get version statistics
+   */
+  async getVersionStats(): Promise<{
     totalVersions: number;
-    latestVersion: number;
     totalSize: number;
-    oldestCreatedAt: Date | null;
-    newestCreatedAt: Date | null;
+    averageVersionsPerDocument: number;
+    versionsByUploader: Record<string, number>;
   }> {
     try {
-      const [stats] = await databaseConfig.db
+      const [totalStats] = await this.getDb()
         .select({
           totalVersions: sql`count(*)`,
-          latestVersion: sql`max(${documentVersions.version})`,
           totalSize: sql`sum(${documentVersions.size})`,
-          oldestCreatedAt: sql`min(${documentVersions.createdAt})`,
-          newestCreatedAt: sql`max(${documentVersions.createdAt})`,
+        })
+        .from(documentVersions);
+
+      const uploaderStats = await this.getDb()
+        .select({
+          uploadedBy: documentVersions.uploadedBy,
+          count: sql`count(*)`
         })
         .from(documentVersions)
-        .where(eq(documentVersions.documentId, documentId));
+        .groupBy(documentVersions.uploadedBy);
+
+      const versionsByUploader = uploaderStats.reduce((acc, stat) => {
+        acc[stat.uploadedBy] = Number(stat.count);
+        return acc;
+      }, {} as Record<string, number>);
+
+      const totalDocuments = await this.getDb()
+        .selectDistinct({ documentId: documentVersions.documentId })
+        .from(documentVersions);
+
+      const averageVersionsPerDocument = totalDocuments.length > 0 
+        ? Number(totalStats?.totalVersions || 0) / totalDocuments.length 
+        : 0;
 
       return {
-        totalVersions: Number(stats?.totalVersions || 0),
-        latestVersion: Number(stats?.latestVersion || 0),
-        totalSize: Number(stats?.totalSize || 0),
-        oldestCreatedAt: stats?.oldestCreatedAt as Date | null,
-        newestCreatedAt: stats?.newestCreatedAt as Date | null,
+        totalVersions: Number(totalStats?.totalVersions || 0),
+        totalSize: Number(totalStats?.totalSize || 0),
+        averageVersionsPerDocument,
+        versionsByUploader,
       };
     } catch (error) {
       throw new Error(`Failed to get version statistics: ${error}`);
+    }
+  }
+
+  /**
+   * Delete old versions (cleanup operation)
+   */
+  async deleteOldVersions(keepVersions: number): Promise<number> {
+    try {
+      // Get all documents with their version counts
+      const documentStats = await this.getDb()
+        .select({
+          documentId: documentVersions.documentId,
+          version: documentVersions.version,
+          id: documentVersions.id,
+        })
+        .from(documentVersions)
+        .orderBy(documentVersions.documentId, desc(documentVersions.version));
+
+      // Group by document and identify versions to delete
+      const versionsToDelete: string[] = [];
+      const documentVersionMap = new Map<string, number[]>();
+
+      for (const stat of documentStats) {
+        if (!documentVersionMap.has(stat.documentId)) {
+          documentVersionMap.set(stat.documentId, []);
+        }
+        documentVersionMap.get(stat.documentId)!.push(stat.version);
+      }
+
+      // Find versions beyond the keep limit
+      for (const [documentId, versions] of documentVersionMap) {
+        if (versions.length > keepVersions) {
+          const versionsToKeep = versions.slice(0, keepVersions);
+          const versionsToDeleteForDoc = versions.slice(keepVersions);
+          
+          // Get IDs of versions to delete
+          const deleteIds = documentStats
+            .filter(s => s.documentId === documentId && versionsToDeleteForDoc.includes(s.version))
+            .map(s => s.id);
+          
+          versionsToDelete.push(...deleteIds);
+        }
+      }
+
+      if (versionsToDelete.length === 0) {
+        return 0;
+      }
+
+      const result = await this.getDb()
+        .delete(documentVersions)
+        .where(sql`${documentVersions.id} = ANY(${versionsToDelete})`);
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to delete old versions: ${error}`);
+    }
+  }
+
+  /**
+   * Delete versions for a document
+   */
+  async deleteVersionsForDocument(documentId: string): Promise<number> {
+    try {
+      const result = await this.getDb()
+        .delete(documentVersions)
+        .where(eq(documentVersions.documentId, documentId));
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to delete versions for document: ${error}`);
+    }
+  }
+
+  /**
+   * Update multiple versions (not allowed for immutable versions)
+   */
+  async updateMany(): Promise<number> {
+    throw new Error('Document versions are immutable and cannot be updated');
+  }
+
+  /**
+   * Delete multiple versions by filters
+   */
+  async deleteMany(filters: DocumentVersionFiltersDTO): Promise<number> {
+    try {
+      const conditions: any[] = [];
+
+      if (filters.documentId) {
+        conditions.push(eq(documentVersions.documentId, filters.documentId));
+      }
+      if (filters.version) {
+        conditions.push(eq(documentVersions.version, filters.version));
+      }
+      if (filters.uploadedBy) {
+        conditions.push(eq(documentVersions.uploadedBy, filters.uploadedBy));
+      }
+      if (filters.dateFrom) {
+        conditions.push(gte(documentVersions.createdAt, filters.dateFrom));
+      }
+      if (filters.dateTo) {
+        conditions.push(lte(documentVersions.createdAt, filters.dateTo));
+      }
+
+      const result = await this.getDb()
+        .delete(documentVersions)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to delete multiple versions: ${error}`);
     }
   }
 }

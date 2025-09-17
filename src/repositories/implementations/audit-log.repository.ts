@@ -7,7 +7,7 @@ import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
 import { auditLogs } from '../../models/schema';
-import { AuditLog, PaginationParams, PaginatedResponse } from '../../types';
+import { AuditLog, AuditAction, PaginationParams, PaginatedResponse } from '../../types';
 import { 
   IAuditLogRepository, 
   CreateAuditLogDTO,
@@ -16,16 +16,36 @@ import {
 
 export class AuditLogRepository implements IAuditLogRepository {
   /**
+   * Get database instance with null check
+   */
+  private getDb() {
+    return databaseConfig.getDatabase();
+  }
+
+  /**
+   * Transform database result to AuditLog type
+   */
+  private transformAuditLog(auditLog: any): AuditLog {
+    return {
+      ...auditLog,
+      documentId: auditLog.documentId ?? undefined,
+      details: auditLog.details ?? undefined,
+      ipAddress: auditLog.ipAddress ?? undefined,
+      userAgent: auditLog.userAgent ?? undefined,
+    };
+  }
+
+  /**
    * Find audit log by ID
    */
   async findById(id: string): Promise<AuditLog | null> {
     try {
-      const [auditLog] = await databaseConfig.db
+      const [auditLog] = await this.getDb()
         .select()
         .from(auditLogs)
         .where(eq(auditLogs.id, id));
 
-      return auditLog || null;
+      return auditLog ? this.transformAuditLog(auditLog) : null;
     } catch (error) {
       throw new Error(`Failed to find audit log by ID: ${error}`);
     }
@@ -36,7 +56,7 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async findMany(filters?: AuditLogFiltersDTO): Promise<AuditLog[]> {
     try {
-      const query = databaseConfig.db.select().from(auditLogs);
+      const query = this.getDb().select().from(auditLogs);
       const conditions: any[] = [];
 
       if (filters) {
@@ -61,7 +81,7 @@ export class AuditLogRepository implements IAuditLogRepository {
         ? await query.where(and(...conditions)).orderBy(desc(auditLogs.createdAt))
         : await query.orderBy(desc(auditLogs.createdAt));
 
-      return result;
+      return result.map(auditLog => this.transformAuditLog(auditLog));
     } catch (error) {
       throw new Error(`Failed to find audit logs: ${error}`);
     }
@@ -78,8 +98,8 @@ export class AuditLogRepository implements IAuditLogRepository {
       const { page, limit } = pagination;
       const offset = (page - 1) * limit;
 
-      const query = databaseConfig.db.select().from(auditLogs);
-      const countQuery = databaseConfig.db.select({ count: sql`count(*)` }).from(auditLogs);
+      const query = this.getDb().select().from(auditLogs);
+      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(auditLogs);
       const conditions: any[] = [];
 
       if (filters) {
@@ -115,12 +135,14 @@ export class AuditLogRepository implements IAuditLogRepository {
       const totalPages = Math.ceil(total / limit);
 
       return {
-        data,
+        data: data.map(auditLog => this.transformAuditLog(auditLog)),
         pagination: {
           page,
           limit,
           total,
           totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
         },
       };
     } catch (error) {
@@ -148,7 +170,7 @@ export class AuditLogRepository implements IAuditLogRepository {
       const auditLogId = uuidv4();
       const now = new Date();
 
-      const [auditLog] = await databaseConfig.db
+      const [auditLog] = await this.getDb()
         .insert(auditLogs)
         .values({
           id: auditLogId,
@@ -162,7 +184,7 @@ export class AuditLogRepository implements IAuditLogRepository {
         })
         .returning();
 
-      return auditLog;
+      return this.transformAuditLog(auditLog);
     } catch (error) {
       throw new Error(`Failed to create audit log: ${error}`);
     }
@@ -185,12 +207,12 @@ export class AuditLogRepository implements IAuditLogRepository {
         createdAt: now,
       }));
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .insert(auditLogs)
         .values(auditLogsToInsert)
         .returning();
 
-      return result;
+      return result.map(auditLog => this.transformAuditLog(auditLog));
     } catch (error) {
       throw new Error(`Failed to create multiple audit logs: ${error}`);
     }
@@ -208,11 +230,11 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(auditLogs)
         .where(eq(auditLogs.id, id));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to delete audit log: ${error}`);
     }
@@ -223,7 +245,7 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async exists(id: string): Promise<boolean> {
     try {
-      const [auditLog] = await databaseConfig.db
+      const [auditLog] = await this.getDb()
         .select({ id: auditLogs.id })
         .from(auditLogs)
         .where(eq(auditLogs.id, id))
@@ -240,7 +262,7 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async count(filters?: AuditLogFiltersDTO): Promise<number> {
     try {
-      const query = databaseConfig.db.select({ count: sql`count(*)` }).from(auditLogs);
+      const query = this.getDb().select({ count: sql`count(*)` }).from(auditLogs);
       const conditions: any[] = [];
 
       if (filters) {
@@ -292,7 +314,7 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async findByAction(action: string): Promise<AuditLog[]> {
     try {
-      return await this.findMany({ action });
+      return await this.findMany({ action: action as AuditAction });
     } catch (error) {
       throw new Error(`Failed to find audit logs by action: ${error}`);
     }
@@ -314,17 +336,19 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async getDocumentAuditTrail(documentId: string, limit?: number): Promise<AuditLog[]> {
     try {
-      const query = databaseConfig.db
+      const query = this.getDb()
         .select()
         .from(auditLogs)
         .where(eq(auditLogs.documentId, documentId))
         .orderBy(desc(auditLogs.createdAt));
 
       if (limit) {
-        return await query.limit(limit);
+        const result = await query.limit(limit);
+        return result.map(auditLog => this.transformAuditLog(auditLog));
       }
 
-      return await query;
+      const result = await query;
+      return result.map(auditLog => this.transformAuditLog(auditLog));
     } catch (error) {
       throw new Error(`Failed to get document audit trail: ${error}`);
     }
@@ -335,17 +359,19 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async getUserActivityLogs(userId: string, limit?: number): Promise<AuditLog[]> {
     try {
-      const query = databaseConfig.db
+      const query = this.getDb()
         .select()
         .from(auditLogs)
         .where(eq(auditLogs.userId, userId))
         .orderBy(desc(auditLogs.createdAt));
 
       if (limit) {
-        return await query.limit(limit);
+        const result = await query.limit(limit);
+        return result.map(auditLog => this.transformAuditLog(auditLog));
       }
 
-      return await query;
+      const result = await query;
+      return result.map(auditLog => this.transformAuditLog(auditLog));
     } catch (error) {
       throw new Error(`Failed to get user activity logs: ${error}`);
     }
@@ -369,11 +395,11 @@ export class AuditLogRepository implements IAuditLogRepository {
       const thisWeek = new Date(today.getTime() - (7 * 24 * 60 * 60 * 1000));
       const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const [totalCount] = await databaseConfig.db
+      const [totalCount] = await this.getDb()
         .select({ count: sql`count(*)` })
         .from(auditLogs);
 
-      const actionStats = await databaseConfig.db
+      const actionStats = await this.getDb()
         .select({
           action: auditLogs.action,
           count: sql`count(*)`
@@ -381,26 +407,26 @@ export class AuditLogRepository implements IAuditLogRepository {
         .from(auditLogs)
         .groupBy(auditLogs.action);
 
-      const [todayCount] = await databaseConfig.db
+      const [todayCount] = await this.getDb()
         .select({ count: sql`count(*)` })
         .from(auditLogs)
         .where(gte(auditLogs.createdAt, today));
 
-      const [weekCount] = await databaseConfig.db
+      const [weekCount] = await this.getDb()
         .select({ count: sql`count(*)` })
         .from(auditLogs)
         .where(gte(auditLogs.createdAt, thisWeek));
 
-      const [monthCount] = await databaseConfig.db
+      const [monthCount] = await this.getDb()
         .select({ count: sql`count(*)` })
         .from(auditLogs)
         .where(gte(auditLogs.createdAt, thisMonth));
 
-      const [uniqueUsersCount] = await databaseConfig.db
+      const [uniqueUsersCount] = await this.getDb()
         .selectDistinct({ count: sql`count(distinct ${auditLogs.userId})` })
         .from(auditLogs);
 
-      const [uniqueDocumentsCount] = await databaseConfig.db
+      const [uniqueDocumentsCount] = await this.getDb()
         .selectDistinct({ count: sql`count(distinct ${auditLogs.documentId})` })
         .from(auditLogs)
         .where(sql`${auditLogs.documentId} IS NOT NULL`);
@@ -429,11 +455,11 @@ export class AuditLogRepository implements IAuditLogRepository {
    */
   async deleteOlderThan(date: Date): Promise<number> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(auditLogs)
         .where(lte(auditLogs.createdAt, date));
 
-      return result.rowCount;
+      return result.length;
     } catch (error) {
       throw new Error(`Failed to delete old audit logs: ${error}`);
     }
@@ -448,7 +474,7 @@ export class AuditLogRepository implements IAuditLogRepository {
   }> {
     try {
       // Get logs to archive
-      const logsToArchive = await databaseConfig.db
+      const logsToArchive = await this.getDb()
         .select()
         .from(auditLogs)
         .where(lte(auditLogs.createdAt, olderThanDate));
@@ -467,6 +493,345 @@ export class AuditLogRepository implements IAuditLogRepository {
       };
     } catch (error) {
       throw new Error(`Failed to archive old audit logs: ${error}`);
+    }
+  }
+
+  /**
+   * Find audit logs by IP address
+   */
+  async findByIpAddress(ipAddress: string): Promise<AuditLog[]> {
+    try {
+      return await this.findMany({ ipAddress });
+    } catch (error) {
+      throw new Error(`Failed to find audit logs by IP address: ${error}`);
+    }
+  }
+
+  /**
+   * Log document access event
+   */
+  async logDocumentAccess(
+    documentId: string,
+    userId: string,
+    action: AuditAction,
+    options?: {
+      details?: Record<string, any>;
+      ipAddress?: string;
+      userAgent?: string;
+    }
+  ): Promise<AuditLog> {
+    try {
+      return await this.create({
+        documentId,
+        userId,
+        action,
+        details: options?.details,
+        ipAddress: options?.ipAddress,
+        userAgent: options?.userAgent,
+      });
+    } catch (error) {
+      throw new Error(`Failed to log document access: ${error}`);
+    }
+  }
+
+  /**
+   * Log user authentication event
+   */
+  async logAuthEvent(
+    userId: string,
+    action: AuditAction,
+    options?: {
+      details?: Record<string, any>;
+      ipAddress?: string;
+      userAgent?: string;
+    }
+  ): Promise<AuditLog> {
+    try {
+      return await this.create({
+        userId,
+        action,
+        details: options?.details,
+        ipAddress: options?.ipAddress,
+        userAgent: options?.userAgent,
+      });
+    } catch (error) {
+      throw new Error(`Failed to log auth event: ${error}`);
+    }
+  }
+
+  /**
+   * Log permission change event
+   */
+  async logPermissionChange(
+    documentId: string,
+    userId: string,
+    grantedBy: string,
+    action: AuditAction,
+    options?: {
+      details?: Record<string, any>;
+      ipAddress?: string;
+      userAgent?: string;
+    }
+  ): Promise<AuditLog> {
+    try {
+      return await this.create({
+        documentId,
+        userId,
+        action,
+        details: {
+          ...options?.details,
+          grantedBy,
+        },
+        ipAddress: options?.ipAddress,
+        userAgent: options?.userAgent,
+      });
+    } catch (error) {
+      throw new Error(`Failed to log permission change: ${error}`);
+    }
+  }
+
+  /**
+   * Get audit summary for a document
+   */
+  async getDocumentAuditSummary(
+    documentId: string,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{
+    totalEvents: number;
+    eventsByAction: Record<AuditAction, number>;
+    uniqueUsers: number;
+    lastActivity: Date | null;
+  }> {
+    try {
+      const filters: AuditLogFiltersDTO = { documentId };
+      if (dateFrom) filters.dateFrom = dateFrom;
+      if (dateTo) filters.dateTo = dateTo;
+
+      const logs = await this.findMany(filters);
+      const eventsByAction = logs.reduce((acc, log) => {
+        acc[log.action] = (acc[log.action] || 0) + 1;
+        return acc;
+      }, {} as Record<AuditAction, number>);
+
+      const uniqueUsers = new Set(logs.map(log => log.userId)).size;
+      const lastActivity = logs.length > 0 ? logs[0].createdAt : null;
+
+      return {
+        totalEvents: logs.length,
+        eventsByAction,
+        uniqueUsers,
+        lastActivity,
+      };
+    } catch (error) {
+      throw new Error(`Failed to get document audit summary: ${error}`);
+    }
+  }
+
+  /**
+   * Get audit summary for a user
+   */
+  async getUserAuditSummary(
+    userId: string,
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{
+    totalEvents: number;
+    eventsByAction: Record<AuditAction, number>;
+    uniqueDocuments: number;
+    lastActivity: Date | null;
+  }> {
+    try {
+      const filters: AuditLogFiltersDTO = { userId };
+      if (dateFrom) filters.dateFrom = dateFrom;
+      if (dateTo) filters.dateTo = dateTo;
+
+      const logs = await this.findMany(filters);
+      const eventsByAction = logs.reduce((acc, log) => {
+        acc[log.action] = (acc[log.action] || 0) + 1;
+        return acc;
+      }, {} as Record<AuditAction, number>);
+
+      const uniqueDocuments = new Set(logs.filter(log => log.documentId).map(log => log.documentId!)).size;
+      const lastActivity = logs.length > 0 ? logs[0].createdAt : null;
+
+      return {
+        totalEvents: logs.length,
+        eventsByAction,
+        uniqueDocuments,
+        lastActivity,
+      };
+    } catch (error) {
+      throw new Error(`Failed to get user audit summary: ${error}`);
+    }
+  }
+
+  /**
+   * Get system-wide audit statistics
+   */
+  async getSystemAuditStats(
+    dateFrom?: Date,
+    dateTo?: Date
+  ): Promise<{
+    totalEvents: number;
+    eventsByAction: Record<AuditAction, number>;
+    activeUsers: number;
+    documentsAccessed: number;
+    topUsers: Array<{ userId: string; eventCount: number }>;
+    topDocuments: Array<{ documentId: string; eventCount: number }>;
+  }> {
+    try {
+      const filters: AuditLogFiltersDTO = {};
+      if (dateFrom) filters.dateFrom = dateFrom;
+      if (dateTo) filters.dateTo = dateTo;
+
+      const logs = await this.findMany(filters);
+      const eventsByAction = logs.reduce((acc, log) => {
+        acc[log.action] = (acc[log.action] || 0) + 1;
+        return acc;
+      }, {} as Record<AuditAction, number>);
+
+      const userCounts = logs.reduce((acc, log) => {
+        acc[log.userId] = (acc[log.userId] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const documentCounts = logs
+        .filter(log => log.documentId)
+        .reduce((acc, log) => {
+          acc[log.documentId!] = (acc[log.documentId!] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+      const topUsers = Object.entries(userCounts)
+        .map(([userId, eventCount]) => ({ userId, eventCount }))
+        .sort((a, b) => b.eventCount - a.eventCount)
+        .slice(0, 10);
+
+      const topDocuments = Object.entries(documentCounts)
+        .map(([documentId, eventCount]) => ({ documentId, eventCount }))
+        .sort((a, b) => b.eventCount - a.eventCount)
+        .slice(0, 10);
+
+      return {
+        totalEvents: logs.length,
+        eventsByAction,
+        activeUsers: Object.keys(userCounts).length,
+        documentsAccessed: Object.keys(documentCounts).length,
+        topUsers,
+        topDocuments,
+      };
+    } catch (error) {
+      throw new Error(`Failed to get system audit stats: ${error}`);
+    }
+  }
+
+  /**
+   * Find suspicious activities
+   */
+  async findSuspiciousActivities(criteria?: {
+    maxDownloadsPerHour?: number;
+    maxFailedLoginsPerHour?: number;
+    unusualIpPatterns?: boolean;
+  }): Promise<AuditLog[]> {
+    try {
+      // This is a simplified implementation
+      // In production, you'd implement more sophisticated detection algorithms
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentLogs = await this.findMany({ dateFrom: oneHourAgo });
+
+      // Filter for potential suspicious activities
+      const suspicious = recentLogs.filter(log => {
+        // Add your suspicious activity detection logic here
+        return false; // Placeholder
+      });
+
+      return suspicious;
+    } catch (error) {
+      throw new Error(`Failed to find suspicious activities: ${error}`);
+    }
+  }
+
+  /**
+   * Clean up old audit logs
+   */
+  async cleanupOldLogs(olderThan: Date): Promise<number> {
+    try {
+      return await this.deleteOlderThan(olderThan);
+    } catch (error) {
+      throw new Error(`Failed to cleanup old logs: ${error}`);
+    }
+  }
+
+  /**
+   * Export audit logs for compliance
+   */
+  async exportAuditLogs(filters: AuditLogFiltersDTO, format: 'json' | 'csv'): Promise<string> {
+    try {
+      const logs = await this.findMany(filters);
+      
+      if (format === 'json') {
+        return JSON.stringify(logs, null, 2);
+      } else {
+        // Simple CSV export
+        const headers = ['id', 'documentId', 'userId', 'action', 'details', 'ipAddress', 'userAgent', 'createdAt'];
+        const csvRows = [
+          headers.join(','),
+          ...logs.map(log => [
+            log.id,
+            log.documentId || '',
+            log.userId,
+            log.action,
+            JSON.stringify(log.details),
+            log.ipAddress || '',
+            log.userAgent || '',
+            log.createdAt.toISOString()
+          ].join(','))
+        ];
+        return csvRows.join('\n');
+      }
+    } catch (error) {
+      throw new Error(`Failed to export audit logs: ${error}`);
+    }
+  }
+
+  /**
+   * Update multiple audit logs (not allowed for immutable logs)
+   */
+  async updateMany(): Promise<number> {
+    throw new Error('Audit logs are immutable and cannot be updated');
+  }
+
+  /**
+   * Delete multiple audit logs by filters
+   */
+  async deleteMany(filters: AuditLogFiltersDTO): Promise<number> {
+    try {
+      const conditions: any[] = [];
+
+      if (filters.documentId) {
+        conditions.push(eq(auditLogs.documentId, filters.documentId));
+      }
+      if (filters.userId) {
+        conditions.push(eq(auditLogs.userId, filters.userId));
+      }
+      if (filters.action) {
+        conditions.push(eq(auditLogs.action, filters.action));
+      }
+      if (filters.dateFrom) {
+        conditions.push(gte(auditLogs.createdAt, filters.dateFrom));
+      }
+      if (filters.dateTo) {
+        conditions.push(lte(auditLogs.createdAt, filters.dateTo));
+      }
+
+      const result = await this.getDb()
+        .delete(auditLogs)
+        .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to delete multiple audit logs: ${error}`);
     }
   }
 }

@@ -12,16 +12,35 @@ import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../in
 
 export class DocumentRepository implements IDocumentRepository {
   /**
+   * Get database instance with null check
+   */
+  private getDb() {
+    return databaseConfig.getDatabase();
+  }
+
+  /**
+   * Transform database result to Document type
+   */
+  private transformDocument(document: any): Document {
+    return {
+      ...document,
+      checksum: document.checksum ?? undefined,
+      tags: document.tags ?? undefined,
+      metadata: document.metadata ?? undefined,
+    };
+  }
+
+  /**
    * Find document by ID
    */
   async findById(id: string): Promise<Document | null> {
     try {
-      const [document] = await databaseConfig.db
+      const [document] = await this.getDb()
         .select()
         .from(documents)
         .where(and(eq(documents.id, id), eq(documents.isDeleted, false)));
 
-      return document || null;
+      return document ? this.transformDocument(document) : null;
     } catch (error) {
       throw new Error(`Failed to find document by ID: ${error}`);
     }
@@ -32,7 +51,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async findMany(filters?: DocumentSearchFilters): Promise<Document[]> {
     try {
-      const query = databaseConfig.db.select().from(documents);
+      const query = this.getDb().select().from(documents);
       const conditions = [eq(documents.isDeleted, false)];
 
       if (filters) {
@@ -66,7 +85,7 @@ export class DocumentRepository implements IDocumentRepository {
       }
 
       const result = await query.where(and(...conditions));
-      return result;
+      return result.map(document => this.transformDocument(document));
     } catch (error) {
       throw new Error(`Failed to find documents: ${error}`);
     }
@@ -83,8 +102,8 @@ export class DocumentRepository implements IDocumentRepository {
       const { page, limit } = pagination;
       const offset = (page - 1) * limit;
 
-      const query = databaseConfig.db.select().from(documents);
-      const countQuery = databaseConfig.db.select({ count: sql`count(*)` }).from(documents);
+      const query = this.getDb().select().from(documents);
+      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(documents);
       const conditions = [eq(documents.isDeleted, false)];
 
       if (filters) {
@@ -120,8 +139,19 @@ export class DocumentRepository implements IDocumentRepository {
       // Add sorting
       const sortBy = filters?.sortBy || 'createdAt';
       const sortOrder = filters?.sortOrder || 'desc';
-      const sortColumn = documents[sortBy as keyof typeof documents];
-      const orderBy = sortOrder === 'desc' ? desc(sortColumn) : asc(sortColumn);
+      
+      let orderBy;
+      if (sortBy === 'createdAt') {
+        orderBy = sortOrder === 'desc' ? desc(documents.createdAt) : asc(documents.createdAt);
+      } else if (sortBy === 'updatedAt') {
+        orderBy = sortOrder === 'desc' ? desc(documents.updatedAt) : asc(documents.updatedAt);
+      } else if (sortBy === 'filename') {
+        orderBy = sortOrder === 'desc' ? desc(documents.filename) : asc(documents.filename);
+      } else if (sortBy === 'size') {
+        orderBy = sortOrder === 'desc' ? desc(documents.size) : asc(documents.size);
+      } else {
+        orderBy = desc(documents.createdAt);
+      }
 
       const [data, countResult] = await Promise.all([
         query.where(and(...conditions)).orderBy(orderBy).limit(limit).offset(offset),
@@ -132,12 +162,14 @@ export class DocumentRepository implements IDocumentRepository {
       const totalPages = Math.ceil(total / limit);
 
       return {
-        data,
+        data: data.map(document => this.transformDocument(document)),
         pagination: {
           page,
           limit,
           total,
           totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
         },
       };
     } catch (error) {
@@ -165,7 +197,7 @@ export class DocumentRepository implements IDocumentRepository {
       const documentId = uuidv4();
       const now = new Date();
 
-      const [document] = await databaseConfig.db
+      const [document] = await this.getDb()
         .insert(documents)
         .values({
           id: documentId,
@@ -185,7 +217,7 @@ export class DocumentRepository implements IDocumentRepository {
         })
         .returning();
 
-      return document;
+      return this.transformDocument(document);
     } catch (error) {
       throw new Error(`Failed to create document: ${error}`);
     }
@@ -214,12 +246,12 @@ export class DocumentRepository implements IDocumentRepository {
         updatedAt: now,
       }));
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .insert(documents)
         .values(documentsToInsert)
         .returning();
 
-      return result;
+      return result.map(document => this.transformDocument(document));
     } catch (error) {
       throw new Error(`Failed to create multiple documents: ${error}`);
     }
@@ -230,7 +262,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async update(id: string, data: UpdateDocumentDTO): Promise<Document | null> {
     try {
-      const [document] = await databaseConfig.db
+      const [document] = await this.getDb()
         .update(documents)
         .set({
           ...data,
@@ -239,7 +271,7 @@ export class DocumentRepository implements IDocumentRepository {
         .where(and(eq(documents.id, id), eq(documents.isDeleted, false)))
         .returning();
 
-      return document || null;
+      return document ? this.transformDocument(document) : null;
     } catch (error) {
       throw new Error(`Failed to update document: ${error}`);
     }
@@ -250,11 +282,11 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async delete(id: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .delete(documents)
         .where(eq(documents.id, id));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to delete document: ${error}`);
     }
@@ -265,7 +297,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async exists(id: string): Promise<boolean> {
     try {
-      const [document] = await databaseConfig.db
+      const [document] = await this.getDb()
         .select({ id: documents.id })
         .from(documents)
         .where(and(eq(documents.id, id), eq(documents.isDeleted, false)))
@@ -282,7 +314,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async count(filters?: DocumentSearchFilters): Promise<number> {
     try {
-      const query = databaseConfig.db.select({ count: sql`count(*)` }).from(documents);
+      const query = this.getDb().select({ count: sql`count(*)` }).from(documents);
       const conditions = [eq(documents.isDeleted, false)];
 
       if (filters) {
@@ -321,12 +353,12 @@ export class DocumentRepository implements IDocumentRepository {
         ? sql`${documents.tags} @> ${JSON.stringify(tags)}`
         : sql`${documents.tags} && ${JSON.stringify(tags)}`;
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .select()
         .from(documents)
         .where(and(eq(documents.isDeleted, false), condition));
 
-      return result;
+      return result.map(document => this.transformDocument(document));
     } catch (error) {
       throw new Error(`Failed to find documents by tags: ${error}`);
     }
@@ -337,7 +369,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async findByMetadata(metadata: Record<string, any>): Promise<Document[]> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .select()
         .from(documents)
         .where(and(
@@ -345,7 +377,7 @@ export class DocumentRepository implements IDocumentRepository {
           sql`${documents.metadata} @> ${JSON.stringify(metadata)}`
         ));
 
-      return result;
+      return result.map(document => this.transformDocument(document));
     } catch (error) {
       throw new Error(`Failed to find documents by metadata: ${error}`);
     }
@@ -416,12 +448,12 @@ export class DocumentRepository implements IDocumentRepository {
     documentsByUploader: Record<string, number>;
   }> {
     try {
-      const [totalCount] = await databaseConfig.db
+      const [totalCount] = await this.getDb()
         .select({ count: sql`count(*)`, totalSize: sql`sum(${documents.size})` })
         .from(documents)
         .where(eq(documents.isDeleted, false));
 
-      const mimeTypeStats = await databaseConfig.db
+      const mimeTypeStats = await this.getDb()
         .select({
           mimeType: documents.mimeType,
           count: sql`count(*)`
@@ -430,7 +462,7 @@ export class DocumentRepository implements IDocumentRepository {
         .where(eq(documents.isDeleted, false))
         .groupBy(documents.mimeType);
 
-      const uploaderStats = await databaseConfig.db
+      const uploaderStats = await this.getDb()
         .select({
           uploadedBy: documents.uploadedBy,
           count: sql`count(*)`
@@ -471,12 +503,12 @@ export class DocumentRepository implements IDocumentRepository {
         conditions.push(sql`${documents.id} != ${excludeDocumentId}`);
       }
 
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .select()
         .from(documents)
         .where(and(...conditions));
 
-      return result;
+      return result.map(document => this.transformDocument(document));
     } catch (error) {
       throw new Error(`Failed to find duplicate documents: ${error}`);
     }
@@ -487,12 +519,12 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async updateTags(documentId: string, tags: string[]): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .update(documents)
         .set({ tags, updatedAt: new Date() })
         .where(and(eq(documents.id, documentId), eq(documents.isDeleted, false)));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to update document tags: ${error}`);
     }
@@ -503,12 +535,12 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async updateMetadata(documentId: string, metadata: Record<string, any>): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .update(documents)
         .set({ metadata, updatedAt: new Date() })
         .where(and(eq(documents.id, documentId), eq(documents.isDeleted, false)));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to update document metadata: ${error}`);
     }
@@ -519,7 +551,7 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async incrementVersion(documentId: string): Promise<number> {
     try {
-      const [document] = await databaseConfig.db
+      const [document] = await this.getDb()
         .update(documents)
         .set({ 
           currentVersion: sql`${documents.currentVersion} + 1`,
@@ -539,12 +571,12 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async softDelete(documentId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .update(documents)
         .set({ isDeleted: true, updatedAt: new Date() })
         .where(eq(documents.id, documentId));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to soft delete document: ${error}`);
     }
@@ -555,14 +587,100 @@ export class DocumentRepository implements IDocumentRepository {
    */
   async restore(documentId: string): Promise<boolean> {
     try {
-      const result = await databaseConfig.db
+      const result = await this.getDb()
         .update(documents)
         .set({ isDeleted: false, updatedAt: new Date() })
         .where(eq(documents.id, documentId));
 
-      return result.rowCount > 0;
+      return result.length > 0;
     } catch (error) {
       throw new Error(`Failed to restore document: ${error}`);
+    }
+  }
+
+  /**
+   * Find deleted documents
+   */
+  async findDeleted(userId?: string): Promise<Document[]> {
+    try {
+      const conditions = [eq(documents.isDeleted, true)];
+      
+      if (userId) {
+        conditions.push(eq(documents.uploadedBy, userId));
+      }
+
+      const result = await this.getDb()
+        .select()
+        .from(documents)
+        .where(and(...conditions));
+
+      return result.map(document => this.transformDocument(document));
+    } catch (error) {
+      throw new Error(`Failed to find deleted documents: ${error}`);
+    }
+  }
+
+  /**
+   * Update multiple documents by filters
+   */
+  async updateMany(filters: DocumentSearchFilters, data: UpdateDocumentDTO): Promise<number> {
+    try {
+      const conditions = [eq(documents.isDeleted, false)];
+
+      if (filters.uploadedBy) {
+        conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
+      }
+      if (filters.mimeType) {
+        conditions.push(eq(documents.mimeType, filters.mimeType));
+      }
+      if (filters.tags && filters.tags.length > 0) {
+        conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
+      }
+      if (filters.filename) {
+        conditions.push(like(documents.filename, `%${filters.filename}%`));
+      }
+
+      const result = await this.getDb()
+        .update(documents)
+        .set({
+          ...data,
+          updatedAt: new Date(),
+        })
+        .where(and(...conditions));
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to update multiple documents: ${error}`);
+    }
+  }
+
+  /**
+   * Delete multiple documents by filters
+   */
+  async deleteMany(filters: DocumentSearchFilters): Promise<number> {
+    try {
+      const conditions = [eq(documents.isDeleted, false)];
+
+      if (filters.uploadedBy) {
+        conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
+      }
+      if (filters.mimeType) {
+        conditions.push(eq(documents.mimeType, filters.mimeType));
+      }
+      if (filters.tags && filters.tags.length > 0) {
+        conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
+      }
+      if (filters.filename) {
+        conditions.push(like(documents.filename, `%${filters.filename}%`));
+      }
+
+      const result = await this.getDb()
+        .delete(documents)
+        .where(and(...conditions));
+
+      return result.length;
+    } catch (error) {
+      throw new Error(`Failed to delete multiple documents: ${error}`);
     }
   }
 }

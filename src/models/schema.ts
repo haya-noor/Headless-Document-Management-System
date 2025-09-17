@@ -93,11 +93,24 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+/**
+ * Token blacklist table - stores invalidated JWT tokens
+ * Used for logout functionality to invalidate tokens
+ */
+export const tokenBlacklist = pgTable('token_blacklist', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  token: text('token').notNull().unique(),
+  userId: varchar('user_id', { length: 36 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Define relationships between tables
 export const usersRelations = relations(users, ({ many }) => ({
   documents: many(documents),
   documentPermissions: many(documentPermissions),
   auditLogs: many(auditLogs),
+  blacklistedTokens: many(tokenBlacklist),
 }));
 
 export const documentsRelations = relations(documents, ({ one, many }) => ({
@@ -144,5 +157,12 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   document: one(documents, {
     fields: [auditLogs.documentId],
     references: [documents.id],
+  }),
+}));
+
+export const tokenBlacklistRelations = relations(tokenBlacklist, ({ one }) => ({
+  user: one(users, {
+    fields: [tokenBlacklist.userId],
+    references: [users.id],
   }),
 }));

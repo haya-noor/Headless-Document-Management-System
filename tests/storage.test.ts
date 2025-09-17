@@ -43,7 +43,7 @@ describe("Storage Service", () => {
       const versionKey = storage.generateVersionKey(baseKey, version);
       
       expect(versionKey).toContain("v2");
-      expect(versionKey).toContain(baseKey);
+      expect(versionKey).toContain("document_v2.pdf");
     });
 
     it("should create upload result with checksum", async () => {
@@ -74,7 +74,7 @@ describe("Storage Service", () => {
         expiresAt: new Date(Date.now() + expiresIn * 1000),
       };
       
-      expect(downloadUrl.url).toContain(key);
+      expect(downloadUrl.url).toContain(encodeURIComponent(key));
       expect(downloadUrl.url).toContain(filename);
       expect(downloadUrl.expiresIn).toBe(3600);
       expect(downloadUrl.expiresAt).toBeInstanceOf(Date);

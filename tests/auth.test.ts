@@ -69,15 +69,15 @@ describe("Authentication System", () => {
       const { validatePasswordStrength } = require("../src/utils/password");
       
       // Valid passwords
-      expect(validatePasswordStrength("TestPass123!")).toBe(true);
-      expect(validatePasswordStrength("AnotherValid1@")).toBe(true);
+      expect(validatePasswordStrength("TestPass123!").isValid).toBe(true);
+      expect(validatePasswordStrength("AnotherValid1@").isValid).toBe(true);
       
       // Invalid passwords
-      expect(validatePasswordStrength("short")).toBe(false);
-      expect(validatePasswordStrength("nouppercase123!")).toBe(false);
-      expect(validatePasswordStrength("NOLOWERCASE123!")).toBe(false);
-      expect(validatePasswordStrength("NoNumbers!")).toBe(false);
-      expect(validatePasswordStrength("NoSpecialChars123")).toBe(false);
+      expect(validatePasswordStrength("short").isValid).toBe(false);
+      expect(validatePasswordStrength("nouppercase123!").isValid).toBe(false);
+      expect(validatePasswordStrength("NOLOWERCASE123!").isValid).toBe(false);
+      expect(validatePasswordStrength("NoNumbers!").isValid).toBe(false);
+      expect(validatePasswordStrength("NoSpecialChars123").isValid).toBe(false);
     });
   });
 
@@ -101,7 +101,7 @@ describe("Authentication System", () => {
       const userService = new UserService(mockUserRepository);
       const userData = testUtils.generateTestUser();
       
-      const result = await userService.register(userData, {});
+      const result = await userService.registerUser(userData, {});
       
       expect(result.success).toBe(true);
       expect(result.data?.user).toBeDefined();
@@ -121,7 +121,7 @@ describe("Authentication System", () => {
       const userService = new UserService(mockUserRepository);
       const userData = testUtils.generateTestUser();
       
-      const result = await userService.register(userData, {});
+      const result = await userService.registerUser(userData, {});
       
       expect(result.success).toBe(false);
       expect(result.error).toBe("EMAIL_EXISTS");
@@ -139,15 +139,20 @@ describe("Authentication System", () => {
           ...mocks.mockDbResponses.user,
           password: hashedPassword,
         }),
+        findOne: async () => ({
+          ...mocks.mockDbResponses.user,
+          password: hashedPassword,
+        }),
         updateLastLogin: async () => {},
       };
 
       const userService = new UserService(mockUserRepository);
       
-      const result = await userService.login({
-        email: "test@example.com",
+      const result = await userService.loginUser(
+        "test@example.com",
         password,
-      }, {});
+        {}
+      );
       
       expect(result.success).toBe(true);
       expect(result.data?.user).toBeDefined();
@@ -163,10 +168,11 @@ describe("Authentication System", () => {
 
       const userService = new UserService(mockUserRepository);
       
-      const result = await userService.login({
-        email: "nonexistent@example.com",
-        password: "TestPass123!",
-      }, {});
+      const result = await userService.loginUser(
+        "nonexistent@example.com",
+        "TestPass123!",
+        {}
+      );
       
       expect(result.success).toBe(false);
       expect(result.error).toBe("INVALID_CREDENTIALS");
@@ -235,7 +241,7 @@ describe("Authentication Integration", () => {
     const { UserService } = require("../src/services/user.service");
     const userService = new UserService(mockRepository);
     
-    const result = await userService.register(userData, {});
+    const result = await userService.registerUser(userData, {});
     
     expect(result.success).toBe(true);
     expect(result.data?.user?.email).toBe(userData.email);
@@ -259,16 +265,28 @@ describe("Authentication Integration", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+      findOne: async () => ({
+        id: testUtils.randomString(),
+        email: "test@example.com",
+        password: hashedPassword,
+        firstName: "Test",
+        lastName: "User",
+        role: "user",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
       updateLastLogin: async () => {},
     };
 
     const { UserService } = require("../src/services/user.service");
     const userService = new UserService(mockRepository);
     
-    const result = await userService.login({
-      email: "test@example.com",
+    const result = await userService.loginUser(
+      "test@example.com",
       password,
-    }, {});
+      {}
+    );
     
     expect(result.success).toBe(true);
     expect(result.data?.token).toBeDefined();
