@@ -5,7 +5,7 @@
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from '../models/schema';
+import * as schema from '../db/models/schema';
 
 /**
  * Database configuration class

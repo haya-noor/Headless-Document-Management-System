@@ -6,7 +6,7 @@
 import { eq, and, desc, asc, gte, lte, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
-import { documentVersions } from '../../models/schema';
+import { documentVersions } from '../../db/models/schema';
 import { DocumentVersion, PaginationParams, PaginatedResponse } from '../../types';
 import { 
   IDocumentVersionRepository, 

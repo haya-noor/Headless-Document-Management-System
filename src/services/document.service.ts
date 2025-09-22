@@ -5,14 +5,14 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
-import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse, ApiResponse } from '../types';
+import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse, ApiResponse, AuditAction, Permission } from '../types';
 import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../repositories/interfaces/document.repository';
 import { IDocumentVersionRepository } from '../repositories/interfaces/document-version.repository';
 import { IDocumentPermissionRepository } from '../repositories/interfaces/document-permission.repository';
 import { IAuditLogRepository } from '../repositories/interfaces/audit-log.repository';
 import { IStorageService } from './interfaces/storage.interface';
 import { storageService } from './storage.factory';
-import { Logger, AuditLogger } from '../middleware/logging';
+import { Logger, AuditLogger } from '../http/middleware/logging';
 
 /**
  * Document service class
@@ -37,6 +37,43 @@ export class DocumentService {
     this.permissionRepository = permissionRepository;
     this.auditRepository = auditRepository;
     this.storageService = storage || storageService;
+  }
+
+  /**
+   * Upload a new document with validation (Enhanced from controller)
+   * @param file - File to upload
+   * @param metadata - Document metadata
+   * @param userId - User uploading the document
+   */
+  async uploadDocumentWithValidation(
+    file: any,
+    metadata: {
+      tags?: string[];
+      metadata?: Record<string, any>;
+      description?: string;
+    },
+    userId: string
+  ): Promise<ApiResponse<Document>> {
+    try {
+      // Validation that was in controller
+      if (!file) {
+        return {
+          success: false,
+          message: 'File is required',
+          error: 'FILE_REQUIRED',
+        };
+      }
+
+      // Call existing upload method
+      return await this.uploadDocument(file, metadata, userId);
+    } catch (error) {
+      Logger.error('Failed to upload document', { error, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'SERVER_ERROR',
+      };
+    }
   }
 
   /**
@@ -110,8 +147,8 @@ export class DocumentService {
         filename: file.filename,
         mimeType: file.mimetype,
         size: file.size,
-        storageKey: uploadResult.key,
-        storageProvider: 'local',
+        s3Key: uploadResult.key,
+        s3Bucket: 'local',
         checksum: uploadResult.checksum,
         tags: metadata.tags || [],
         metadata: {
@@ -125,7 +162,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId: document.id,
         userId,
-        action: 'upload',
+        action: AuditAction.UPLOAD,
         details: {
           filename: file.filename,
           size: file.size,
@@ -184,7 +221,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId,
         userId,
-        action: 'view',
+        action: AuditAction.VIEW,
         details: { filename: document.filename },
       });
 
@@ -199,6 +236,55 @@ export class DocumentService {
         success: false,
         message: 'Failed to retrieve document',
         error: 'RETRIEVAL_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Search documents with enhanced filters and data transformations (Enhanced from controller)
+   */
+  async searchDocumentsWithTransforms(
+    searchData: {
+      query?: string;
+      tags?: string[];
+      mimeType?: string;
+      page?: number;
+      limit?: number;
+      sortBy?: string;
+      sortOrder?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      uploadedBy?: string;
+      minSize?: number;
+      maxSize?: number;
+    },
+    userId: string
+  ): Promise<ApiResponse<PaginatedResponse<Document>>> {
+    try {
+      const { page, limit, sortBy, sortOrder, dateFrom, dateTo, ...filters } = searchData;
+
+      // Convert string dates to Date objects - transformation from controller
+      const searchFilters: DocumentSearchFilters = {
+        ...filters,
+        sortBy,
+        sortOrder: sortOrder as 'asc' | 'desc' | undefined,
+        ...(dateFrom && { dateFrom: new Date(dateFrom) }),
+        ...(dateTo && { dateTo: new Date(dateTo) }),
+      };
+
+      const pagination: PaginationParams = { 
+        page: page || 1, 
+        limit: limit || 10 
+      };
+
+      // Call existing search method
+      return await this.searchDocuments(searchFilters, pagination, userId);
+    } catch (error) {
+      Logger.error('Failed to search documents', { error, searchData, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'SERVER_ERROR',
       };
     }
   }
@@ -279,7 +365,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId,
         userId,
-        action: 'update',
+        action: AuditAction.UPDATE,
         details: { changes: updateData },
       });
 
@@ -334,7 +420,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId,
         userId,
-        action: 'delete',
+        action: AuditAction.DELETE,
         details: { filename: document.filename },
       });
 
@@ -393,7 +479,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId,
         userId,
-        action: 'generate_download_link',
+        action: AuditAction.DOWNLOAD,
         details: {
           filename: document.filename,
           expiresIn: options.expiresIn || 3600,
@@ -449,14 +535,14 @@ export class DocumentService {
       }
 
       // Clear existing permissions for the document
-      await this.permissionRepository.deleteByDocumentId(documentId);
+      await this.permissionRepository.removeAllDocumentPermissions(documentId);
 
       // Create new permissions
       for (const perm of permissions) {
         await this.permissionRepository.create({
           documentId,
           userId: perm.userId,
-          permission: perm.permission,
+          permission: perm.permission as Permission,
           grantedBy,
         });
       }
@@ -465,7 +551,7 @@ export class DocumentService {
       await this.auditRepository.create({
         documentId,
         userId: grantedBy,
-        action: 'update_permissions',
+        action: AuditAction.PERMISSION_GRANT,
         details: { permissions },
       });
 
@@ -479,6 +565,121 @@ export class DocumentService {
         success: false,
         message: 'Failed to update document permissions',
         error: 'PERMISSION_UPDATE_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Update document metadata only (Enhanced from controller)
+   */
+  async updateDocumentMetadata(
+    documentId: string,
+    userId: string,
+    metadata: Record<string, any>
+  ): Promise<ApiResponse<Document>> {
+    try {
+      // Check permissions
+      const hasPermission = await this.checkDocumentPermission(documentId, userId, 'write');
+      if (!hasPermission) {
+        return {
+          success: false,
+          message: 'Access denied',
+          error: 'ACCESS_DENIED',
+        };
+      }
+
+      const document = await this.documentRepository.findById(documentId);
+      if (!document) {
+        return {
+          success: false,
+          message: 'Document not found',
+          error: 'DOCUMENT_NOT_FOUND',
+        };
+      }
+
+      const updateData: UpdateDocumentDTO = {
+        metadata: { ...document.metadata, ...metadata }
+      };
+
+      const updatedDocument = await this.documentRepository.update(documentId, updateData);
+
+      // Create audit log
+      await this.auditRepository.create({
+        documentId,
+        userId,
+        action: AuditAction.UPDATE,
+        details: { newMetadata: metadata },
+      });
+
+      Logger.info('Document metadata updated successfully', { documentId, userId });
+
+      return {
+        success: true,
+        message: 'Document metadata updated successfully',
+        data: updatedDocument!,
+      };
+    } catch (error) {
+      Logger.error('Failed to update document metadata', { error, documentId, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'SERVER_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Update document tags only (Enhanced from controller)
+   */
+  async updateDocumentTags(
+    documentId: string,
+    userId: string,
+    tags: string[]
+  ): Promise<ApiResponse<Document>> {
+    try {
+      // Check permissions
+      const hasPermission = await this.checkDocumentPermission(documentId, userId, 'write');
+      if (!hasPermission) {
+        return {
+          success: false,
+          message: 'Access denied',
+          error: 'ACCESS_DENIED',
+        };
+      }
+
+      const document = await this.documentRepository.findById(documentId);
+      if (!document) {
+        return {
+          success: false,
+          message: 'Document not found',
+          error: 'DOCUMENT_NOT_FOUND',
+        };
+      }
+
+      const updateData: UpdateDocumentDTO = { tags };
+      const updatedDocument = await this.documentRepository.update(documentId, updateData);
+
+      // Create audit log
+      await this.auditRepository.create({
+        documentId,
+        userId,
+        action: AuditAction.UPDATE,
+        details: { newTags: tags, oldTags: document.tags },
+      });
+
+      Logger.info('Document tags updated successfully', { documentId, userId });
+
+      return {
+        success: true,
+        message: 'Document tags updated successfully',
+        data: updatedDocument!,
+      };
+    } catch (error) {
+      Logger.error('Failed to update document tags', { error, documentId, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'SERVER_ERROR',
       };
     }
   }
@@ -501,11 +702,13 @@ export class DocumentService {
       // Check explicit permissions
       const userPermissions = await this.permissionRepository.findByDocumentAndUser(documentId, userId);
       
-      for (const perm of userPermissions) {
-        if (perm.permission === permission || 
-            (permission === 'read' && ['write', 'delete'].includes(perm.permission)) ||
-            (permission === 'write' && perm.permission === 'delete')) {
-          return true;
+      if (userPermissions && Array.isArray(userPermissions)) {
+        for (const perm of userPermissions) {
+          if (perm.permission === permission || 
+              (permission === 'read' && [Permission.WRITE, Permission.DELETE].includes(perm.permission)) ||
+              (permission === 'write' && perm.permission === Permission.DELETE)) {
+            return true;
+          }
         }
       }
 

@@ -4,7 +4,7 @@
  */
 
 import WorkingApplication from './app';
-import { Logger } from './middleware/logging';
+import { Logger } from './http/middleware/logging';
 
 // Create and start application
 const app = new WorkingApplication();

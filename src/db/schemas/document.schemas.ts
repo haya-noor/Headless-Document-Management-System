@@ -3,6 +3,7 @@
  * Defines validation rules for document operations
  */
 
+// Zod is the library used by Elysia to validate data (elysia uses zod under the hood)
 import { z } from 'zod';
 
 /**
@@ -95,6 +96,7 @@ export const DocumentTagsSchema = z.object({
  * Pagination parameters schema
  * Validates pagination options
  */
+// Elysia uses the t type, so we need to use the z type ( elysia uses zod under the hood)
 export const PaginationSchema = z.object({
   page: z.number().int().positive().default(1),
   limit: z.number().int().positive().max(100).default(20),

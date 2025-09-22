@@ -6,7 +6,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
-import { documentPermissions } from '../../models/schema';
+import { documentPermissions } from '../../db/models/schema';
 import { DocumentPermission, PaginationParams, PaginatedResponse, Permission } from '../../types';
 import { 
   IDocumentPermissionRepository, 
@@ -361,7 +361,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
   /**
    * Revoke all permissions for user on document
    */
-  async revokeAllPermissions(documentId: string, userId: string): Promise<boolean> {
+  async revokeAllPermissions(documentId: string, userId: string): Promise<number> {
     try {
       const result = await this.getDb()
         .delete(documentPermissions)
@@ -370,7 +370,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
           eq(documentPermissions.userId, userId)
         ));
 
-      return result.rowCount > 0;
+      return result.rowCount || 0;
     } catch (error) {
       throw new Error(`Failed to revoke all permissions: ${error}`);
     }

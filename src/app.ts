@@ -10,8 +10,8 @@ import { staticPlugin } from '@elysiajs/static';
 import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
 import { databaseConfig } from './config/database';
-import { Logger } from './middleware/logging';
-import { authRoutes, documentRoutes, fileRoutes } from './routes';
+import { Logger } from './http/middleware/logging';
+import { authRoutes, documentRoutes, fileRoutes } from './http/routes';
 
 /**
  * Working Application class using Elysia

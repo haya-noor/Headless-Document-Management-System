@@ -7,8 +7,9 @@ import { User, PaginationParams, PaginatedResponse, ApiResponse } from '../types
 import { IUserRepository, CreateUserDTO, UpdateUserDTO, UserFiltersDTO } from '../repositories/interfaces/user.repository';
 import { UserRepository } from '../repositories/implementations/user.repository';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils/password';
-import { generateToken } from '../utils/jwt';
-import { Logger, AuditLogger } from '../middleware/logging';
+import { generateToken, getTokenExpiration, verifyToken } from '../utils/jwt';
+import { Logger, AuditLogger } from '../http/middleware/logging';
+import { TokenBlacklistRepository } from '../repositories/implementations/token-blacklist.repository';
 
 /**
  * User service class
@@ -16,13 +17,15 @@ import { Logger, AuditLogger } from '../middleware/logging';
  */
 export class UserService {
   private userRepository: IUserRepository;
+  private tokenBlacklistRepository: TokenBlacklistRepository;
 
   constructor(userRepository?: IUserRepository) {
     this.userRepository = userRepository || new UserRepository();
+    this.tokenBlacklistRepository = new TokenBlacklistRepository();
   }
 
   /**
-   * Register a new user
+   * Register a new user,  DTO = Data Transfer Object
    * @param {CreateUserDTO} userData - User registration data
    * @param {Object} options - Registration options
    * @returns {Promise<ApiResponse<{user: User; token: string}>>} Registration result
@@ -515,6 +518,277 @@ export class UserService {
         success: false,
         message: 'Failed to search users',
         error: 'SEARCH_FAILED',
+      };
+    }
+  }
+
+  // ===== ENHANCED METHODS FROM AUTH CONTROLLER =====
+
+  /**
+   * User logout with token blacklisting (Enhanced from controller)
+   */
+  async logoutUser(refreshToken: string): Promise<ApiResponse<void>> {
+    try {
+      // Get token expiration date and decode to get userId
+      const expiresAt = getTokenExpiration(refreshToken);
+      if (!expiresAt) {
+        return {
+          success: false,
+          message: 'Invalid token format',
+          error: 'INVALID_TOKEN',
+        };
+      }
+
+      // Decode token to get userId
+      let userId = '';
+      try {
+        const decoded = verifyToken(refreshToken);
+        userId = decoded.userId;
+      } catch (error) {
+        Logger.warn('Invalid refresh token during logout', { error });
+        return {
+          success: false,
+          message: 'Invalid refresh token',
+          error: 'INVALID_TOKEN',
+        };
+      }
+
+      // Add token to blacklist
+      await this.tokenBlacklistRepository.addToBlacklist({
+        token: refreshToken,
+        userId,
+        expiresAt,
+      });
+
+      // Log audit trail
+      AuditLogger.logAuth({
+        action: 'logout' as any,
+        userId,
+        success: true,
+      });
+
+      Logger.info('User logged out successfully', { userId });
+
+      return {
+        success: true,
+        message: 'Logged out successfully',
+      };
+    } catch (error) {
+      Logger.error('Logout error', { error });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Get user profile (Enhanced from controller)
+   */
+  async getUserProfile(userId: string): Promise<ApiResponse<User>> {
+    try {
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Profile retrieved successfully',
+        data: user,
+      };
+    } catch (error) {
+      Logger.error('Failed to get user profile', { error, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Update user profile (Enhanced from controller)
+   */
+  async updateUserProfile(
+    userId: string,
+    updateData: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    }
+  ): Promise<ApiResponse<User>> {
+    try {
+      // Check if email is being updated and if it's already taken
+      if (updateData.email) {
+        const existingUser = await this.userRepository.findByEmail(updateData.email);
+        if (existingUser && existingUser.id !== userId) {
+          return {
+            success: false,
+            message: 'Email address is already registered',
+            error: 'EMAIL_EXISTS',
+          };
+        }
+      }
+
+      const updatedUser = await this.userRepository.update(userId, updateData);
+      if (!updatedUser) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      Logger.info('User profile updated successfully', { userId });
+
+      return {
+        success: true,
+        message: 'Profile updated successfully',
+        data: updatedUser,
+      };
+    } catch (error) {
+      Logger.error('Failed to update user profile', { error, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Change user password (Enhanced from controller)
+   */
+  async changeUserPassword(
+    userId: string,
+    passwordData: {
+      currentPassword: string;
+      newPassword: string;
+    }
+  ): Promise<ApiResponse<void>> {
+    try {
+      // Get user first to get email
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      // Get user with password using email
+      const userWithPassword = await this.userRepository.findOne({ email: user.email }, true);
+      if (!userWithPassword || !(userWithPassword as any).password) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await verifyPassword(
+        passwordData.currentPassword,
+        (userWithPassword as any).password
+      );
+      if (!isCurrentPasswordValid) {
+        return {
+          success: false,
+          message: 'Current password is incorrect',
+          error: 'INVALID_CURRENT_PASSWORD',
+        };
+      }
+
+      // Validate new password strength
+      const passwordValidation = validatePasswordStrength(passwordData.newPassword);
+      if (!passwordValidation.isValid) {
+        return {
+          success: false,
+          message: 'New password does not meet security requirements',
+          error: 'WEAK_PASSWORD',
+          data: { errors: passwordValidation.errors } as any,
+        };
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(passwordData.newPassword);
+
+      // Update password
+      await this.userRepository.update(userId, { password: hashedPassword });
+
+      Logger.info('User password changed successfully', { userId });
+
+      return {
+        success: true,
+        message: 'Password changed successfully',
+      };
+    } catch (error) {
+      Logger.error('Failed to change user password', { error, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR',
+      };
+    }
+  }
+
+  /**
+   * Delete user account (Enhanced from controller)
+   */
+  async deleteUserAccount(userId: string, password: string): Promise<ApiResponse<void>> {
+    try {
+      // Get user first to get email
+      const user = await this.userRepository.findById(userId);
+      if (!user) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      // Get user with password using email
+      const userWithPassword = await this.userRepository.findOne({ email: user.email }, true);
+      if (!userWithPassword || !(userWithPassword as any).password) {
+        return {
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND',
+        };
+      }
+
+      // Verify password
+      const isPasswordValid = await verifyPassword(password, (userWithPassword as any).password);
+      if (!isPasswordValid) {
+        return {
+          success: false,
+          message: 'Password is incorrect',
+          error: 'INVALID_PASSWORD',
+        };
+      }
+
+      // Soft delete user account
+      await this.userRepository.update(userId, { isActive: false });
+
+      Logger.info('User account deleted successfully', { userId });
+
+      return {
+        success: true,
+        message: 'Account deleted successfully',
+      };
+    } catch (error) {
+      Logger.error('Failed to delete user account', { error, userId });
+      return {
+        success: false,
+        message: 'Internal server error',
+        error: 'INTERNAL_ERROR',
       };
     }
   }

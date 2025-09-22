@@ -6,11 +6,11 @@
 
 import { promises as fs } from 'fs';
 import { createHash } from 'crypto';
-import { join, dirname, extname } from 'path';
+import path, { join, dirname, extname } from 'path';
 import { config } from '../config';
 import { FileUpload, PreSignedUrlResponse } from '../types';
 import { IStorageService } from './interfaces/storage.interface';
-import { Logger } from '../middleware/logging';
+import { Logger } from '../http/middleware/logging';
 
 /**
  * Local storage service class
@@ -118,6 +118,7 @@ export class LocalStorageService implements IStorageService {
       return {
         url,
         expiresIn,
+        expiresAt: new Date(Date.now() + (expiresIn * 1000))
       };
     } catch (error) {
       Logger.error('Failed to generate download URL', { error, key });
@@ -284,13 +285,13 @@ export class LocalStorageService implements IStorageService {
    * List files in storage with optional prefix and limit
    * @param {string} prefix - Optional prefix to filter files
    * @param {number} limit - Optional limit on number of files to return
-   * @returns {Promise<Array<{key: string; size: number; lastModified: Date}>>} List of files
+   * @returns {Promise<string[]>} List of file keys
    */
-  async listFiles(prefix?: string, limit?: number): Promise<Array<{key: string; size: number; lastModified: Date}>> {
+  async listFiles(prefix?: string, limit?: number): Promise<string[]> {
     try {
       await this.ensureStorageDirectory();
       
-      const files: Array<{key: string; size: number; lastModified: Date}> = [];
+      const files: string[] = [];
       
       const scanDirectory = async (dirPath: string, currentPrefix: string = ''): Promise<void> => {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -304,12 +305,7 @@ export class LocalStorageService implements IStorageService {
           } else {
             // Check if file matches prefix filter
             if (!prefix || relativePath.startsWith(prefix)) {
-              const stats = await fs.stat(fullPath);
-              files.push({
-                key: relativePath,
-                size: stats.size,
-                lastModified: stats.mtime
-              });
+              files.push(relativePath);
             }
           }
         }
@@ -317,8 +313,8 @@ export class LocalStorageService implements IStorageService {
       
       await scanDirectory(this.storagePath);
       
-      // Sort by lastModified descending (newest first)
-      files.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+      // Sort files alphabetically
+      files.sort();
       
       // Apply limit if specified
       return limit ? files.slice(0, limit) : files;

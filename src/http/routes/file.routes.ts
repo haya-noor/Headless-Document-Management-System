@@ -4,11 +4,8 @@
  */
 
 import { Elysia, t } from 'elysia';
-import { FileController } from '../controllers/file.controller';
-import { createAuthMiddleware, verifyAuthToken } from '../middleware/auth.middleware';
-
-const fileController = new FileController();
-const authMiddleware = createAuthMiddleware();
+import { fileService } from '../../services';
+import { getAuthenticatedUser, createUnauthorizedResponse } from '../middleware/auth.middleware';
 
 export const fileRoutes = {
   /**
@@ -18,7 +15,7 @@ export const fileRoutes = {
   serveFile: (app: Elysia) => app
     .get('/:key', async ({ params, set }) => {
       const { key } = params as any;
-      const result = await fileController.serveFile(key);
+      const result = await fileService.serveFileWithValidation(key);
       
       if (!result.success) {
         set.status = result.error === 'FILE_NOT_FOUND' ? 404 : 500;
@@ -49,6 +46,7 @@ export const fileRoutes = {
         },
       });
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         key: t.String(),
       }),
@@ -65,23 +63,18 @@ export const fileRoutes = {
    */
   uploadFile: (app: Elysia) => app
     .post('/upload', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
-      const result = await fileController.uploadFile(user, body);
+      const result = await fileService.uploadFileWithValidation(user.userId, body);
       
-      if (result.success) {
-        set.status = 201;
-      } else {
-        set.status = 400;
-      }
-      
+      set.status = result.success ? 201 : 400;
       return result;
     }, {
+      // validate with FileUploadSchema, using elysia (elysia uses the t type)
       body: t.Object({
         file: t.File(),
         key: t.Optional(t.String()),
@@ -100,18 +93,18 @@ export const fileRoutes = {
    */
   generateDownloadLink: (app: Elysia) => app
     .post('/download', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
-      const result = await fileController.generateDownloadLink(user, body);
+      const result = await fileService.generateDownloadLinkWithValidation(user.userId, body);
       
       set.status = result.success ? 200 : 400;
       return result;
     }, {
+      // validate with DownloadLinkSchema, using elysia (elysia uses the t type)
       body: t.Object({
         key: t.String(),
         expiresIn: t.Optional(t.Number()),
@@ -130,19 +123,19 @@ export const fileRoutes = {
    */
   deleteFile: (app: Elysia) => app
     .delete('/:key', async ({ params, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { key } = params as any;
-      const result = await fileController.deleteFile(user, key);
+      const result = await fileService.deleteFileWithValidation(user.userId, key);
       
       set.status = result.success ? 200 : 400;
       return result;
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         key: t.String(),
       }),
@@ -160,16 +153,12 @@ export const fileRoutes = {
   getFileMetadata: (app: Elysia) => app
     .get('/:key/metadata', async ({ params, set }) => {
       const { key } = params as any;
-      const result = await fileController.getFileMetadata(key);
+      const result = await fileService.getFileMetadataWithValidation(key);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'FILE_NOT_FOUND' ? 404 : 500;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'FILE_NOT_FOUND' ? 404 : 500);
       return result;
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         key: t.String(),
       }),
@@ -186,19 +175,23 @@ export const fileRoutes = {
    */
   listFiles: (app: Elysia) => app
     .get('/', async ({ query, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { prefix, limit } = query as any;
-      const result = await fileController.listFiles(user, prefix, limit ? parseInt(limit) : undefined);
+      const result = await fileService.listFilesWithValidation(
+        user.userId, 
+        prefix, 
+        limit ? parseInt(limit) : undefined
+      );
       
       set.status = result.success ? 200 : 500;
       return result;
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       query: t.Object({
         prefix: t.Optional(t.String()),
         limit: t.Optional(t.String()),
@@ -219,7 +212,7 @@ export const fileRoutes = {
       const { key } = params as any;
       const { filename } = query as any;
       
-      const result = await fileController.serveFile(key);
+      const result = await fileService.serveFileWithValidation(key);
       
       if (!result.success) {
         set.status = result.error === 'FILE_NOT_FOUND' ? 404 : 500;
@@ -253,9 +246,11 @@ export const fileRoutes = {
         },
       });
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         key: t.String(),
       }),
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       query: t.Object({
         filename: t.Optional(t.String()),
       }),
@@ -273,16 +268,12 @@ export const fileRoutes = {
   getFileInfo: (app: Elysia) => app
     .get('/info/:key', async ({ params, set }) => {
       const { key } = params as any;
-      const result = await fileController.getFileMetadata(key);
+      const result = await fileService.getFileMetadataWithValidation(key);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'FILE_NOT_FOUND' ? 404 : 500;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'FILE_NOT_FOUND' ? 404 : 500);
       return result;
     }, {
+      // validate with StringParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         key: t.String(),
       }),

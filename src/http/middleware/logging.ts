@@ -3,7 +3,7 @@
  * Provides structured logging for the application
  */
 
-import { config } from '../config';
+import { config } from '../../config';
 
 /**
  * Logger utility class

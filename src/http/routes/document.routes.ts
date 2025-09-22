@@ -4,8 +4,8 @@
  */
 
 import { Elysia, t } from 'elysia';
-import { DocumentController } from '../controllers/document.controller';
-import { createAuthMiddleware, verifyAuthToken } from '../middleware/auth.middleware';
+import { documentService } from '../../services';
+import { getAuthenticatedUser, createUnauthorizedResponse } from '../middleware/auth.middleware';
 import { 
   DocumentUploadSchema,
   DocumentUpdateSchema,
@@ -16,10 +16,7 @@ import {
   DocumentMetadataSchema,
   DocumentTagsSchema,
   UUIDParamSchema
-} from '../schemas/document.schemas';
-
-const documentController = new DocumentController();
-const authMiddleware = createAuthMiddleware();
+} from '../../db/schemas/document.schemas';
 
 export const documentRoutes = {
   /**
@@ -28,23 +25,18 @@ export const documentRoutes = {
    */
   uploadDocument: (app: Elysia) => app
     .post('/', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
-      const result = await documentController.uploadDocument(user, body);
+      const result = await documentService.uploadDocumentWithValidation(body.file, body, user.userId);
       
-      if (result.success) {
-        set.status = 201;
-      } else {
-        set.status = 400;
-      }
-      
+      set.status = result.success ? 201 : 400;
       return result;
     }, {
+      // validate with DocumentUploadSchema, using elysia (elysia uses the t type)
       body: t.Object({
         file: t.File(),
         tags: t.Optional(t.Array(t.String())),
@@ -64,24 +56,19 @@ export const documentRoutes = {
    */
   getDocument: (app: Elysia) => app
     .get('/:id', async ({ params, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
-      const result = await documentController.getDocument(user, id);
+      const result = await documentService.getDocument(id, user.userId);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
@@ -98,18 +85,18 @@ export const documentRoutes = {
    */
   searchDocuments: (app: Elysia) => app
     .get('/', async ({ query, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
-      const result = await documentController.searchDocuments(user, query as any);
+      const result = await documentService.searchDocumentsWithTransforms(query as any, user.userId);
       
       set.status = 200;
       return result;
     }, {
+      // validate with DocumentSearchSchema, using elysia (elysia uses the t type)
       query: t.Object({
         query: t.Optional(t.String()),
         tags: t.Optional(t.Array(t.String())),
@@ -137,24 +124,19 @@ export const documentRoutes = {
    */
   updateDocument: (app: Elysia) => app
     .put('/:id', async ({ params, body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
-      const result = await documentController.updateDocument(user, id, body);
+      const result = await documentService.updateDocument(id, body, user.userId);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
@@ -177,24 +159,19 @@ export const documentRoutes = {
    */
   deleteDocument: (app: Elysia) => app
     .delete('/:id', async ({ params, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
-      const result = await documentController.deleteDocument(user, id);
+      const result = await documentService.deleteDocument(id, user.userId);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
@@ -211,27 +188,23 @@ export const documentRoutes = {
    */
   generateDownloadLink: (app: Elysia) => app
     .post('/:id/download', async ({ params, body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
-      const result = await documentController.generateDownloadLink(user, id, body);
+      const result = await documentService.generateDownloadLink(id, user.userId, body);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
+      // validate with DownloadLinkSchema, using elysia (elysia uses the t type)
       body: t.Object({
         expiresIn: t.Optional(t.Number()),
         filename: t.Optional(t.String()),
@@ -249,28 +222,24 @@ export const documentRoutes = {
    */
   updatePermissions: (app: Elysia) => app
     .put('/:id/permissions', async ({ params, body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
       const { permissions } = body as any;
-      const result = await documentController.updateDocumentPermissions(user, id, permissions);
+      const result = await documentService.updateDocumentPermissions(id, permissions, user.userId);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
+      // validate with DocumentPermissionsSchema, using elysia (elysia uses the t type)
       body: t.Object({
         permissions: t.Array(t.Object({
           userId: t.String(),
@@ -290,28 +259,24 @@ export const documentRoutes = {
    */
   updateMetadata: (app: Elysia) => app
     .put('/:id/metadata', async ({ params, body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
       const { metadata } = body as any;
-      const result = await documentController.updateDocumentMetadata(user, id, metadata);
+      const result = await documentService.updateDocumentMetadata(id, user.userId, metadata);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
+      // validate with DocumentMetadataSchema, using elysia (elysia uses the t type)
       body: t.Object({
         metadata: t.Record(t.String(), t.Any()),
       }),
@@ -328,28 +293,24 @@ export const documentRoutes = {
    */
   updateTags: (app: Elysia) => app
     .put('/:id/tags', async ({ params, body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { id } = params as any;
       const { tags } = body as any;
-      const result = await documentController.updateDocumentTags(user, id, tags);
+      const result = await documentService.updateDocumentTags(id, user.userId, tags);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        set.status = result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
       return result;
     }, {
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       params: t.Object({
         id: t.String(),
       }),
+      // validate with DocumentTagsSchema, using elysia (elysia uses the t type)
       body: t.Object({
         tags: t.Array(t.String()),
       }),

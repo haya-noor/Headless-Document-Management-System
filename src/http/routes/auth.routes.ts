@@ -4,17 +4,13 @@
  */
 
 import { Elysia, t } from 'elysia';
-import { AuthController } from '../controllers/auth.controller';
-import { createAuthMiddleware, verifyAuthToken } from '../middleware/auth.middleware';
-import { validateBody, validateParams } from '../middleware/validation.middleware';
+import { userService } from '../../services';
+import { getAuthenticatedUser, createUnauthorizedResponse } from '../middleware/auth.middleware';
 import { 
   registerSchema, 
   loginSchema, 
   changePasswordSchema
-} from '../schemas/auth.schemas';
-
-const authController = new AuthController();
-const authMiddleware = createAuthMiddleware();
+} from '../../db/schemas/auth.schemas';
 
 export const authRoutes = {
   /**
@@ -29,15 +25,9 @@ export const authRoutes = {
         userAgent: request.headers.get('user-agent') || 'Unknown',
       };
 
-      const result = await authController.register(userData, options);
+      const result = await userService.registerUser(userData, options);
       
-      if (result.success) {
-        set.status = 201;
-      } else {
-        const statusCode = result.error === 'EMAIL_EXISTS' ? 409 : 400;
-        set.status = statusCode;
-      }
-      
+      set.status = result.success ? 201 : (result.error === 'EMAIL_EXISTS' ? 409 : 400);
       return result;
     }, {
       body: registerSchema,
@@ -60,15 +50,9 @@ export const authRoutes = {
         userAgent: request.headers.get('user-agent') || 'Unknown',
       };
 
-      const result = await authController.login(credentials, options);
+      const result = await userService.loginUser(credentials.email, credentials.password, options);
       
-      if (result.success) {
-        set.status = 200;
-      } else {
-        const statusCode = result.error === 'INVALID_CREDENTIALS' ? 401 : 400;
-        set.status = statusCode;
-      }
-      
+      set.status = result.success ? 200 : (result.error === 'INVALID_CREDENTIALS' ? 401 : 400);
       return result;
     }, {
       body: loginSchema,
@@ -87,7 +71,7 @@ export const authRoutes = {
   logout: (app: Elysia) => app
     .post('/logout', async ({ body, set }) => {
       const logoutData = body as any;
-      const result = await authController.logout(logoutData);
+      const result = await userService.logoutUser(logoutData.refreshToken);
       
       set.status = result.success ? 200 : 400;
       return result;
@@ -108,14 +92,13 @@ export const authRoutes = {
    */
   getProfile: (app: Elysia) => app
     .get('/profile', async ({ set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
-      const result = await authController.getProfile(user);
+      const result = await userService.getUserProfile(user.userId);
       
       set.status = result.success ? 200 : 404;
       return result;
@@ -133,15 +116,14 @@ export const authRoutes = {
    */
   updateProfile: (app: Elysia) => app
     .put('/profile', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const updateData = body as any;
-      const result = await authController.updateProfile(user, updateData);
+      const result = await userService.updateUserProfile(user.userId, updateData);
       
       set.status = result.success ? 200 : 400;
       return result;
@@ -164,15 +146,14 @@ export const authRoutes = {
    */
   changePassword: (app: Elysia) => app
     .post('/change-password', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const passwordData = body as any;
-      const result = await authController.changePassword(user, passwordData);
+      const result = await userService.changeUserPassword(user.userId, passwordData);
       
       set.status = result.success ? 200 : 400;
       return result;
@@ -191,15 +172,14 @@ export const authRoutes = {
    */
   deleteAccount: (app: Elysia) => app
     .delete('/account', async ({ body, set, headers }) => {
-      const token = headers.authorization?.replace('Bearer ', '');
-      const user = verifyAuthToken(token || '');
+      const user = getAuthenticatedUser(headers);
       if (!user) {
         set.status = 401;
-        return { success: false, message: 'Unauthorized', error: 'UNAUTHORIZED' };
+        return createUnauthorizedResponse();
       }
       
       const { password } = body as any;
-      const result = await authController.deleteAccount(user, password);
+      const result = await userService.deleteUserAccount(user.userId, password);
       
       set.status = result.success ? 200 : 400;
       return result;

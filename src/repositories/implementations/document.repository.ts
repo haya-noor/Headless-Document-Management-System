@@ -6,7 +6,7 @@
 import { eq, and, or, like, gte, lte, inArray, sql, desc, asc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
-import { documents } from '../../models/schema';
+import { documents } from '../../db/models/schema';
 import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse } from '../../types';
 import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../interfaces/document.repository';
 

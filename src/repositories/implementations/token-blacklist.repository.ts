@@ -6,7 +6,7 @@
 import { eq, and, lt } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { databaseConfig } from '../../config/database';
-import { tokenBlacklist } from '../../models/schema';
+import { tokenBlacklist } from '../../db/models/schema';
 import { 
   ITokenBlacklistRepository, 
   CreateTokenBlacklistDTO,

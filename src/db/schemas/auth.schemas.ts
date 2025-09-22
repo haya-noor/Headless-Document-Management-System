@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { UserRole } from '../types';
+import { UserRole } from '../../types';
 
 /**
  * User registration schema

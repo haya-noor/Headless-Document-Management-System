@@ -98,6 +98,14 @@ export interface IStorageService {
    * @returns {string} Version-specific storage key
    */
   generateVersionKey(baseKey: string, version: number): string;
+
+  /**
+   * List files with optional prefix filter
+   * @param {string} prefix - Optional prefix to filter files
+   * @param {number} limit - Maximum number of files to return
+   * @returns {Promise<string[]>} Array of file keys
+   */
+  listFiles(prefix?: string, limit?: number): Promise<string[]>;
 }
 
 /**
