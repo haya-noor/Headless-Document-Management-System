@@ -5,7 +5,7 @@
 
 import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseConfig } from '../../config/database';
+import { databaseService } from '../../services';
 import { users } from '../../db/models/schema';
 import { User, UserRole, PaginationParams, PaginatedResponse } from '../../types';
 import {
@@ -21,7 +21,7 @@ import {
  */
 export class UserRepository implements IUserRepository {
   private get db() {
-    return databaseConfig.getDatabase();
+    return databaseService.getDatabase();
   }
 
   /**

@@ -3,9 +3,11 @@
  * Provides pre-configured service instances with dependency injection
  */
 
-import { DocumentService } from './document.service';
-import { UserService } from './user.service';
-import { FileService } from './file.service';
+// Use dynamic imports to avoid circular dependencies
+let DocumentService: any;
+let UserService: any;
+let FileService: any;
+let DatabaseService: any;
 import { DocumentRepository } from '../repositories/implementations/document.repository';
 import { DocumentVersionRepository } from '../repositories/implementations/document-version.repository';
 import { DocumentPermissionRepository } from '../repositories/implementations/document-permission.repository';
@@ -19,9 +21,10 @@ import { UserRepository } from '../repositories/implementations/user.repository'
  */
 class ServiceFactory {
   private static instance: ServiceFactory;
-  private _documentService?: DocumentService;
-  private _userService?: UserService;
-  private _fileService?: FileService;
+  private _documentService?: any;
+  private _userService?: any;
+  private _fileService?: any;
+  private _databaseService?: any;
 
   private constructor() {}
 
@@ -35,8 +38,11 @@ class ServiceFactory {
   /**
    * Get configured document service
    */
-  get documentService(): DocumentService {
+  get documentService(): any {
     if (!this._documentService) {
+      if (!DocumentService) {
+        DocumentService = require('./document.service').DocumentService;
+      }
       const documentRepo = new DocumentRepository();
       const versionRepo = new DocumentVersionRepository();
       const permissionRepo = new DocumentPermissionRepository();
@@ -55,8 +61,11 @@ class ServiceFactory {
   /**
    * Get configured user service
    */
-  get userService(): UserService {
+  get userService(): any {
     if (!this._userService) {
+      if (!UserService) {
+        UserService = require('./user.service').UserService;
+      }
       this._userService = new UserService();
     }
     return this._userService;
@@ -65,11 +74,27 @@ class ServiceFactory {
   /**
    * Get configured file service
    */
-  get fileService(): FileService {
+  get fileService(): any {
     if (!this._fileService) {
+      if (!FileService) {
+        FileService = require('./file.service').FileService;
+      }
       this._fileService = new FileService();
     }
     return this._fileService;
+  }
+
+  /**
+   * Get configured database service
+   */
+  get databaseService(): any {
+    if (!this._databaseService) {
+      if (!DatabaseService) {
+        DatabaseService = require('./database.service').DatabaseService;
+      }
+      this._databaseService = DatabaseService.getInstance();
+    }
+    return this._databaseService;
   }
 
   /**
@@ -87,4 +112,5 @@ export const serviceFactory = ServiceFactory.getInstance();
 export const documentService = serviceFactory.documentService;
 export const userService = serviceFactory.userService;
 export const fileService = serviceFactory.fileService;
+export const databaseService = serviceFactory.databaseService;
 export const tokenBlacklistRepository = serviceFactory.tokenBlacklistRepository;

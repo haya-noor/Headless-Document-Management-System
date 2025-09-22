@@ -181,7 +181,7 @@ describe("Authentication System", () => {
 
   describe("Authentication Schemas", () => {
     it("should validate registration data", () => {
-      const { registerSchema } = require("../src/schemas/auth.schemas");
+      const { registerSchema } = require("../src/db/schemas/auth.schemas");
       
       const validData = testUtils.generateTestUser();
       const result = registerSchema.safeParse(validData);
@@ -191,7 +191,7 @@ describe("Authentication System", () => {
     });
 
     it("should reject invalid registration data", () => {
-      const { registerSchema } = require("../src/schemas/auth.schemas");
+      const { registerSchema } = require("../src/db/schemas/auth.schemas");
       
       const invalidData = {
         email: "invalid-email",
@@ -206,7 +206,7 @@ describe("Authentication System", () => {
     });
 
     it("should validate login data", () => {
-      const { loginSchema } = require("../src/schemas/auth.schemas");
+      const { loginSchema } = require("../src/db/schemas/auth.schemas");
       
       const validData = {
         email: "test@example.com",

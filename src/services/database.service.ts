@@ -1,32 +1,33 @@
 /**
- * Database configuration and connection setup using Drizzle ORM
- * Handles PostgreSQL connection with connection pooling
+ * Database service
+ * Handles PostgreSQL connection using Drizzle ORM
  */
 
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../db/models/schema';
+import { databaseConfig } from '../config/database.config';
 
 /**
- * Database configuration class
+ * Database service class
  * Manages PostgreSQL connection using postgres.js driver
  */
-export class DatabaseConfig {
-  private static instance: DatabaseConfig;
+export class DatabaseService {
+  private static instance: DatabaseService;
   private client: postgres.Sql | null = null;
   private db: ReturnType<typeof drizzle> | null = null;
 
   private constructor() {}
 
   /**
-   * Singleton pattern for database configuration
-   * @returns {DatabaseConfig} Database configuration instance
+   * Singleton pattern for database service
+   * @returns {DatabaseService} Database service instance
    */
-  public static getInstance(): DatabaseConfig {
-    if (!DatabaseConfig.instance) {
-      DatabaseConfig.instance = new DatabaseConfig();
+  public static getInstance(): DatabaseService {
+    if (!DatabaseService.instance) {
+      DatabaseService.instance = new DatabaseService();
     }
-    return DatabaseConfig.instance;
+    return DatabaseService.instance;
   }
 
   /**
@@ -36,17 +37,15 @@ export class DatabaseConfig {
    */
   public async connect(): Promise<void> {
     try {
-      const connectionString = process.env.DATABASE_URL;
-      
-      if (!connectionString) {
+      if (!databaseConfig.url) {
         throw new Error('DATABASE_URL environment variable is not set');
       }
 
       // Create postgres client with connection pooling
-      this.client = postgres(connectionString, {
-        max: 10, // Maximum number of connections
-        idle_timeout: 20, // Close idle connections after 20 seconds
-        connect_timeout: 10, // Connection timeout in seconds
+      this.client = postgres(databaseConfig.url, {
+        max: databaseConfig.connectionPool.max,
+        idle_timeout: databaseConfig.connectionPool.idleTimeout,
+        connect_timeout: databaseConfig.connectionPool.connectTimeout,
       });
 
       // Initialize Drizzle ORM with schema
@@ -117,4 +116,4 @@ export class DatabaseConfig {
 }
 
 // Export singleton instance
-export const databaseConfig = DatabaseConfig.getInstance();
+export const databaseService = DatabaseService.getInstance();

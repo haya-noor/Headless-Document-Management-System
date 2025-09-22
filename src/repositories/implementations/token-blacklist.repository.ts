@@ -5,7 +5,7 @@
 
 import { eq, and, lt } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseConfig } from '../../config/database';
+import { databaseService } from '../../services';
 import { tokenBlacklist } from '../../db/models/schema';
 import { 
   ITokenBlacklistRepository, 
@@ -18,7 +18,7 @@ export class TokenBlacklistRepository implements ITokenBlacklistRepository {
    * Get database instance with null check
    */
   private getDb() {
-    return databaseConfig.getDatabase();
+    return databaseService.getDatabase();
   }
 
   /**

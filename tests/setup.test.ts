@@ -4,7 +4,7 @@
  */
 
 import { beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
-import { databaseConfig } from "../src/config/database";
+import { databaseService } from "../src/services";
 
 /**
  * Global test setup

@@ -5,7 +5,7 @@
 
 import { eq, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseConfig } from '../../config/database';
+import { databaseService } from '../../services';
 import { documentPermissions } from '../../db/models/schema';
 import { DocumentPermission, PaginationParams, PaginatedResponse, Permission } from '../../types';
 import { 
@@ -20,7 +20,7 @@ export class DocumentPermissionRepository implements IDocumentPermissionReposito
    * Get database instance with null check
    */
   private getDb() {
-    return databaseConfig.getDatabase();
+    return databaseService.getDatabase();
   }
 
   /**

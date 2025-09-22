@@ -9,7 +9,7 @@ import { swagger } from '@elysiajs/swagger';
 import { staticPlugin } from '@elysiajs/static';
 import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
-import { databaseConfig } from './config/database';
+import { databaseService } from './services';
 import { Logger } from './http/middleware/logging';
 import { authRoutes, documentRoutes, fileRoutes } from './http/routes';
 
@@ -208,7 +208,7 @@ class WorkingApplication {
   public async start(): Promise<void> {
     try {
       // Connect to database
-      await databaseConfig.connect();
+      await databaseService.connect();
       Logger.info('Database connection established');
 
       // Start HTTP server
@@ -249,7 +249,7 @@ class WorkingApplication {
       Logger.info('Shutting down application gracefully...');
       
       // Close database connection
-      await databaseConfig.disconnect();
+      await databaseService.disconnect();
       Logger.info('Database connection closed');
 
       Logger.info('Application shutdown completed');

@@ -383,7 +383,7 @@ describe("Document Management System", () => {
 
   describe("Document Schemas", () => {
     it("should validate document upload data", () => {
-      const { DocumentUploadSchema } = require("../src/schemas/document.schemas");
+      const { DocumentUploadSchema } = require("../src/db/schemas/document.schemas");
       
       const validData = {
         file: testUtils.generateTestFile(),
@@ -397,7 +397,7 @@ describe("Document Management System", () => {
     });
 
     it("should validate document search parameters", () => {
-      const { DocumentSearchSchema } = require("../src/schemas/document.schemas");
+      const { DocumentSearchSchema } = require("../src/db/schemas/document.schemas");
       
       const validData = {
         query: "test",
@@ -416,7 +416,7 @@ describe("Document Management System", () => {
     });
 
     it("should validate permission data", () => {
-      const { DocumentPermissionSchema } = require("../src/schemas/document.schemas");
+      const { DocumentPermissionSchema } = require("../src/db/schemas/document.schemas");
       
       const validData = {
         userId: "user-id-123",
@@ -428,7 +428,7 @@ describe("Document Management System", () => {
     });
 
     it("should reject invalid permission data", () => {
-      const { DocumentPermissionSchema } = require("../src/schemas/document.schemas");
+      const { DocumentPermissionSchema } = require("../src/db/schemas/document.schemas");
       
       const invalidData = {
         userId: "invalid-uuid",
