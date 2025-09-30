@@ -5,17 +5,25 @@
 
 import { eq, and, or, like, gte, lte, inArray, sql, desc, asc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../../services';
 import { documents } from '../../db/models/schema';
 import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse } from '../../types';
 import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../interfaces/document.repository';
 
 export class DocumentRepository implements IDocumentRepository {
+  private db: any;
+
+  constructor(database?: any) {
+    this.db = database;
+  }
+
   /**
    * Get database instance with null check
    */
   private getDb() {
-    return databaseService.getDatabase();
+    if (!this.db) {
+      throw new Error('Database instance not provided to DocumentRepository');
+    }
+    return this.db;
   }
 
   /**

@@ -4,6 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { Effect } from "effect";
+import { Schema } from "@effect/schema";
 import { testUtils, mocks } from "./setup.test";
 
 describe("Document Management System", () => {
@@ -56,8 +58,8 @@ describe("Document Management System", () => {
         description: "Test document upload",
       };
 
-      const result = await documentService.uploadDocument(file, metadata, "test-user-id");
-      
+      const result = await Effect.runPromise(documentService.uploadDocument(file, metadata, "test-user-id"));
+
       expect(result.success).toBe(true);
       expect(result.data?.filename).toBe(file.filename);
       expect(result.data?.uploadedBy).toBe("test-user-id");
@@ -93,8 +95,8 @@ describe("Document Management System", () => {
         mocks.mockStorageService
       );
 
-      const result = await documentService.getDocument("test-doc-id", "test-user-id");
-      
+      const result = await Effect.runPromise(documentService.getDocument("test-doc-id", "test-user-id"));
+
       expect(result.success).toBe(true);
       expect(result.data?.id).toBe(mocks.mockDbResponses.document.id);
     });
@@ -121,8 +123,8 @@ describe("Document Management System", () => {
         mocks.mockStorageService
       );
 
-      const result = await documentService.getDocument("test-doc-id", "test-user-id");
-      
+      const result = await Effect.runPromise(documentService.getDocument("test-doc-id", "test-user-id"));
+
       expect(result.success).toBe(false);
       expect(result.error).toBe("ACCESS_DENIED");
     });
@@ -268,7 +270,7 @@ describe("Document Management System", () => {
       };
 
       const mockPermissionRepo = {
-        deleteByDocumentId: async () => true,
+        removeAllDocumentPermissions: async () => true,
         create: async (data: any) => ({
           id: testUtils.randomString(),
           ...data,
@@ -346,8 +348,8 @@ describe("Document Management System", () => {
   });
 
   describe("Document Repository", () => {
-    it("should implement CRUD operations", () => {
-      const { DocumentRepository } = require("../src/repositories/implementations/document.repository");
+    it("should implement CRUD operations", async () => {
+      const { DocumentRepository } = await import("../src/repositories/implementations/document.repository");
       
       const repo = new DocumentRepository();
       
@@ -382,8 +384,8 @@ describe("Document Management System", () => {
   });
 
   describe("Document Schemas", () => {
-    it("should validate document upload data", () => {
-      const { DocumentUploadSchema } = require("../src/db/schemas/document.schemas");
+    it("should validate document upload data", async () => {
+      const { DocumentUploadSchema } = require("../src/schemas/document.schemas");
       
       const validData = {
         file: testUtils.generateTestFile(),
@@ -392,51 +394,59 @@ describe("Document Management System", () => {
         description: "Test document",
       };
       
-      const result = DocumentUploadSchema.safeParse(validData);
-      expect(result.success).toBe(true);
+      const result = await Effect.runPromise(Schema.decodeUnknown(DocumentUploadSchema)(validData));
+      expect(result).toBeDefined();
     });
 
-    it("should validate document search parameters", () => {
-      const { DocumentSearchSchema } = require("../src/db/schemas/document.schemas");
+    it("should validate document search parameters", async () => {
+      const { DocumentSearchSchema } = require("../src/schemas/document.schemas");
       
       const validData = {
         query: "test",
         tags: ["test"],
         mimeType: "application/pdf",
+        uploadedBy: "test-user-id",
+        dateFrom: "2023-01-01",
+        dateTo: "2023-12-31",
+        minSize: 1000,
+        maxSize: 5000000,
+        metadata: { category: "test" },
         page: 1,
         limit: 10,
         sortBy: "createdAt",
         sortOrder: "desc",
       };
       
-      const result = DocumentSearchSchema.safeParse(validData);
-      expect(result.success).toBe(true);
-      expect(result.data?.page).toBe(1);
-      expect(result.data?.limit).toBe(10);
+      const result = await Effect.runPromise(Schema.decodeUnknown(DocumentSearchSchema)(validData));
+      expect(result).toBeDefined();
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
     });
 
-    it("should validate permission data", () => {
-      const { DocumentPermissionSchema } = require("../src/db/schemas/document.schemas");
+    it("should validate permission data", async () => {
+      const { DocumentPermissionSchema } = require("../src/schemas/document.schemas");
       
       const validData = {
         userId: "user-id-123",
         permission: "read",
       };
       
-      const result = DocumentPermissionSchema.safeParse(validData);
-      expect(result.success).toBe(true);
+      const result = await Effect.runPromise(Schema.decodeUnknown(DocumentPermissionSchema)(validData));
+      expect(result).toBeDefined();
     });
 
-    it("should reject invalid permission data", () => {
-      const { DocumentPermissionSchema } = require("../src/db/schemas/document.schemas");
+    it("should reject invalid permission data", async () => {
+      const { DocumentPermissionSchema } = require("../src/schemas/document.schemas");
       
       const invalidData = {
         userId: "invalid-uuid",
         permission: "invalid-permission",
       };
       
-      const result = DocumentPermissionSchema.safeParse(invalidData);
-      expect(result.success).toBe(false);
+      const result = await Effect.runPromise(Schema.decodeUnknown(DocumentPermissionSchema)(invalidData).pipe(
+        Effect.mapError(() => "validation_failed")
+      )).catch(() => "validation_failed");
+      expect(result).toBe("validation_failed");
     });
   });
 

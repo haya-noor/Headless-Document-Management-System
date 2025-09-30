@@ -16,7 +16,7 @@ import {
   DocumentMetadataSchema,
   DocumentTagsSchema,
   UUIDParamSchema
-} from '../../db/schemas/document.schemas';
+} from '../../schemas/document.schemas';
 
 export const documentRoutes = {
   /**
@@ -31,6 +31,7 @@ export const documentRoutes = {
         return createUnauthorizedResponse();
       }
       
+      // validate with DocumentUploadSchema, using elysia (elysia uses the t type)
       const result = await documentService.uploadDocumentWithValidation(body.file, body, user.userId);
       
       set.status = result.success ? 201 : 400;
@@ -62,7 +63,9 @@ export const documentRoutes = {
         return createUnauthorizedResponse();
       }
       
+      // validate with UUIDParamSchema, using elysia (elysia uses the t type)
       const { id } = params as any;
+      // validate with DocumentIdParamSchema, using elysia (elysia uses the t type)
       const result = await documentService.getDocument(id, user.userId);
       
       set.status = result.success ? 200 : (result.error === 'DOCUMENT_NOT_FOUND' ? 404 : 403);
@@ -320,4 +323,5 @@ export const documentRoutes = {
         description: 'Update document tags only',
       },
     }),
+
 };

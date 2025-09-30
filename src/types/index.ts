@@ -34,6 +34,11 @@ export enum AuditAction {
 }
 
 /**
+ * Metadata value type - can be string, number, boolean, or null
+ */
+export type MetadataValue = string | number | boolean | null;
+
+/**
  * User entity interface
  */
 export interface User {
@@ -60,7 +65,7 @@ export interface Document {
   storageProvider: string;
   checksum?: string;
   tags: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, MetadataValue>;
   uploadedBy: string;
   currentVersion: number;
   isDeleted: boolean;
@@ -82,7 +87,7 @@ export interface DocumentVersion {
   storageProvider: string;
   checksum?: string;
   tags: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, MetadataValue>;
   uploadedBy: string;
   createdAt: Date;
 }
@@ -108,7 +113,7 @@ export interface AuditLog {
   documentId?: string;
   userId: string;
   action: AuditAction;
-  details: Record<string, any>;
+  details: Record<string, MetadataValue>;
   ipAddress?: string;
   userAgent?: string;
   createdAt: Date;
@@ -170,7 +175,7 @@ export interface DocumentSearchFilters {
   filename?: string;
   mimeType?: string;
   tags?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, MetadataValue>;
   uploadedBy?: string;
   dateFrom?: Date;
   dateTo?: Date;
@@ -203,20 +208,31 @@ export interface PreSignedUrlResponse {
 
 /**
  * API response wrapper
+ * ApiResponse is a generic type that can be used to return any type of data
+ * data return type is T becasue different endpoints return different types of data so we need to be able to return any type of data
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
-  data?: T;
+  data?: T;   
   error?: string;
 }
 
 /**
  * Repository interface for generic CRUD operations
+ * Repository is a generic type that can be used to return any type of data
+ * findById: the promise returns a T or null, T becasue we want to return the type of data that the repository is returning, it 
+ * could be a user, a document, a document version, etc. 
+ * findMany: the promise returns an array of T, T becasue we want to return the type of data that the repository is returning, it  
+ * could be an array of users, a array of documents, a array of document versions, etc. 
+ * create: the promise returns a T, T becasue we want to return the type of data that the repository is returning, and partial becasue 
+ * we want to be able to create a new entity with only some of the properties
+ * update: the promise returns a T or null, T becasue we want to return the type of data that the repository is returning, and 
+ * partial becasue we want to be able to update an entity with only some of the properties
  */
 export interface Repository<T> {
   findById(_id: string): Promise<T | null>;
-  findMany(_filters?: any): Promise<T[]>;
+  findMany(_filters?: Record<string, unknown>): Promise<T[]>;
   create(_data: Partial<T>): Promise<T>;
   update(_id: string, _data: Partial<T>): Promise<T | null>;
   delete(_id: string): Promise<boolean>;

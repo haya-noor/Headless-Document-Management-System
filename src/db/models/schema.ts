@@ -1,6 +1,7 @@
 /**
  * Database schema definitions using Drizzle ORM
  * Defines all tables and relationships for the document management system
+ * Updated to work with Effect-based domain entities
  */
 
 import { pgTable, text, timestamp, jsonb, boolean, varchar, integer } from 'drizzle-orm/pg-core';
@@ -25,21 +26,21 @@ export const users = pgTable('users', {
 /**
  * Documents table - stores document metadata and file information
  * Immutable versioning is handled through separate document_versions table
+ * Updated to align with Effect-based domain entities
  */
 export const documents = pgTable('documents', {
-  id: varchar('id', { length: 36 }).primaryKey(), // Application-generated UUID
+  id: varchar('id', { length: 36 }).primaryKey(), // Application-generated UUID (DocumentIdVO)
   filename: varchar('filename', { length: 255 }).notNull(),
   originalName: varchar('original_name', { length: 255 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
   size: integer('size').notNull(),
-  storageKey: varchar('storage_key', { length: 500 }).notNull(), // Storage key/path
+  storageKey: varchar('storage_key', { length: 500 }).notNull(), // Storage key/path (FileReferenceVO)
   storageProvider: varchar('storage_provider', { length: 20 }).notNull().default('local'), // Storage provider type
-  checksum: varchar('checksum', { length: 64 }), // SHA-256 hash
+  checksum: varchar('checksum', { length: 64 }), // SHA-256 hash (ChecksumVO)
   tags: jsonb('tags').$type<string[]>().default([]), // Array of tags
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}), // Key-value metadata
   uploadedBy: varchar('uploaded_by', { length: 36 }).notNull(),
   currentVersion: integer('current_version').notNull().default(1),
-  isDeleted: boolean('is_deleted').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -47,17 +48,18 @@ export const documents = pgTable('documents', {
 /**
  * Document versions table - immutable file versions for audit trail
  * Each document update creates a new version entry
+ * Updated to align with Effect-based domain entities
  */
 export const documentVersions = pgTable('document_versions', {
   id: varchar('id', { length: 36 }).primaryKey(),
-  documentId: varchar('document_id', { length: 36 }).notNull(),
+  documentId: varchar('document_id', { length: 36 }).notNull(), // DocumentIdVO
   version: integer('version').notNull(),
   filename: varchar('filename', { length: 255 }).notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
   size: integer('size').notNull(),
-  storageKey: varchar('storage_key', { length: 500 }).notNull(),
+  storageKey: varchar('storage_key', { length: 500 }).notNull(), // FileReferenceVO
   storageProvider: varchar('storage_provider', { length: 20 }).notNull().default('local'),
-  checksum: varchar('checksum', { length: 64 }),
+  checksum: varchar('checksum', { length: 64 }), // ChecksumVO
   tags: jsonb('tags').$type<string[]>().default([]),
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}),
   uploadedBy: varchar('uploaded_by', { length: 36 }).notNull(),

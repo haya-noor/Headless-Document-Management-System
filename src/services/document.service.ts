@@ -5,7 +5,19 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
+import { Effect } from 'effect';
 import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse, ApiResponse, AuditAction, Permission } from '../types';
+
+/**
+ * File upload interface
+ */
+interface UploadedFile {
+  buffer: Buffer;
+  filename: string;
+  originalname?: string;
+  mimetype: string;
+  size: number;
+}
 import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../repositories/interfaces/document.repository';
 import { IDocumentVersionRepository } from '../repositories/interfaces/document-version.repository';
 import { IDocumentPermissionRepository } from '../repositories/interfaces/document-permission.repository';
@@ -13,6 +25,9 @@ import { IAuditLogRepository } from '../repositories/interfaces/audit-log.reposi
 import { IStorageService } from './interfaces/storage.interface';
 import { storageService } from './storage.factory';
 import { Logger, AuditLogger } from '../http/middleware/logging';
+import { DocumentEntity, DocumentVersionEntity } from '../domain/entities';
+import { DocumentIdVO, ChecksumVO, FileReferenceVO, DateTimeVO } from '../domain/value-objects';
+import { DocumentValidationError, DocumentNotFoundError } from '../domain/errors';
 
 /**
  * Document service class
@@ -40,21 +55,22 @@ export class DocumentService {
   }
 
   /**
-   * Upload a new document with validation (Enhanced from controller)
+   * Upload a new document with validation using Effect patterns
    * @param file - File to upload
    * @param metadata - Document metadata
    * @param userId - User uploading the document
    */
-  async uploadDocumentWithValidation(
-    file: any,
+  uploadDocumentWithValidation(
+    file: UploadedFile, 
     metadata: {
       tags?: string[];
       metadata?: Record<string, any>;
       description?: string;
     },
     userId: string
-  ): Promise<ApiResponse<Document>> {
-    try {
+  ): Effect.Effect<ApiResponse<Document>, DocumentValidationError, never> {
+    const self = this;
+    return Effect.gen(function* () {
       // Validation that was in controller
       if (!file) {
         return {
@@ -65,49 +81,43 @@ export class DocumentService {
       }
 
       // Call existing upload method
-      return await this.uploadDocument(file, metadata, userId);
-    } catch (error) {
-      Logger.error('Failed to upload document', { error, userId });
-      return {
-        success: false,
-        message: 'Internal server error',
-        error: 'SERVER_ERROR',
-      };
-    }
+      return yield* self.uploadDocument(file, metadata, userId);
+    });
   }
 
   /**
-   * Upload a new document
+   * Upload a new document using Effect patterns and domain entities
    * @param file - File to upload
    * @param metadata - Document metadata
    * @param userId - User uploading the document
    */
-  async uploadDocument(
-    file: any,
+  uploadDocument(
+    file: UploadedFile,
     metadata: {
       tags?: string[];
       metadata?: Record<string, any>;
       description?: string;
     },
     userId: string
-  ): Promise<ApiResponse<Document>> {
-    try {
+  ): Effect.Effect<ApiResponse<Document>, DocumentValidationError, never> {
+    const self = this;
+    return Effect.gen(function* () {
       const documentId = uuidv4();
       
       // Generate unique storage key
-      const storageKey = this.storageService.generateFileKey(userId, file.filename, documentId);
+      const storageKey = self.storageService.generateFileKey(userId, file.filename, documentId);
       
       // Calculate file checksum
       const checksum = createHash('sha256').update(file.buffer).digest('hex');
       
       // Check for duplicates
-      const duplicates = await this.documentRepository.findDuplicatesByChecksum(checksum);
+      const duplicates = yield* Effect.promise(() => self.documentRepository.findDuplicatesByChecksum(checksum) as Promise<Document[]>);
       if (duplicates.length > 0) {
         Logger.warn('Duplicate file detected', { checksum, duplicates: duplicates.length });
       }
 
       // Upload file to storage
-      const uploadResult = await this.storageService.uploadFile(
+      const uploadResult = yield* Effect.promise(() => self.storageService.uploadFile(
         {
           buffer: file.buffer,
           mimetype: file.mimetype,
@@ -119,37 +129,91 @@ export class DocumentService {
           metadata: metadata.metadata,
           contentType: file.mimetype,
         }
-      );
+      ));
 
-      // Create document record
-      const documentData: CreateDocumentDTO = {
+      // Create document entity using domain factory
+      const documentEntity = DocumentEntity.create({
+        id: documentId,
         filename: file.filename,
         originalName: file.originalname || file.filename,
         mimeType: file.mimetype,
         size: file.size,
-        s3Key: uploadResult.key,
-        s3Bucket: 'local', // For local storage
-        checksum: uploadResult.checksum,
+        storageKey: uploadResult.key,
+        storageProvider: 'local',
+        checksum: checksum,
         tags: metadata.tags || [],
+        /*
+        // metadata: {...metadata.metadata, description: metadata.description}
+        // the ... is a spread operator, it's creating a new object with the same properties as the original 
+        Example:
+        this is original metadata
+        metadata = {
+           metadata: {
+              category: "documents",
+              author: "john",
+              version: "1.0"
+            },
+          description: "Important document"
+          }
+
+        the ...metadata.metadata uses the above metadata and creates a new object with the same properties as the original object
+        metadata = {
+          ...metadata.metadata,
+          description: metadata.description,
+        }
+        */
         metadata: {
           ...metadata.metadata,
           description: metadata.description,
         },
         uploadedBy: userId,
-      };
+      });
 
-      const document = await this.documentRepository.create(documentData);
+      // Save document using repository
+      /*
+      documentEntity.toPersistence() is a method that returns the document entity in a format (raw  just strings,numbers,booleans)
+       that can be used by the repository to create a document
+      documentEntity.toPersistence() returns the following object:
+      {
+        id: "uuid-string",
+        filename: "document.pdf",
+        originalName: "My Document.pdf",
+        mimeType: "application/pdf",
+        size: 1024,
+      }
+
+
+      self.documentRepository.create takes the persistence object and insert it into a database 
+      so create insert the data into DB 
+
+      Promise<Document> is the return type of the create method, so the create method returns a promise that resolves 
+      to a Document object
+
+      yield* Effect.promise(() => is same as await but in effect pattern
+      
+      await is used in async functions to pause the execution of the function until the promise resolves   
+
+      Example:
+      async function example() {
+        const result = await somePromise(); 
+        console.log(result);
+      }
+      If somePromise() resolves → await gives you the resolved value.
+      If somePromise() rejects → await throws the rejection as an error.
+      */
+      const savedDocument = yield* Effect.promise(() => self.documentRepository.create(documentEntity.toPersistence()) as Promise<Document>);
 
       // Create initial version
-      await this.versionRepository.create({
-        documentId: document.id,
+      const versionEntity = DocumentVersionEntity.create({
+        id: uuidv4(),
+        documentId: documentEntity.getId(),
         version: 1,
         filename: file.filename,
         mimeType: file.mimetype,
         size: file.size,
-        s3Key: uploadResult.key,
-        s3Bucket: 'local',
-        checksum: uploadResult.checksum,
+        storageKey: uploadResult.key,
+        storageProvider: 'local',
+        checksum: checksum,
         tags: metadata.tags || [],
         metadata: {
           ...metadata.metadata,
@@ -158,21 +222,24 @@ export class DocumentService {
         uploadedBy: userId,
       });
 
+      // we need to use toPersistence() method to get the raw data because repository expects it like that.
+      yield* Effect.promise(() => self.versionRepository.create(versionEntity.toPersistence()));
+
       // Create audit log
-      await this.auditRepository.create({
-        documentId: document.id,
+      yield* Effect.promise(() => self.auditRepository.create({
+        documentId: documentEntity.getId(),
         userId,
-        action: AuditAction.UPLOAD,
+        action: AuditAction.UPLOAD, // AuditAction is an enum that contains the possible actions that can be performed on a document like upload, download, update, delete, etc.
         details: {
           filename: file.filename,
           size: file.size,
           mimeType: file.mimetype,
           tags: metadata.tags,
         },
-      });
+      }));
 
       Logger.info('Document uploaded successfully', {
-        documentId: document.id,
+        documentId: documentEntity.getId(),
         filename: file.filename,
         userId,
       });
@@ -180,35 +247,21 @@ export class DocumentService {
       return {
         success: true,
         message: 'Document uploaded successfully',
-        data: document,
+        data: savedDocument,
       };
-    } catch (error) {
-      Logger.error('Failed to upload document', { error, userId });
-      return {
-        success: false,
-        message: 'Failed to upload document',
-        error: 'UPLOAD_ERROR',
-      };
-    }
+    });
   }
 
   /**
-   * Get document by ID with permission check
+   * Get document by ID with permission check using Effect patterns
    */
-  async getDocument(documentId: string, userId: string): Promise<ApiResponse<Document>> {
-    try {
-      const document = await this.documentRepository.findById(documentId);
+  getDocument(documentId: string, userId: string): Effect.Effect<ApiResponse<Document>, DocumentNotFoundError, never> {
+    const self = this;
+    return Effect.gen(function* () {
+      const document = yield* Effect.promise(() => self.documentRepository.findById(documentId) as Promise<Document>);
       
-      if (!document) {
-        return {
-          success: false,
-          message: 'Document not found',
-          error: 'DOCUMENT_NOT_FOUND',
-        };
-      }
-
       // Check permissions
-      const hasPermission = await this.checkDocumentPermission(documentId, userId, 'read');
+      const hasPermission = yield* Effect.promise(() => self.checkDocumentPermission(documentId, userId, 'read'));
       if (!hasPermission) {
         return {
           success: false,
@@ -218,32 +271,31 @@ export class DocumentService {
       }
 
       // Create audit log
-      await this.auditRepository.create({
+      yield* Effect.promise(() => self.auditRepository.create({
         documentId,
         userId,
         action: AuditAction.VIEW,
         details: { filename: document.filename },
-      });
+      }));
 
       return {
         success: true,
         message: 'Document retrieved successfully',
         data: document,
       };
-    } catch (error) {
-      Logger.error('Failed to get document', { error, documentId, userId });
-      return {
-        success: false,
-        message: 'Failed to retrieve document',
-        error: 'RETRIEVAL_ERROR',
-      };
-    }
+    });
   }
 
   /**
-   * Search documents with enhanced filters and data transformations (Enhanced from controller)
+   * Search documents with filters 
+   * When to put async before a function?
+   * when that ftn returns a promise
+   * Inside async we can use await to pause the execution of the function until the promise resolves or rejects
+   * when function needs to perform async operations like fetching data from a database, calling an API, etc. use async 
    */
+
   async searchDocumentsWithTransforms(
+    // function parameters 
     searchData: {
       query?: string;
       tags?: string[];
@@ -259,14 +311,36 @@ export class DocumentService {
       maxSize?: number;
     },
     userId: string
+    // async is used in this function because it returns a promise<ApiResponse<PaginatedResponse<Document>>> so we can use await 
+    // to pause the execution of the function until the promise resolves or rejects
+
+
+    /*
+    the searchData is being destructured into the following variables:
+    searchData = {page,limit,sortBy,sortOrder,dateFrom,dateTo, ...filters}
+    searchFilters = {...filters,sortBy,sortOrder,dateFrom,dateTo}
+    pagination = {page: page || 1, limit: limit || 10}
+    becasuse searchData contains a mix of different types of information:
+    searchData = {
+    query, tags, mimeType,        // filters
+    page, limit,                  // 📄 pagination
+    sortBy, sortOrder,            // ↕ sorting
+    dateFrom, dateTo,             // 🗓 date ranges
+    uploadedBy, minSize, maxSize  // 🔍 other filters
+    }
+    so we need to destructure it into different variables to use them efficiently just by refering to the variables
+    and not the searchData object
+
+    the function is called withTransforms because it performs data transformations on the data before returning it 
+    like converting string dates to Date objects, sorting (sortBy, sortOrder), etc.
+      */
   ): Promise<ApiResponse<PaginatedResponse<Document>>> {
     try {
-      const { page, limit, sortBy, sortOrder, dateFrom, dateTo, ...filters } = searchData;
-
-      // Convert string dates to Date objects - transformation from controller
+      const { page, limit, sortBy, sortOrder, dateFrom, dateTo, ...filters } = searchData; 
       const searchFilters: DocumentSearchFilters = {
+      // ...filters is a spread operator, it's creating a new object with the same properties as the original object 
         ...filters,
-        sortBy,
+        sortBy, // like createdAt, updatedAt, filename, size, etc.
         sortOrder: sortOrder as 'asc' | 'desc' | undefined,
         ...(dateFrom && { dateFrom: new Date(dateFrom) }),
         ...(dateTo && { dateTo: new Date(dateTo) }),
@@ -278,6 +352,8 @@ export class DocumentService {
       };
 
       // Call existing search method
+      // userId: so we can get the documents that the user has access to and the documents that the user has explicit permissions for
+      // and then use that to filter the documents
       return await this.searchDocuments(searchFilters, pagination, userId);
     } catch (error) {
       Logger.error('Failed to search documents', { error, searchData, userId });
@@ -298,9 +374,11 @@ export class DocumentService {
     userId: string
   ): Promise<ApiResponse<PaginatedResponse<Document>>> {
     try {
-      // Get user's accessible documents
+      // get document uploaded by user
+      // Calls the documentRepository to find all documents uploaded by this user.
       const userDocuments = await this.documentRepository.findByUploader(userId);
-      const accessibleDocumentIds = userDocuments.map(doc => doc.id);
+      //Extracts just the ids of those documents into an array (accessibleDocumentIds).
+      const accessibleDocumentIds = userDocuments.map((doc: Document) => doc.id);
 
       // Get documents user has explicit permissions for
       const permissions = await this.permissionRepository.findByUserId(userId);
@@ -468,7 +546,8 @@ export class DocumentService {
         };
       }
 
-      // Generate pre-signed URL
+      // Generate pre-signed URL 
+      // pre-signed url is a url that is signed with a secret key so that only the user who has the secret key can access the url
       const { url, expiresAt } = await this.storageService.generateDownloadUrl(
         document.storageKey,
         options.expiresIn || 3600, // Default 1 hour
@@ -522,7 +601,12 @@ export class DocumentService {
           error: 'DOCUMENT_NOT_FOUND',
         };
       }
-
+      /*
+      document.uploadedBy === grantedBy means check the id of the user who uploaded the document and the id of the user
+       who is trying to grant/revoke permissions, if the id is same it means uploader is trying to manage permissions
+       await this.checkDocumentPermission check does this user have delete permission for this document (delete permission is 
+       the highest permission, so if user has delete permission, he can manage permissions)
+      */
       const canManagePermissions = document.uploadedBy === grantedBy ||
         await this.checkDocumentPermission(documentId, grantedBy, 'delete');
 
@@ -695,18 +779,24 @@ export class DocumentService {
     try {
       // Check if user is document owner
       const document = await this.documentRepository.findById(documentId);
+      // means if document exists and the uploadedBy is the same as the userId, then the user is the owner of the document
       if (document && document.uploadedBy === userId) {
         return true;
       }
 
       // Check explicit permissions
+      // find the permissions that the user has for this document
       const userPermissions = await this.permissionRepository.findByDocumentAndUser(documentId, userId);
-      
+      // 
       if (userPermissions && Array.isArray(userPermissions)) {
         for (const perm of userPermissions) {
+          // if permission that user asks for is the same as the permission that the user has for this document
           if (perm.permission === permission || 
+            // if permission that user asks for is read and the permission that the user has for this document is write or delete
               (permission === 'read' && [Permission.WRITE, Permission.DELETE].includes(perm.permission)) ||
+              // if permission that user asks for is write and the permission that the user has for this document is delete
               (permission === 'write' && perm.permission === Permission.DELETE)) {
+                // if any check passes then the user has the permission so return true
             return true;
           }
         }

@@ -3,6 +3,5 @@
  * Exports all route definitions
  */
 
-export { authRoutes } from './auth.routes';
+export { authRoutes } from './user.routes';
 export { documentRoutes } from './document.routes';
-export { fileRoutes } from './file.routes';

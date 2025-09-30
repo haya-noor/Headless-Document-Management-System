@@ -5,7 +5,7 @@
 
 import { eq, and, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../../services';
+// Removed databaseService import to avoid circular dependency
 import { documentPermissions } from '../../db/models/schema';
 import { DocumentPermission, PaginationParams, PaginatedResponse, Permission } from '../../types';
 import { 
@@ -16,11 +16,20 @@ import {
 } from '../interfaces/document-permission.repository';
 
 export class DocumentPermissionRepository implements IDocumentPermissionRepository {
+  private db: any;
+
+  constructor(database?: any) {
+    this.db = database;
+  }
+
   /**
    * Get database instance with null check
    */
   private getDb() {
-    return databaseService.getDatabase();
+    if (!this.db) {
+      throw new Error('Database instance not provided to DocumentPermissionRepository');
+    }
+    return this.db;
   }
 
   /**

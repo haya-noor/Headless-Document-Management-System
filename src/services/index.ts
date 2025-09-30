@@ -6,14 +6,13 @@
 // Use dynamic imports to avoid circular dependencies
 let DocumentService: any;
 let UserService: any;
-let FileService: any;
 let DatabaseService: any;
-import { DocumentRepository } from '../repositories/implementations/document.repository';
-import { DocumentVersionRepository } from '../repositories/implementations/document-version.repository';
-import { DocumentPermissionRepository } from '../repositories/implementations/document-permission.repository';
-import { AuditLogRepository } from '../repositories/implementations/audit-log.repository';
-import { TokenBlacklistRepository } from '../repositories/implementations/token-blacklist.repository';
-import { UserRepository } from '../repositories/implementations/user.repository';
+let DocumentRepository: any;
+let DocumentVersionRepository: any;
+let DocumentPermissionRepository: any;
+let AuditLogRepository: any;
+let TokenBlacklistRepository: any;
+let UserRepository: any;
 
 /**
  * Service factory class
@@ -23,7 +22,6 @@ class ServiceFactory {
   private static instance: ServiceFactory;
   private _documentService?: any;
   private _userService?: any;
-  private _fileService?: any;
   private _databaseService?: any;
 
   private constructor() {}
@@ -43,10 +41,26 @@ class ServiceFactory {
       if (!DocumentService) {
         DocumentService = require('./document.service').DocumentService;
       }
-      const documentRepo = new DocumentRepository();
-      const versionRepo = new DocumentVersionRepository();
-      const permissionRepo = new DocumentPermissionRepository();
-      const auditRepo = new AuditLogRepository();
+      if (!DocumentRepository) {
+        DocumentRepository = require('../repositories/implementations/document.repository').DocumentRepository;
+      }
+      if (!DocumentVersionRepository) {
+        DocumentVersionRepository = require('../repositories/implementations/document-version.repository').DocumentVersionRepository;
+      }
+      if (!DocumentPermissionRepository) {
+        DocumentPermissionRepository = require('../repositories/implementations/document-permission.repository').DocumentPermissionRepository;
+      }
+      if (!AuditLogRepository) {
+        AuditLogRepository = require('../repositories/implementations/audit-log.repository').AuditLogRepository;
+      }
+      
+      // Get database instance
+      const db = this.databaseService.getDatabase();
+      
+      const documentRepo = new DocumentRepository(db);
+      const versionRepo = new DocumentVersionRepository(db);
+      const permissionRepo = new DocumentPermissionRepository(db);
+      const auditRepo = new AuditLogRepository(db);
       
       this._documentService = new DocumentService(
         documentRepo,
@@ -71,18 +85,6 @@ class ServiceFactory {
     return this._userService;
   }
 
-  /**
-   * Get configured file service
-   */
-  get fileService(): any {
-    if (!this._fileService) {
-      if (!FileService) {
-        FileService = require('./file.service').FileService;
-      }
-      this._fileService = new FileService();
-    }
-    return this._fileService;
-  }
 
   /**
    * Get configured database service
@@ -100,7 +102,10 @@ class ServiceFactory {
   /**
    * Get token blacklist repository
    */
-  get tokenBlacklistRepository(): TokenBlacklistRepository {
+  get tokenBlacklistRepository(): any {
+    if (!TokenBlacklistRepository) {
+      TokenBlacklistRepository = require('../repositories/implementations/token-blacklist.repository').TokenBlacklistRepository;
+    }
     return new TokenBlacklistRepository();
   }
 }
@@ -111,6 +116,5 @@ export const serviceFactory = ServiceFactory.getInstance();
 // Export individual services for convenience
 export const documentService = serviceFactory.documentService;
 export const userService = serviceFactory.userService;
-export const fileService = serviceFactory.fileService;
 export const databaseService = serviceFactory.databaseService;
 export const tokenBlacklistRepository = serviceFactory.tokenBlacklistRepository;

@@ -11,7 +11,7 @@ import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
 import { databaseService } from './services';
 import { Logger } from './http/middleware/logging';
-import { authRoutes, documentRoutes, fileRoutes } from './http/routes';
+import { authRoutes, documentRoutes } from './http/routes';
 
 /**
  * Working Application class using Elysia
@@ -153,19 +153,6 @@ class WorkingApplication {
           .use(authRoutes.changePassword);
       });
 
-      // File serving routes
-      app.group('/files', (filesApp) => {
-        return filesApp
-          .use(fileRoutes.serveFile)
-          .use(fileRoutes.uploadFile)
-          .use(fileRoutes.generateDownloadLink)
-          .use(fileRoutes.deleteFile)
-          .use(fileRoutes.getFileMetadata)
-          .use(fileRoutes.listFiles)
-          .use(fileRoutes.downloadFile)
-          .use(fileRoutes.getFileInfo);
-      });
-
       // Document routes
       app.group('/documents', (documentsApp) => {
         return documentsApp
@@ -193,8 +180,7 @@ class WorkingApplication {
         },
         tags: [
           { name: 'Authentication', description: 'User authentication and authorization' },
-          { name: 'Files', description: 'File operations and management' },
-          { name: 'Documents', description: 'Document management (coming soon)' },
+          { name: 'Documents', description: 'Document management and file operations' },
         ],
       },
     }));

@@ -5,7 +5,7 @@
 
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../../services';
+// Removed databaseService import to avoid circular dependency
 import { auditLogs } from '../../db/models/schema';
 import { AuditLog, AuditAction, PaginationParams, PaginatedResponse } from '../../types';
 import { 
@@ -15,11 +15,20 @@ import {
 } from '../interfaces/audit-log.repository';
 
 export class AuditLogRepository implements IAuditLogRepository {
+  private db: any;
+
+  constructor(database?: any) {
+    this.db = database;
+  }
+
   /**
    * Get database instance with null check
    */
   private getDb() {
-    return databaseService.getDatabase();
+    if (!this.db) {
+      throw new Error('Database instance not provided to AuditLogRepository');
+    }
+    return this.db;
   }
 
   /**

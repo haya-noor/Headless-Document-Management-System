@@ -3,8 +3,11 @@
  * Defines document-specific data access operations
  */
 
-import { Document, DocumentSearchFilters } from '../../types';
+import { Effect } from '@effect/core';
+import { DocumentEntity, Document } from '../../domain/entities';
+import { DocumentSearchFilters } from '../../types';
 import { BaseRepository } from './base.repository';
+import { DocumentNotFoundError, DocumentValidationError } from '../../domain/errors';
 
 /**
  * Document creation data transfer object
@@ -14,8 +17,8 @@ export interface CreateDocumentDTO {
   originalName: string;
   mimeType: string;
   size: number;
-  s3Key: string;
-  s3Bucket: string;
+  storageKey: string;
+  storageProvider: 'local' | 's3' | 'gcs';
   checksum?: string;
   tags?: string[];
   metadata?: Record<string, any>;
@@ -35,128 +38,163 @@ export interface UpdateDocumentDTO {
 
 /**
  * Document repository interface
- * Extends base repository with document-specific operations
+ * Extends base repository with document-specific operations using Effect
  */
-export interface IDocumentRepository extends BaseRepository<Document, CreateDocumentDTO, UpdateDocumentDTO, DocumentSearchFilters> {
+export interface IDocumentRepository {
+  /**
+   * Find document by ID
+   * @param {string} id - Document unique identifier
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError, never>} Document entity or error
+   */
+  findById(id: string): Effect.Effect<DocumentEntity, DocumentNotFoundError, never>;
+
+  /**
+   * Find documents by filters
+   * @param {DocumentSearchFilters} filters - Search filters
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities
+   */
+  findMany(filters: DocumentSearchFilters): Effect.Effect<DocumentEntity[], never, never>;
+
+  /**
+   * Create new document
+   * @param {CreateDocumentDTO} data - Document creation data
+   * @returns {Effect.Effect<DocumentEntity, DocumentValidationError, never>} Created document entity
+   */
+  create(data: CreateDocumentDTO): Effect.Effect<DocumentEntity, DocumentValidationError, never>;
+
+  /**
+   * Update document
+   * @param {string} id - Document unique identifier
+   * @param {UpdateDocumentDTO} data - Document update data
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>} Updated document entity
+   */
+  update(id: string, data: UpdateDocumentDTO): Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>;
+
+  /**
+   * Delete document
+   * @param {string} id - Document unique identifier
+   * @returns {Effect.Effect<boolean, DocumentNotFoundError, never>} True if deleted
+   */
+  delete(id: string): Effect.Effect<boolean, DocumentNotFoundError, never>;
   /**
    * Find documents by uploader
    * @param {string} userId - User ID who uploaded the documents
-   * @returns {Promise<Document[]>} Array of documents uploaded by user
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities uploaded by user
    */
-  findByUploader(userId: string): Promise<Document[]>;
+  findByUploader(userId: string): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents by tags
    * @param {string[]} tags - Array of tags to search for
    * @param {boolean} matchAll - Whether to match all tags or any tag
-   * @returns {Promise<Document[]>} Array of documents with matching tags
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities with matching tags
    */
-  findByTags(tags: string[], matchAll?: boolean): Promise<Document[]>;
+  findByTags(tags: string[], matchAll?: boolean): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents by metadata key-value pairs
    * @param {Record<string, any>} metadata - Metadata to search for
-   * @returns {Promise<Document[]>} Array of documents with matching metadata
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities with matching metadata
    */
-  findByMetadata(metadata: Record<string, any>): Promise<Document[]>;
+  findByMetadata(metadata: Record<string, any>): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents by MIME type
    * @param {string} mimeType - MIME type to filter by
-   * @returns {Promise<Document[]>} Array of documents with specified MIME type
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities with specified MIME type
    */
-  findByMimeType(mimeType: string): Promise<Document[]>;
+  findByMimeType(mimeType: string): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Search documents with advanced filters
    * @param {DocumentSearchFilters} filters - Search filters
-   * @returns {Promise<Document[]>} Array of matching documents
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of matching document entities
    */
-  searchDocuments(filters: DocumentSearchFilters): Promise<Document[]>;
+  searchDocuments(filters: DocumentSearchFilters): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents by filename pattern
    * @param {string} pattern - Filename pattern (supports wildcards)
-   * @returns {Promise<Document[]>} Array of documents with matching filenames
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities with matching filenames
    */
-  findByFilenamePattern(pattern: string): Promise<Document[]>;
+  findByFilenamePattern(pattern: string): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents within size range
    * @param {number} minSize - Minimum file size in bytes
    * @param {number} maxSize - Maximum file size in bytes
-   * @returns {Promise<Document[]>} Array of documents within size range
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities within size range
    */
-  findBySizeRange(minSize: number, maxSize: number): Promise<Document[]>;
+  findBySizeRange(minSize: number, maxSize: number): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Find documents within date range
    * @param {Date} startDate - Start date
    * @param {Date} endDate - End date
-   * @returns {Promise<Document[]>} Array of documents created within date range
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities created within date range
    */
-  findByDateRange(startDate: Date, endDate: Date): Promise<Document[]>;
+  findByDateRange(startDate: Date, endDate: Date): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Get document statistics
-   * @returns {Promise<Object>} Document statistics
+   * @returns {Effect.Effect<Object, never, never>} Document statistics
    */
-  getDocumentStats(): Promise<{
+  getDocumentStats(): Effect.Effect<{
     totalDocuments: number;
     totalSize: number;
     documentsByMimeType: Record<string, number>;
     documentsByUploader: Record<string, number>;
-  }>;
+  }, never, never>;
 
   /**
    * Find duplicate documents by checksum
    * @param {string} checksum - File checksum to search for
    * @param {string} excludeDocumentId - Optional document ID to exclude
-   * @returns {Promise<Document[]>} Array of documents with same checksum
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of document entities with same checksum
    */
-  findDuplicatesByChecksum(checksum: string, excludeDocumentId?: string): Promise<Document[]>;
+  findDuplicatesByChecksum(checksum: string, excludeDocumentId?: string): Effect.Effect<DocumentEntity[], never, never>;
 
   /**
    * Update document tags
    * @param {string} documentId - Document unique identifier
    * @param {string[]} tags - New tags array
-   * @returns {Promise<boolean>} True if tags were updated
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>} Updated document entity
    */
-  updateTags(documentId: string, tags: string[]): Promise<boolean>;
+  updateTags(documentId: string, tags: string[]): Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>;
 
   /**
    * Update document metadata
    * @param {string} documentId - Document unique identifier
    * @param {Record<string, any>} metadata - New metadata object
-   * @returns {Promise<boolean>} True if metadata was updated
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>} Updated document entity
    */
-  updateMetadata(documentId: string, metadata: Record<string, any>): Promise<boolean>;
+  updateMetadata(documentId: string, metadata: Record<string, any>): Effect.Effect<DocumentEntity, DocumentNotFoundError | DocumentValidationError, never>;
 
   /**
    * Increment document version
    * @param {string} documentId - Document unique identifier
-   * @returns {Promise<number>} New version number
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError, never>} Updated document entity with new version
    */
-  incrementVersion(documentId: string): Promise<number>;
+  incrementVersion(documentId: string): Effect.Effect<DocumentEntity, DocumentNotFoundError, never>;
 
   /**
    * Soft delete document (mark as deleted)
    * @param {string} documentId - Document unique identifier
-   * @returns {Promise<boolean>} True if document was soft deleted
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError, never>} Updated document entity marked as deleted
    */
-  softDelete(documentId: string): Promise<boolean>;
+  softDelete(documentId: string): Effect.Effect<DocumentEntity, DocumentNotFoundError, never>;
 
   /**
    * Restore soft deleted document
    * @param {string} documentId - Document unique identifier
-   * @returns {Promise<boolean>} True if document was restored
+   * @returns {Effect.Effect<DocumentEntity, DocumentNotFoundError, never>} Updated document entity restored
    */
-  restore(documentId: string): Promise<boolean>;
+  restore(documentId: string): Effect.Effect<DocumentEntity, DocumentNotFoundError, never>;
 
   /**
    * Find deleted documents
    * @param {string} userId - Optional user ID to filter by
-   * @returns {Promise<Document[]>} Array of deleted documents
+   * @returns {Effect.Effect<DocumentEntity[], never, never>} Array of deleted document entities
    */
-  findDeleted(userId?: string): Promise<Document[]>;
+  findDeleted(userId?: string): Effect.Effect<DocumentEntity[], never, never>;
 }
