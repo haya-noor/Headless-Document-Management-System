@@ -9,9 +9,26 @@ import { swagger } from '@elysiajs/swagger';
 import { staticPlugin } from '@elysiajs/static';
 import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
-import { databaseService } from './services';
-import { Logger } from './http/middleware/logging';
-import { authRoutes, documentRoutes } from './http/routes';
+import { databaseService } from './application/services';
+import { Logger } from './presentation/http/middleware/logging';
+import { 
+  registerRoute,
+  loginRoute,
+  logoutRoute,
+  getProfileRoute,
+  updateProfileRoute,
+  changePasswordRoute,
+  deleteAccountRoute,
+  uploadDocumentRoute,
+  getDocumentRoute,
+  searchDocumentsRoute,
+  updateDocumentRoute,
+  deleteDocumentRoute,
+  generateDownloadLinkRoute,
+  updatePermissionsRoute,
+  updateMetadataRoute,
+  updateTagsRoute
+} from './presentation/http/routes';
 
 /**
  * Working Application class using Elysia
@@ -145,26 +162,27 @@ class WorkingApplication {
       // Authentication routes
       app.group('/auth', (authApp) => {
         return authApp
-          .use(authRoutes.register)
-          .use(authRoutes.login)
-          .use(authRoutes.logout)
-          .use(authRoutes.getProfile)
-          .use(authRoutes.updateProfile)
-          .use(authRoutes.changePassword);
+          .use(registerRoute)
+          .use(loginRoute)
+          .use(logoutRoute)
+          .use(getProfileRoute)
+          .use(updateProfileRoute)
+          .use(changePasswordRoute)
+          .use(deleteAccountRoute);
       });
 
       // Document routes
       app.group('/documents', (documentsApp) => {
         return documentsApp
-          .use(documentRoutes.uploadDocument)
-          .use(documentRoutes.getDocument)
-          .use(documentRoutes.searchDocuments)
-          .use(documentRoutes.updateDocument)
-          .use(documentRoutes.deleteDocument)
-          .use(documentRoutes.generateDownloadLink)
-          .use(documentRoutes.updatePermissions)
-          .use(documentRoutes.updateMetadata)
-          .use(documentRoutes.updateTags);
+          .use(uploadDocumentRoute)
+          .use(getDocumentRoute)
+          .use(searchDocumentsRoute)
+          .use(updateDocumentRoute)
+          .use(deleteDocumentRoute)
+          .use(generateDownloadLinkRoute)
+          .use(updatePermissionsRoute)
+          .use(updateMetadataRoute)
+          .use(updateTagsRoute);
       });
 
       return app;

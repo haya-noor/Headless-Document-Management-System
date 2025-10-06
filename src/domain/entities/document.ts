@@ -43,6 +43,7 @@ export const DocumentSchema = Schema.Struct({
     Schema.int(),
     Schema.positive()
   ),
+  isDeleted: Schema.Boolean,
   createdAt: Schema.Date,
   updatedAt: Schema.Date
 });
@@ -101,6 +102,7 @@ export class DocumentEntity {
   public readonly metadata: Record<string, unknown>;
   public readonly uploadedBy: string;
   public readonly currentVersion: number;
+  public readonly isDeleted: boolean;
   public readonly createdAt: DateTimeVO;
   public readonly updatedAt: DateTimeVO;
 
@@ -120,6 +122,7 @@ export class DocumentEntity {
     metadata: Record<string, unknown>;
     uploadedBy: string;
     currentVersion: number;
+    isDeleted: boolean;
     createdAt: DateTimeVO;
     updatedAt: DateTimeVO;
   }) {
@@ -135,6 +138,7 @@ export class DocumentEntity {
     this.metadata = props.metadata;
     this.uploadedBy = props.uploadedBy;
     this.currentVersion = props.currentVersion;
+    this.isDeleted = props.isDeleted;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
   }
@@ -172,6 +176,7 @@ export class DocumentEntity {
       metadata: props.metadata || {},
       uploadedBy: props.uploadedBy,
       currentVersion: 1,
+      isDeleted: false,
       createdAt: now,
       updatedAt: now
     });
@@ -203,6 +208,7 @@ export class DocumentEntity {
       metadata: data.metadata,
       uploadedBy: data.uploadedBy,
       currentVersion: data.currentVersion,
+      isDeleted: data.isDeleted,
       createdAt,
       updatedAt
     });
@@ -239,6 +245,7 @@ export class DocumentEntity {
       metadata: this.metadata,
       uploadedBy: this.uploadedBy as Document['uploadedBy'],
       currentVersion: this.currentVersion,
+      isDeleted: this.isDeleted,
       createdAt: this.createdAt.getValue(),
       updatedAt: this.updatedAt.getValue()
     };

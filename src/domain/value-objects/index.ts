@@ -7,3 +7,5 @@ export * from './document-id';
 export * from './checksum';
 export * from './file-reference';
 export * from './date-time';
+export * from './policy-id';
+export * from './user-id';

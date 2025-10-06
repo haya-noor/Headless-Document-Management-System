@@ -119,32 +119,3 @@ export function getTokenExpiration(token: string): Date | null {
   }
 }
 
-/**
- * Verify token with blacklist check
- * @param {string} token - JWT token to verify
- * @param {Function} isTokenBlacklisted - Function to check if token is blacklisted
- * @returns {Promise<JWTPayload>} Decoded token payload
- * @throws {Error} If token is invalid, expired, or blacklisted
- */
-export async function verifyTokenWithBlacklist(
-  token: string, 
-  isTokenBlacklisted: (token: string) => Promise<boolean>
-): Promise<JWTPayload> {
-  try {
-    // First verify the token signature and expiration
-    const decoded = verifyToken(token);
-    
-    // Then check if token is blacklisted
-    const isBlacklisted = await isTokenBlacklisted(token);
-    if (isBlacklisted) {
-      throw new Error('Token has been invalidated');
-    }
-    
-    return decoded;
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error(`Token verification failed: ${error}`);
-  }
-}

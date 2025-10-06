@@ -4,3 +4,5 @@
  */
 
 export * from './document.guards';
+export * from './user.guards';
+export * from './access-policy.guards';
