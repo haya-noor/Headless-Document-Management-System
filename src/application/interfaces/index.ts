@@ -10,6 +10,7 @@ export * from './audit.interface';       // AuditLog entity
 export * from './auth.interface';        // JWT authentication
 export * from './api.interface';         // API responses & pagination
 export * from './storage.interface';     // Storage abstraction
+export * from './file.interface';        // File upload/download types
 
 // Repository interfaces (data access contracts)
 export * from './base.interface';        // Main Repository interface

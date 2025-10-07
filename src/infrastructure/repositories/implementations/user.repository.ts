@@ -5,7 +5,7 @@
 
 import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { databaseService } from '../../../application/services';
+import { databaseService } from '../../../application/workflow';
 import { users } from '../../database/models/schema';
 import { User, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
 import { UserRole } from '../../../application/types';

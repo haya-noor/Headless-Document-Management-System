@@ -4,13 +4,13 @@
  * Designed to be easily replaceable with S3-compatible storage in the future
  */
 
-import { promises as fs } from 'fs';
+import { promises as fs } from 'fs';  //fs = file system
 import { createHash } from 'crypto';
 import path, { join, dirname, extname } from 'path';
-import { config } from '../config';
-import { FileUpload, PreSignedUrlResponse } from '../types';
-import { IStorageService } from '../interfaces/storage.interface';
-import { Logger } from '../http/middleware/logging';
+import { config } from '../../config';
+import { FileUpload, PreSignedUrlResponse } from '../../application/interfaces/file.interface';
+import { IStorageService } from '../../application/interfaces/storage.interface';
+import { Logger } from '../../presentation/http/middleware/logging';
 
 /**
  * Local storage service class
@@ -22,7 +22,7 @@ export class LocalStorageService implements IStorageService {
 
   constructor() {
     // Create storage directory in project root
-    this.storagePath = join(process.cwd(), 'storage', 'documents');
+    this.storagePath = join(process.cwd(), 'local-storage', 'documents');
     this.ensureStorageDirectory();
   }
 

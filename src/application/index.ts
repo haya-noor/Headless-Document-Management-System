@@ -3,8 +3,8 @@
  * Exports all application components
  */
 
-// Services
-export * from './services';
+// Workflow
+export * from './workflow';
 
 // Interfaces
 export * from './interfaces';

@@ -10,3 +10,7 @@ export * from './database/models/shared-columns';
 // Repositories
 export * from './repositories/implementations';
 
+// Storage
+export * from './storage/local-storage';
+export * from './storage/storage.factory';
+

@@ -5,7 +5,7 @@
 
 import * as jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { JWTPayload, UserRole } from '../types';
+import { JWTPayload, UserRole } from '../application/types';
 
 /**
  * Generate JWT token for authenticated user

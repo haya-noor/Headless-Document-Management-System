@@ -2,7 +2,14 @@
  * Access Policy Service
  * Orchestrates access policy operations and business logic
  * Coordinates between repositories and domain entities
- */
+ * 
+ * 
+ * orchestrates access-policy use cases via AccessPolicyRepository interface(port), validates
+ * input, build domain entities, calls repository methods, and returns the result
+ * 
+ * 
+ * 
+  */
 
 import { Effect } from 'effect';
 import { AccessPolicyEntity, PolicySubjectType, PolicyResourceType } from '../entities';

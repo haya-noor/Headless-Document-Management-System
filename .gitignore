@@ -100,7 +100,7 @@ tmp/
 temp/
 
 # Local storage (uploaded files)
-storage/
+local-storage/
 uploads/
 
 # Test files

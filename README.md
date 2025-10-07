@@ -36,8 +36,9 @@ A comprehensive backend document management system built with **Bun**, **Elysia*
 ### 🏗️ Architecture
 - Clean Architecture with separation of concerns
 - Repository pattern for data access
-- Service layer for business logic
+- Workflow layer for business orchestration
 - Controller layer for HTTP handling
+- Infrastructure layer for external concerns
 - Middleware for cross-cutting concerns
 
 ## 🚀 Quick Start
@@ -146,31 +147,55 @@ bun test --coverage
 
 ```
 src/
-├── controllers/        # HTTP request handlers
-│   ├── auth.controller.ts
-│   ├── document.controller.ts
-│   └── file.controller.ts
-├── services/          # Business logic layer
-│   ├── user.service.ts
-│   ├── document.service.ts
-│   ├── local-storage.service.ts
-│   └── storage.factory.ts
-├── repositories/      # Data access layer
-│   ├── implementations/
-│   └── interfaces/
-├── routes/           # Route definitions
-│   ├── auth.routes.ts
-│   ├── document.routes.ts
-│   └── file.routes.ts
-├── middleware/       # Cross-cutting concerns
-│   ├── auth.middleware.ts
-│   ├── validation.middleware.ts
-│   └── logging.ts
-├── models/          # Database schemas
-├── dtos/            # Data Transfer Objects
-├── types/           # TypeScript type definitions
-├── utils/           # Shared utilities
-└── config/          # Configuration management
+├── application/         # Application layer
+│   ├── workflow/       # Business workflow orchestration
+│   │   ├── user.service.ts
+│   │   ├── document.service.ts
+│   │   ├── access-policy.service.ts
+│   │   ├── password.service.ts
+│   │   ├── database.service.ts
+│   │   └── index.ts
+│   ├── interfaces/     # Application interfaces
+│   │   ├── auth.interface.ts
+│   │   ├── document.interface.ts
+│   │   ├── storage.interface.ts
+│   │   ├── file.interface.ts
+│   │   └── index.ts
+│   ├── types/          # TypeScript type definitions
+│   └── index.ts
+├── domain/             # Domain layer (business logic)
+│   ├── entities/       # Domain entities
+│   ├── value-objects/  # Value objects
+│   ├── services/       # Domain services
+│   ├── guards/         # Domain guards
+│   ├── errors/         # Domain errors
+│   └── index.ts
+├── infrastructure/     # Infrastructure layer
+│   ├── storage/        # Storage implementations
+│   │   ├── local-storage.ts
+│   │   └── storage.factory.ts
+│   ├── database/       # Database models and schemas
+│   ├── repositories/   # Repository implementations
+│   └── index.ts
+├── presentation/       # Presentation layer
+│   ├── http/          # HTTP controllers and routes
+│   │   ├── routes/
+│   │   └── middleware/
+│   ├── dtos/          # Data Transfer Objects
+│   └── index.ts
+├── config/            # Configuration management
+├── utils/             # Shared utilities
+└── index.ts           # Application entry point
+
+# Data directories
+local-storage/         # Local file storage (ignored by git)
+├── documents/         # Uploaded documents
+└── ...
+
+# Configuration files
+.env                   # Environment variables
+.gitignore            # Git ignore rules
+docker-compose.yml    # Docker configuration
 ```
 
 ## 🔧 Configuration
@@ -190,7 +215,7 @@ JWT_EXPIRES_IN=24h
 
 # Storage
 STORAGE_PROVIDER=local
-LOCAL_STORAGE_PATH=./storage
+LOCAL_STORAGE_PATH=./local-storage
 
 # File Upload
 MAX_FILE_SIZE=10485760  # 10MB
@@ -207,6 +232,39 @@ The system uses **Drizzle ORM** with PostgreSQL and includes the following table
 - **document_permissions** - User permissions for documents
 - **audit_logs** - System audit trail
 
+## 🏛️ Architecture Overview
+
+This project follows **Clean Architecture** principles with clear separation of concerns:
+
+### Layers
+
+1. **Domain Layer** (`src/domain/`)
+   - Pure business logic and rules
+   - No external dependencies
+   - Contains entities, value objects, and domain services
+
+2. **Application Layer** (`src/application/`)
+   - Workflow orchestration and use cases
+   - Application interfaces and types
+   - Coordinates between domain and infrastructure
+
+3. **Infrastructure Layer** (`src/infrastructure/`)
+   - External concerns (database, storage, etc.)
+   - Repository implementations
+   - Storage service implementations
+
+4. **Presentation Layer** (`src/presentation/`)
+   - HTTP controllers and routes
+   - Request/response handling
+   - Middleware and DTOs
+
+### Key Patterns
+
+- **Repository Pattern**: Abstracts data access
+- **Service Layer**: Business logic orchestration
+- **Factory Pattern**: Service creation and configuration
+- **Dependency Injection**: Loose coupling between layers
+
 ## 🚀 Deployment
 
 ### Docker Deployment
@@ -214,6 +272,30 @@ The system uses **Drizzle ORM** with PostgreSQL and includes the following table
 # Build and run with Docker
 docker-compose up -d
 ```
+
+### Manual Deployment
+```bash
+# Build the application
+bun run build
+
+# Start the production server
+bun run start
+```
+
+## 📝 Development
+
+### Code Organization
+
+- **Workflow Services**: Business process orchestration
+- **Domain Services**: Pure business logic
+- **Repository Implementations**: Data access
+- **Infrastructure Services**: External system integration
+
+### File Storage
+
+- **Local Storage**: Files stored in `local-storage/` directory
+- **Storage Abstraction**: Easy to switch to cloud storage (S3, GCS, Azure)
+- **File Organization**: Organized by user and document structure
 
 ## 📄 License
 

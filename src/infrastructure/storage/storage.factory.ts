@@ -4,9 +4,9 @@
  * Enables easy switching between local storage and cloud storage providers
  */
 
-import { IStorageService, StorageConfig } from '../interfaces/storage.interface';
-import { LocalStorageService } from './local-storage.service';
-import { config } from '../config';
+import { IStorageService, StorageConfig } from '../../application/interfaces/storage.interface';
+import { LocalStorageService } from './local-storage';
+import { config } from '../../config';
 
 /**
  * Storage service factory class

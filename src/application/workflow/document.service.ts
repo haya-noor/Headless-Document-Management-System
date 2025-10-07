@@ -21,7 +21,7 @@ interface UploadedFile {
 import { DocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../interfaces/document.interface';
 import { Repository } from '../interfaces/base.interface';
 import { IStorageService } from '../interfaces/storage.interface';
-import { storageService } from './storage.factory';
+import { storageService } from '../../infrastructure/storage/storage.factory';
 import { Logger, AuditLogger } from '../http/middleware/logging';
 import { DocumentEntity, DocumentVersionEntity } from '../domain/entities';
 import { DocumentIdVO, ChecksumVO, FileReferenceVO, DateTimeVO } from '../domain/value-objects';
