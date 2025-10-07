@@ -9,14 +9,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { documentPermissions } from '../../database/models/schema';
 import { DocumentPermission, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
 import { Permission } from '../../../application/types';
-import { 
-  IDocumentPermissionRepository, 
-  CreateDocumentPermissionDTO,
-  UpdateDocumentPermissionDTO,
-  DocumentPermissionFiltersDTO 
-} from '../../../application/interfaces/repositories/document-permission.repository';
+import { Repository } from '../../../application/interfaces/base.interface';
 
-export class DocumentPermissionRepository implements IDocumentPermissionRepository {
+export class DocumentPermissionRepository implements Repository<DocumentPermission, any, any, any> {
   private db: any;
 
   constructor(database?: any) {

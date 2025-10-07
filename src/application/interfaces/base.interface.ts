@@ -1,15 +1,25 @@
 /**
  * Effect-based Base Repository Interface
  * Defines generic CRUD operations using Effect for all repositories
- * Following d4-effect.md requirements for effectful signatures and typed errors
  */
 
-import { Effect } from 'effect';
-import { PaginationParams, PaginatedResponse } from '../../types';
+import { Effect, Data } from 'effect';
+import { PaginationParams, PaginatedResponse } from './api.interface';
 
 /**
  * Repository error types
  */
+export class DatabaseError extends Data.TaggedError('DatabaseError')<{
+  message: string;
+  cause?: unknown;
+}> {}
+
+export class NotFoundError extends Data.TaggedError('NotFoundError')<{
+  message: string;
+  resource: string;
+  id: string;
+}> {}
+
 export class RepositoryError extends Error {
   constructor(
     message: string,
@@ -21,12 +31,6 @@ export class RepositoryError extends Error {
   }
 }
 
-export class NotFoundError extends RepositoryError {
-  constructor(resource: string, id: string) {
-    super(`${resource} with id ${id} not found`, 'NOT_FOUND');
-    this.name = 'NotFoundError';
-  }
-}
 
 export class ValidationError extends RepositoryError {
   constructor(message: string, field?: string) {
@@ -48,12 +52,6 @@ export class ConflictError extends RepositoryError {
   }
 }
 
-export class DatabaseError extends RepositoryError {
-  constructor(message: string, cause?: unknown) {
-    super(message, 'DATABASE_ERROR', cause);
-    this.name = 'DatabaseError';
-  }
-}
 
 /**
  * Generic Effect-based repository interface for CRUD operations
@@ -62,7 +60,7 @@ export class DatabaseError extends RepositoryError {
  * @template UpdateDTO - Data transfer object for updates
  * @template FilterDTO - Data transfer object for filtering
  */
-export interface EffectBaseRepository<T, CreateDTO = Partial<T>, UpdateDTO = Partial<T>, FilterDTO = any> {
+export interface Repository<T, CreateDTO = Partial<T>, UpdateDTO = Partial<T>, FilterDTO = any> {
   /**
    * Find entity by ID
    * @param {string} id - Entity unique identifier

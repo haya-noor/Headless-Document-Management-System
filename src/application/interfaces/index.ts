@@ -3,15 +3,16 @@
  * Exports all application layer interfaces
  */
 
-// Application layer interfaces
-export * from './storage.interface';
-export * from './user.interface';
-export * from './document.interface';
-export * from './audit.interface';
-export * from './auth.interface';
-export * from './api.interface';
-export * from './file.interface';
-export * from './repository.interface';
+// Domain/Entity interfaces (what the data looks like)
+export * from './audit.interface';       // AuditLog entity
 
-// Repository interfaces
-export * from './repositories';
+// Infrastructure interfaces (cross-cutting concerns)
+export * from './auth.interface';        // JWT authentication
+export * from './api.interface';         // API responses & pagination
+export * from './storage.interface';     // Storage abstraction
+
+// Repository interfaces (data access contracts)
+export * from './base.interface';        // Main Repository interface
+export * from './user.interface';        // UserRepository interface
+export * from './document.interface';    // DocumentRepository interface
+export * from './access-policy.interface'; // AccessPolicyRepository interface

@@ -1,7 +1,14 @@
 /**
- * Database schema definitions using Drizzle ORM
- * Defines all tables and relationships for the document management system
- * Updated to work with Effect-based domain entities and d4-effect.md requirements
+ * 
+ * We declare the indexes and constraints in the schema.ts file, but they are not 
+ * actually created in the database until you run db:migrate
+ * 
+ * When we run db:migrate, Drizzle:
+ * - Reads your schema.ts file
+ * - Analyzes all the index() definitions
+ * - Generates SQL migration files
+ * - Creates the indexes in the database
+ * 
  */
 
 import { pgTable, text, timestamp, jsonb, boolean, varchar, integer, unique, check, index } from 'drizzle-orm/pg-core';
@@ -30,7 +37,21 @@ export const users = pgTable('users', {
   validUuid: check('valid_uuid', commonConstraints.validUuid),
   validRole: check('valid_role', sql`role IN ('admin', 'user')`),
   
-  // Indexes
+  /*
+  Indexes 
+  -- This is what actually gets created in the database
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_users_role ON users(role);
+    CREATE INDEX idx_users_active ON users(is_active);
+    CREATE INDEX idx_users_created_at ON users(created_at);
+
+  When you run drizzle-kit generate, Drizzle:
+  Reads your schema.ts file
+  Analyzes all the index() definitions
+  Generates SQL migration files
+
+  so drizzle automatically creates the indexes when you run db:migrate 
+  */
   emailIdx: index('idx_users_email').on(table.email),
   roleIdx: index('idx_users_role').on(table.role),
   activeIdx: index('idx_users_active').on(table.isActive),
@@ -53,7 +74,10 @@ export const documents = pgTable('documents', {
   checksum: varchar('checksum', { length: 64 }), // SHA-256 hash (ChecksumVO)
   tags: jsonb('tags').$type<string[]>().default([]), // Array of tags
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}), // Key-value metadata
+
+  // document table has uploaded_by is FK to users.id
   uploadedBy: foreignKey('users', 'uploaded_by'),
+
   currentVersion: integer('current_version').notNull().default(1),
   ...softDeleteColumns,
 }, (table) => ({
@@ -122,7 +146,10 @@ export const documentVersions = pgTable('document_versions', {
   checksum: varchar('checksum', { length: 64 }), // ChecksumVO
   tags: jsonb('tags').$type<string[]>().default([]),
   metadata: jsonb('metadata').$type<Record<string, any>>().default({}),
+
+  // document_versions table has uploaded_by is FK to users.id
   uploadedBy: foreignKey('users', 'uploaded_by'),
+
 }, (table) => ({
   // Check constraints
   validUuid: check('valid_uuid', commonConstraints.validUuid),

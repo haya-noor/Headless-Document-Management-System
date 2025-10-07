@@ -7,5 +7,5 @@
 export * from './http/routes';
 export * from './http/middleware';
 
-// Schemas
-export * from './schemas';
+// DTOs
+export * from './dtos';

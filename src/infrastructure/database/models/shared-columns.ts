@@ -91,9 +91,4 @@ export const commonIndexes = {
    * Index on is_active for soft delete queries
    */
   isActive: 'idx_is_active',
-  
-  /**
-   * Composite index for common query patterns
-   */
-  activeAndCreated: 'idx_active_created',
 } as const;

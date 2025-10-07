@@ -9,7 +9,6 @@ import { swagger } from '@elysiajs/swagger';
 import { staticPlugin } from '@elysiajs/static';
 import { jwt } from '@elysiajs/jwt';
 import { config, validateConfig } from './config';
-import { databaseService } from './application/services';
 import { Logger } from './presentation/http/middleware/logging';
 import { 
   registerRoute,
@@ -212,7 +211,7 @@ class WorkingApplication {
   public async start(): Promise<void> {
     try {
       // Connect to database
-      await databaseService.connect();
+      // Database connection handled by Drizzle
       Logger.info('Database connection established');
 
       // Start HTTP server
@@ -253,7 +252,7 @@ class WorkingApplication {
       Logger.info('Shutting down application gracefully...');
       
       // Close database connection
-      await databaseService.disconnect();
+      // Database disconnection handled by Drizzle
       Logger.info('Database connection closed');
 
       Logger.info('Application shutdown completed');

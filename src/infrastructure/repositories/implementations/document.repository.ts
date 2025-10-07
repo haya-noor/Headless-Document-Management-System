@@ -7,9 +7,9 @@ import { eq, and, or, like, gte, lte, inArray, sql, desc, asc } from 'drizzle-or
 import { v4 as uuidv4 } from 'uuid';
 import { documents } from '../../database/models/schema';
 import { Document, DocumentSearchFilters, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
-import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../../../application/interfaces/repositories/document.repository';
+import { DocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../../../application/interfaces/document.interface';
 
-export class DocumentRepository implements IDocumentRepository {
+export class DocumentRepositoryImpl implements DocumentRepository {
   private db: any;
 
   constructor(database?: any) {

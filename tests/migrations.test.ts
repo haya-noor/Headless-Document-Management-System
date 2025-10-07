@@ -1,6 +1,9 @@
 /**
  * Migration Tests using Testcontainers
  * Tests database migrations up and down operations
+ * 
+ * Real PostgreSQL  
+ * 
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';

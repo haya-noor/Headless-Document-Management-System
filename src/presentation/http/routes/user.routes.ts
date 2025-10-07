@@ -7,11 +7,11 @@ import { Elysia, t } from 'elysia';
 import { userService } from './service-factory';
 import { getAuthenticatedUser, createUnauthorizedResponse } from '../middleware/auth.middleware';
 import { 
-  RegisterSchema, 
-  LoginSchema, 
-  ChangePasswordSchema,
-  UpdateProfileSchema
-} from '../../schemas/user.schemas';
+  UserRegistrationDTOSchema, 
+  UserLoginDTOSchema, 
+  PasswordChangeDTOSchema,
+  ProfileUpdateDTOSchema
+} from '../../dtos/user.dtos';
 
 export const authRoutes = {
   /**

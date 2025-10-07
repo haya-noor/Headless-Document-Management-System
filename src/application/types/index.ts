@@ -24,6 +24,7 @@ export enum Permission {
  * Audit log action types
  */
 export enum AuditAction {
+  CREATE = 'create',
   UPLOAD = 'upload',
   DOWNLOAD = 'download',
   UPDATE = 'update',

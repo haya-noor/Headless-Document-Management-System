@@ -8,8 +8,5 @@ export * from './database/models/schema';
 export * from './database/models/shared-columns';
 
 // Repositories
-export * from './repositories/interfaces';
 export * from './repositories/implementations';
 
-// External services
-export * from './external';

@@ -7,16 +7,16 @@ import { Elysia, t } from 'elysia';
 import { documentService } from './service-factory';
 import { getAuthenticatedUser, createUnauthorizedResponse } from '../middleware/auth.middleware';
 import { 
-  DocumentUploadSchema,
-  DocumentUpdateSchema,
-  DocumentSearchSchema,
-  DocumentPermissionSchema,
-  DocumentPermissionsSchema,
-  DownloadLinkSchema,
-  DocumentMetadataSchema,
-  DocumentTagsSchema,
-  UUIDParamSchema
-} from '../../schemas/document.schemas';
+  DocumentUploadDTOSchema,
+  DocumentUpdateDTOSchema,
+  DocumentSearchDTOSchema,
+  DocumentPermissionDTOSchema,
+  DocumentPermissionsDTOSchema,
+  DownloadLinkDTOSchema,
+  DocumentMetadataDTOSchema,
+  DocumentTagsDTOSchema
+} from '../../dtos/document.dtos';
+import { UUIDParamDTO } from '../../dtos/parameters.dtos';
 
 export const documentRoutes = {
   /**

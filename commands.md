@@ -30,7 +30,10 @@ bun test tests/documents.test.ts
 
 
 Run All Tests
-bun test
+bun test 
 
+Migration
+npm run db:migrate 
 
-
+npm run db:migrate - If errors, migration fails and stops
+migrations.test.ts - Tests the result after migration succeeds

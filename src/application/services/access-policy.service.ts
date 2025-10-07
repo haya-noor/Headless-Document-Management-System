@@ -7,7 +7,7 @@
 import { Effect } from 'effect';
 import { AccessPolicyEntity, PolicySubjectType, PolicyResourceType } from '../entities';
 import { PolicyIdVO, UserIdVO, DocumentIdVO } from '../value-objects';
-import { AccessPolicyRepository, CreateAccessPolicyDTO, UpdateAccessPolicyDTO, AccessPolicyFilterDTO } from '../../repositories/interfaces/access-policy.repository';
+import { AccessPolicyRepository, CreateAccessPolicyDTO, UpdateAccessPolicyDTO, AccessPolicyFilterDTO } from '../interfaces/access-policy.interface';
 import { ValidationError, NotFoundError, ConflictError } from '../errors';
 
 export class AccessPolicyService {

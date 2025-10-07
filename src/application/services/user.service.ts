@@ -4,8 +4,8 @@
  */
 
 import { User, PaginationParams, PaginatedResponse, ApiResponse } from '../types';
-import { IUserRepository, CreateUserDTO, UpdateUserDTO, UserFiltersDTO } from '../repositories/interfaces/user.repository';
-import { UserRepository } from '../repositories/implementations/user.repository';
+import { UserRepository, CreateUserDTO, UpdateUserDTO, UserFilterDTO } from '../interfaces/user.interface';
+import { UserRepositoryImpl } from '../repositories/implementations/user.repository';
 import { hashPassword, verifyPassword, validatePasswordStrength } from '../utils/password';
 import { generateToken, getTokenExpiration, verifyToken } from '../utils/jwt';
 import { Logger, AuditLogger } from '../http/middleware/logging';
@@ -15,10 +15,10 @@ import { Logger, AuditLogger } from '../http/middleware/logging';
  * Provides business logic layer for user operations
  */
 export class UserService {
-  private userRepository: IUserRepository;
+  private userRepository: UserRepository;
 
-  constructor(userRepository?: IUserRepository) {
-    this.userRepository = userRepository || new UserRepository();
+  constructor(userRepository?: UserRepository) {
+    this.userRepository = userRepository || new UserRepositoryImpl();
   }
 
   /**

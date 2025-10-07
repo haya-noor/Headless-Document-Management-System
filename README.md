@@ -167,7 +167,7 @@ src/
 │   ├── validation.middleware.ts
 │   └── logging.ts
 ├── models/          # Database schemas
-├── schemas/         # Validation schemas
+├── dtos/            # Data Transfer Objects
 ├── types/           # TypeScript type definitions
 ├── utils/           # Shared utilities
 └── config/          # Configuration management

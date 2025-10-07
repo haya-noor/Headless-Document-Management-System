@@ -28,7 +28,7 @@
       "@/services/*": ["services/*"],
       "@/repositories/*": ["repositories/*"],
       "@/models/*": ["models/*"],
-      "@/schemas/*": ["schemas/*"]
+      "@/dtos/*": ["src/presentation/dtos/*"]
     }
   },
   "include": ["src/**/*"],

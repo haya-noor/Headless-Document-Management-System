@@ -1,6 +1,6 @@
 /**
  * User repository implementation using Drizzle ORM
- * Concrete implementation of IUserRepository interface
+ * Concrete implementation of UserRepository interface
  */
 
 import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
@@ -10,17 +10,17 @@ import { users } from '../../database/models/schema';
 import { User, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
 import { UserRole } from '../../../application/types';
 import {
-  IUserRepository,
+  UserRepository,
   CreateUserDTO,
   UpdateUserDTO,
-  UserFiltersDTO,
-} from '../../../application/interfaces/repositories/user.repository';
+  UserFilterDTO,
+} from '../../../application/interfaces/user.interface';
 
 /**
  * User repository implementation
  * Provides data access layer for user operations using Drizzle ORM
  */
-export class UserRepository implements IUserRepository {
+export class UserRepositoryImpl implements UserRepository {
   private get db() {
     return databaseService.getDatabase();
   }

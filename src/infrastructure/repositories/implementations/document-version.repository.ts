@@ -8,13 +8,9 @@ import { v4 as uuidv4 } from 'uuid';
 // Removed databaseService import to avoid circular dependency
 import { documentVersions } from '../../database/models/schema';
 import { DocumentVersion, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
-import { 
-  IDocumentVersionRepository, 
-  CreateDocumentVersionDTO,
-  DocumentVersionFiltersDTO 
-} from '../../../application/interfaces/repositories/document-version.repository';
+import { Repository } from '../../../application/interfaces/base.interface';
 
-export class DocumentVersionRepository implements IDocumentVersionRepository {
+export class DocumentVersionRepository implements Repository<DocumentVersion, any, any, any> {
   private db: any;
 
   constructor(database?: any) {

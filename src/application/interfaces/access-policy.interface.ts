@@ -5,7 +5,7 @@
  */
 
 import { Effect } from 'effect';
-import { EffectBaseRepository, RepositoryErrorType } from './effect-base.repository';
+import { Repository, RepositoryErrorType } from './base.interface';
 import { AccessPolicyEntity } from '../../domain/entities';
 
 /**
@@ -51,7 +51,7 @@ export interface AccessPolicyFilterDTO {
  * AccessPolicy repository interface
  * Provides Effect-based operations for access policy management
  */
-export interface AccessPolicyRepository extends EffectBaseRepository<
+export interface AccessPolicyRepository extends Repository<
   AccessPolicyEntity,
   CreateAccessPolicyDTO,
   UpdateAccessPolicyDTO,

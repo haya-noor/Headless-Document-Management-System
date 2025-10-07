@@ -18,10 +18,8 @@ interface UploadedFile {
   mimetype: string;
   size: number;
 }
-import { IDocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../repositories/interfaces/document.repository';
-import { IDocumentVersionRepository } from '../repositories/interfaces/document-version.repository';
-import { IDocumentPermissionRepository } from '../repositories/interfaces/document-permission.repository';
-import { IAuditLogRepository } from '../repositories/interfaces/audit-log.repository';
+import { DocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../interfaces/document.interface';
+import { Repository } from '../interfaces/base.interface';
 import { IStorageService } from '../interfaces/storage.interface';
 import { storageService } from './storage.factory';
 import { Logger, AuditLogger } from '../http/middleware/logging';
@@ -34,17 +32,17 @@ import { DocumentValidationError, DocumentNotFoundError } from '../domain/errors
  * Provides business logic layer for document operations
  */
 export class DocumentService {
-  private documentRepository: IDocumentRepository;
-  private versionRepository: IDocumentVersionRepository;
-  private permissionRepository: IDocumentPermissionRepository;
-  private auditRepository: IAuditLogRepository;
+  private documentRepository: DocumentRepository;
+  private versionRepository: Repository<any>;
+  private permissionRepository: Repository<any>;
+  private auditRepository: Repository<any>;
   private storageService: IStorageService;
 
   constructor(
-    documentRepository: IDocumentRepository,
-    versionRepository: IDocumentVersionRepository,
-    permissionRepository: IDocumentPermissionRepository,
-    auditRepository: IAuditLogRepository,
+    documentRepository: DocumentRepository,
+    versionRepository: Repository<any>,
+    permissionRepository: Repository<any>,
+    auditRepository: Repository<any>,
     storage?: IStorageService
   ) {
     this.documentRepository = documentRepository;

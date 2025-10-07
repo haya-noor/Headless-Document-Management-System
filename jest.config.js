@@ -34,7 +34,7 @@ module.exports = {
     '^@/services/(.*)$': '<rootDir>/src/services/$1',
     '^@/repositories/(.*)$': '<rootDir>/src/repositories/$1',
     '^@/models/(.*)$': '<rootDir>/src/models/$1',
-    '^@/schemas/(.*)$': '<rootDir>/src/schemas/$1',
+    '^@/dtos/(.*)$': '<rootDir>/src/presentation/dtos/$1',
   },
 
   // Coverage configuration

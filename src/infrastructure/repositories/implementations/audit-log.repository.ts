@@ -9,13 +9,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { auditLogs } from '../../database/models/schema';
 import { AuditLog, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
 import { AuditAction } from '../../../application/types';
-import { 
-  IAuditLogRepository, 
-  CreateAuditLogDTO,
-  AuditLogFiltersDTO 
-} from '../../../application/interfaces/repositories/audit-log.repository';
+import { Repository } from '../../../application/interfaces/base.interface';
 
-export class AuditLogRepository implements IAuditLogRepository {
+export class AuditLogRepository implements Repository<AuditLog, any, any, any> {
   private db: any;
 
   constructor(database?: any) {
