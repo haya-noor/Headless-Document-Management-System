@@ -1,7 +1,7 @@
 /**
  * Simple Migration Tests
  * Tests migration file structure and SQL syntax
- * Following d4-effect.md requirements for migration validation
+ * 
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -23,7 +23,7 @@ describe('Migration Files', () => {
     
     expect(migrationContent).toContain('CREATE TABLE IF NOT EXISTS "access_policies"');
     expect(migrationContent).toContain('"subject_type" varchar(20) NOT NULL');
-    expect(migrationContent).toContain('"resource_type" varchar(20) NOT NULL');
+    expect(migrationContent).toContain('"resource_type" varchar(20) NOT NULL');  // resource_type like 'document', 'folder', etc.
     expect(migrationContent).toContain('"actions" jsonb NOT NULL');
     expect(migrationContent).toContain('"priority" integer DEFAULT 50 NOT NULL');
   });

@@ -1,7 +1,6 @@
 /**
  * Migration Tests using Testcontainers
  * Tests database migrations up and down operations
- * Following d4-effect.md requirements for Testcontainers migration tests
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
@@ -56,8 +55,14 @@ describe('Database Migrations', () => {
         ORDER BY table_name
       `);
 
+      /*
+      tables.map((row: any) => row.table_name) → builds an array of table names (e.g., ['users','documents', ...]).
+      */
       const tableNames = tables.map((row: any) => row.table_name);
-      
+      /*
+      expect(tableNames).toContain('<name>') → checks that a specific table was created by your migrations.
+      so the migrations produced these tables:
+      */
       expect(tableNames).toContain('users');
       expect(tableNames).toContain('documents');
       expect(tableNames).toContain('access_policies');
@@ -67,10 +72,21 @@ describe('Database Migrations', () => {
       expect(tableNames).toContain('token_blacklist');
     });
 
+
+    /*
+    ./drizzle contains the migration artifacts (SQL files + metadata) that create those tables(user, documents, access-policy...)
+     when you run:
+      await migrate(db, { migrationsFolder: './drizzle' });
+
+    */
     it('should create tables with correct structure', async () => {
       await migrate(db, { migrationsFolder: './drizzle' });
 
       // Check users table structure
+      /*
+      information_schema is a built-in schema inside PostgreSQL database. It contains read-only views with metadata about all 
+      the other databases, schemas, tables, columns, and other objects managed by the PostgreSQL server.
+      */
       const usersColumns = await db.execute(sql`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns 
@@ -95,6 +111,12 @@ describe('Database Migrations', () => {
       await migrate(db, { migrationsFolder: './drizzle' });
 
       // Check foreign key constraints
+      /*
+      Reads the database’s metadata views (information_schema.*) to list all FOREIGN KEY constraints in the public schema.
+      table_constraints tc        → one row per FK constraint
+      key_column_usage kcu        → which child table/column participates
+      constraint_column_usage ccu → which parent table/column is referenced
+      */
       const foreignKeys = await db.execute(sql`
         SELECT 
           tc.table_name, 
@@ -113,13 +135,14 @@ describe('Database Migrations', () => {
         ORDER BY tc.table_name, kcu.column_name
       `);
 
+      // Map foreign keys for easy lookup
       const fkMap = new Map();
       foreignKeys.forEach((fk: any) => {
         const key = `${fk.table_name}.${fk.column_name}`;
         fkMap.set(key, `${fk.foreign_table_name}.${fk.foreign_column_name}`);
       });
 
-      // Check specific foreign keys
+      // Check specific foreign keys, checks these keys in the fkMap
       expect(fkMap.get('documents.uploaded_by')).toBe('users.id');
       expect(fkMap.get('document_versions.document_id')).toBe('documents.id');
       expect(fkMap.get('document_versions.uploaded_by')).toBe('users.id');
@@ -184,7 +207,7 @@ describe('Database Migrations', () => {
         checkMap.get(cc.table_name).push(cc.check_clause);
       });
 
-      // Check specific check constraints
+      // Check specific check constraints like role and email format
       const userChecks = checkMap.get('users') || [];
       expect(userChecks.some((check: string) => check.includes('role IN'))).toBe(true);
       expect(userChecks.some((check: string) => check.includes('email ~*'))).toBe(true);
@@ -194,6 +217,11 @@ describe('Database Migrations', () => {
       await migrate(db, { migrationsFolder: './drizzle' });
 
       // Check indexes
+      /*
+      indexes are special lookup tables that the database search engine can use to speed up data retrieval.
+      like:
+      CREATE INDEX idx_users_email ON users(email); so it can quickly find users by their email address.
+      */
       const indexes = await db.execute(sql`
         SELECT 
           schemaname,

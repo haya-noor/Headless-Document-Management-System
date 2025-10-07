@@ -1,6 +1,6 @@
 /**
  * UserEntity Tests
- * Following w3-effect.md Essential Entity Testing Patterns
+ * Actual testing done here 
  */
 
 import { describe, it, expect } from 'bun:test';

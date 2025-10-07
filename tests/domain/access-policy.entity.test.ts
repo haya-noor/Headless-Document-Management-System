@@ -1,6 +1,8 @@
 /**
  * AccessPolicyEntity Tests
  * Following w3-effect.md Essential Entity Testing Patterns
+ * 
+ * fast-check for property-based testing like factory constraints and domain invariants
  */
 
 import { describe, it, expect } from 'bun:test';
