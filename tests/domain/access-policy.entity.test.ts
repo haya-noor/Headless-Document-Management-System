@@ -13,7 +13,7 @@ import {
   PermissionAction, 
   PolicySubjectType, 
   PolicyResourceType 
-} from '../../src/domain/entities';
+} from '../../src/app/domain/access-policy/entity';
 import { 
   AccessPolicyFactory, 
   AccessPolicyEntityFactory, 

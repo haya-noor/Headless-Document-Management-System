@@ -5,7 +5,7 @@
 
 import { Effect } from 'effect';
 import { faker } from '@faker-js/faker';
-import { UserEntity, UserRole } from '../../src/domain/entities';
+import { UserEntity, UserRole } from '../../src/app/domain/user/entity';
 
 /**
  * User factory data type

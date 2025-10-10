@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { Effect } from 'effect';
-import { DocumentEntity } from '../../src/domain/entities';
+import { DocumentEntity } from '../../src/app/domain/document/entity';
 import { DocumentFactory, DocumentEntityFactory, generateDocument } from '../factories/document.factory';
 import { UserEntityFactory } from '../factories/user.factory';
 

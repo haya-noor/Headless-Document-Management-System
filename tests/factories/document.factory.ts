@@ -5,7 +5,7 @@
 
 import { Effect } from 'effect';
 import { faker } from '@faker-js/faker';
-import { DocumentEntity } from '../../src/domain/entities';
+import { DocumentEntity } from '../../src/app/domain/document/entity';
 import crypto from 'crypto';
 
 /**
@@ -144,6 +144,12 @@ export const DocumentFactory = {
     overrides?: Partial<DocumentFactoryData>
   ): DocumentFactoryData =>
     generateDocument({ storageProvider: provider, ...overrides }),
+
+  /**
+   * Generate a basic document
+   */
+  create: (overrides?: Partial<DocumentFactoryData>): DocumentFactoryData =>
+    generateDocument(overrides),
 };
 
 /**

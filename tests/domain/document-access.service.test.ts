@@ -6,16 +6,15 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { Effect } from 'effect';
 import * as fc from 'fast-check';
+import { UserEntity, UserRole } from '../../src/app/domain/user/entity';
+import { DocumentEntity } from '../../src/app/domain/document/entity';
 import { 
-  UserEntity, 
-  UserRole, 
-  DocumentEntity, 
   AccessPolicyEntity, 
   PermissionAction,
   PolicySubjectType,
   PolicyResourceType 
-} from '../../src/domain/entities';
-import { DocumentAccessService } from '../../src/domain/services';
+} from '../../src/app/domain/access-policy/entity';
+import { DocumentAccessService } from '../../src/app/domain/services/document-access.service';
 import { UserEntityFactory } from '../factories/user.factory';
 import { DocumentEntityFactory } from '../factories/document.factory';
 import { AccessPolicyEntityFactory, AccessPolicyFactory } from '../factories/access-policy.factory';

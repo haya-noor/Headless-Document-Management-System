@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { Effect } from 'effect';
-import { UserEntity, UserRole } from '../../src/domain/entities';
+import { UserEntity, UserRole } from '../../src/app/domain/user/entity';
 import { UserFactory, UserEntityFactory, generateUser } from '../factories/user.factory';
 
 describe('UserEntity', () => {

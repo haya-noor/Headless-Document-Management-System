@@ -1,35 +1,27 @@
 /**
- * Main application entry point
- * Initializes Elysia server with all middleware and routes
+ * Headless Document Management System
+ * Domain-Driven Design Training Project
+ * 
+ * This project focuses on:
+ * - Domain entities and value objects
+ * - Repository pattern with Effect
+ * - Database integration with Drizzle
+ * - Comprehensive testing
  */
 
-import WorkingApplication from './app';
-import { Logger } from './presentation/http/middleware/logging';
+console.log(`
+╔══════════════════════════════════════════════════════════════╗
+║              Headless Document Management System             ║
+║                                                              ║
+║  🎯 Domain-Driven Design Training Project                   ║
+║  📚 Focus: Entities, Value Objects, Repositories            ║
+║  🧪 Testing: Unit, Integration, Property-based              ║
+║                                                              ║
+║  Run tests with: bun test                                   ║
+║  Domain tests: bun test tests/domain/                       ║
+║  Integration tests: bun test tests/integration/             ║
+╚══════════════════════════════════════════════════════════════╝
+`);
 
-// Create and start application
-const app = new WorkingApplication();
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => app.shutdown());
-process.on('SIGINT', () => app.shutdown());
-
-// Handle uncaught exceptions and rejections
-process.on('uncaughtException', (error) => {
-  Logger.error('Uncaught Exception', { error });
-  app.shutdown();
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  Logger.error('Unhandled Rejection', { reason, promise });
-  app.shutdown();
-});
-
-// Start the application
-app.start().catch((error) => {
-  Logger.error('Failed to start application', { error });
-  console.error('Error details:', error);
-  process.exit(1);
-});
-
-// Don't export the app as default to prevent Bun from auto-starting it
-// export default app.app;
+// This is a domain-focused project - run tests to see the functionality
+// Domain entities are available through their individual modules

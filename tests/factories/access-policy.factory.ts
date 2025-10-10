@@ -10,7 +10,7 @@ import {
   PermissionAction, 
   PolicySubjectType, 
   PolicyResourceType
-} from '../../src/domain/entities';
+} from '../../src/app/domain/access-policy/entity';
 
 /**
  * AccessPolicy factory data type

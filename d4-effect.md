@@ -23,3 +23,6 @@ Expectations:
     Correct relational constraints: FKs, unique(slug, workspaceId), indexes, check(version >= 1).
     Drizzle proficiency: inferred types, reversible migrations, basic seeding approach.
     Repository boundaries: effectful interfaces only; typed errors; pagination contracts (Paginated<T> output).
+
+
+
