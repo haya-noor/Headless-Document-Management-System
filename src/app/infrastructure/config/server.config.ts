@@ -1,0 +1,19 @@
+/**
+ * Server configuration
+ * Contains server-related configuration settings used by storage services
+ * 
+ * Used by:
+ * - src/app/infrastructure/storage/local-storage.ts (for generating file URLs)
+ *   Line 100: const baseUrl = `http://localhost:${serverConfig.port}`;
+ *   Line 369: const baseUrl = `http://localhost:${serverConfig.port}`;
+ * 
+ * Configuration:
+ * - PORT: number (default: 3002)
+ * - Loaded from .env file via getEnvVar utility
+ */
+
+import { getEnvVar } from './utils';
+
+export const serverConfig = {
+  port: parseInt(getEnvVar('PORT', '3002')),
+} as const;

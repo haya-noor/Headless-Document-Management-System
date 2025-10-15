@@ -143,8 +143,8 @@ export const createTestDocumentEntity = (
  * Property-based test generator
  */
 export const documentArbitrary = fc.record({
-  id: fc.uuid(),
-  ownerId: fc.uuid(),
+  id: fc.uuid().filter(uuid => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)),
+  ownerId: fc.uuid().filter(uuid => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)),
   title: fc.string({ minLength: 1, maxLength: 255 }),
   description: fc.oneof(
     fc.constant(undefined),
@@ -154,10 +154,10 @@ export const documentArbitrary = fc.record({
     fc.constant(undefined),
     fc.array(fc.string({ minLength: 1, maxLength: 30 }), { minLength: 1, maxLength: 5 })
   ),
-  currentVersionId: fc.uuid(),
-  createdAt: fc.date(),
+  currentVersionId: fc.uuid().filter(uuid => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)),
+  createdAt: fc.date().map(d => d.toISOString()),
   updatedAt: fc.oneof(
     fc.constant(undefined),
-    fc.date()
+    fc.date().map(d => d.toISOString())
   ),
 })

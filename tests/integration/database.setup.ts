@@ -22,10 +22,10 @@ export const setupDatabase = async () => {
       POSTGRES_USER: "test",
       POSTGRES_DB: "testdb"
     })
-    .withExposedPorts(3002)
+    .withExposedPorts(5432)
     .start()
 
-  const port = container!.getMappedPort(3002)
+  const port = container!.getMappedPort(5432)
   const host = container!.getHost()
   const connectionString = `postgres://test:test@${host}:${port}/testdb`
 

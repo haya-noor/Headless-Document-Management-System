@@ -1,12 +1,13 @@
 /**
- * Storage service factory
+ * Storage service factory (provides selection of storage service based on 
+ * configuration)
  * Creates appropriate storage service instance based on configuration
  * Enables easy switching between local storage and cloud storage providers
  */
 
 import { IStorageService, StorageConfig } from '@/app/application/interfaces/storage.interface';
 import { LocalStorageService } from './local-storage';
-import { config } from '../../config';
+import { storageConfig as defaultStorageConfig } from '../config/storage.config';
 
 /**
  * Storage service factory class
@@ -31,23 +32,24 @@ export class StorageServiceFactory {
    * @param {StorageConfig} storageConfig - Optional storage configuration
    * @returns {IStorageService} Storage service instance
    */
-  public static createStorageService(storageConfig?: StorageConfig): IStorageService {
-    const provider = storageConfig?.provider || config.storage.provider || 'local';
+  public static createStorageService(customConfig?: StorageConfig): IStorageService {
+    const config = customConfig || defaultStorageConfig;
+    const provider = config.provider;
 
     switch (provider) {
       case 'local':
         return new LocalStorageService();
 
       case 's3':
-        // Future implementation: return new S3StorageService(storageConfig.s3);
+        // Future implementation: return new S3StorageService(config.s3);
         throw new Error('S3 storage not implemented yet. Use local storage for now.');
 
       case 'gcs':
-        // Future implementation: return new GCSStorageService(storageConfig.gcs);
+        // Future implementation: return new GCSStorageService(config.gcs);
         throw new Error('Google Cloud Storage not implemented yet. Use local storage for now.');
 
       case 'azure':
-        // Future implementation: return new AzureStorageService(storageConfig.azure);
+        // Future implementation: return new AzureStorageService(config.azure);
         throw new Error('Azure Storage not implemented yet. Use local storage for now.');
 
       default:

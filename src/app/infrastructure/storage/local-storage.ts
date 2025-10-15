@@ -1,5 +1,5 @@
 /**
- * Local file storage service
+ * Local file storage service (file operation and local storage path)
  * Handles file upload, download, and management operations with local filesystem
  * Designed to be easily replaceable with S3-compatible storage in the future
  */
@@ -8,7 +8,8 @@ import { promises as fs } from 'fs';  //fs = file system
 import { createHash } from 'crypto';
 import * as path from 'path';
 const { join, dirname, extname } = path;
-import { config } from '../../config';
+import { serverConfig } from '../config/server.config';
+import { storageConfig } from '../config/storage.config';
 import { FileUpload, PreSignedUrlResponse } from '@/app/application/interfaces/file.interface';
 import { IStorageService } from '@/app/application/interfaces/storage.interface';
 // Logger removed - no longer needed for domain-focused project
@@ -22,8 +23,8 @@ export class LocalStorageService implements IStorageService {
   private storagePath: string;
 
   constructor() {
-    // Create storage directory in project root
-    this.storagePath = join(process.cwd(), 'local-storage', 'documents');
+    // Create storage directory using config
+    this.storagePath = join(process.cwd(), storageConfig.local.storagePath, 'documents');
     this.ensureStorageDirectory();
   }
 
@@ -91,13 +92,13 @@ export class LocalStorageService implements IStorageService {
    */
   async generateDownloadUrl(
     key: string,
-    expiresIn: number = config.security.downloadLinkExpiry,
+    expiresIn: number = 3600, // 1 hour default
     filename?: string
   ): Promise<PreSignedUrlResponse> {
     try {
       // For local storage, we'll create a download endpoint
       // In future S3 implementation, this will generate pre-signed URLs
-      const baseUrl = `http://localhost:${config.server.port}`;
+      const baseUrl = `http://localhost:${serverConfig.port}`;
       const downloadPath = `/api/v1/files/download/${encodeURIComponent(key)}`;
       const url = filename 
         ? `${baseUrl}${downloadPath}?filename=${encodeURIComponent(filename)}`
@@ -366,7 +367,7 @@ export class LocalStorageService implements IStorageService {
    * @returns {string} File URL
    */
   private getFileUrl(key: string): string {
-    const baseUrl = `http://localhost:${config.server.port}`;
+    const baseUrl = `http://localhost:${serverConfig.port}`;
     return `${baseUrl}/api/v1/files/${encodeURIComponent(key)}`;
   }
 
