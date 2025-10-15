@@ -1,255 +1,195 @@
-/**
- * Document domain entity
- * Represents a document with immutable state and business invariants
- */
-
-import { Schema } from '@effect/schema';
-import { Effect } from 'effect';
-import { DocumentIdVO } from './id';
-import { ChecksumVO } from './checksum';
-import { DateTimeVO } from '../shared/date-time';
+import { Effect, Option, Schema as S, Clock } from "effect"
+import { BaseEntity, IEntity } from "../shared/base.entity"
+import { DocumentSchema } from "./schema"
+import { DocumentGuards } from "./guards"
+import { DocumentValidationError } from "./errors"
+import { DocumentSchemaId, DocumentSchemaVersionId, UserId } from "../shared/uuid"
+import { ValidationError, BusinessRuleViolationError } from "../shared/errors"
 
 /**
- * Document entity schema
- * Defines the structure and validation rules for a document
- * .pipe method allow chaining of functions like compositon of functions
+ * IDocumentSchema — Aggregate contract
  */
-export const DocumentSchema = Schema.Struct({
-  id: Schema.String.pipe(Schema.brand('DocumentId')),
-  filename: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(255)
-  ),
-  originalName: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(255)
-  ),
-  mimeType: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(100)
-  ),
-  size: Schema.Number.pipe(
-    Schema.int(),
-    Schema.positive()
-  ),
-  storageKey: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(500)
-  ),
-  storageProvider: Schema.Literal('local', 's3', 'gcs'),
-  checksum: Schema.String.pipe(Schema.brand('Checksum')),
-  tags: Schema.Array(Schema.String),
-  metadata: Schema.Record({ key: Schema.String, value: Schema.Unknown }),
-  uploadedBy: Schema.String.pipe(Schema.brand('UserId')),
-  currentVersion: Schema.Number.pipe(
-    Schema.int(),
-    Schema.positive()
-  ),
-  isDeleted: Schema.Boolean,
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date
-});
-
-// With schema.schema.Type  the static Document automatically matches the type of DocumentSchema 
-// if we add a new field to DocumentSchema, that'll be automatically added to the Document type so no need to manually add it to 
-// the Document type
-export type Document = Schema.Schema.Type<typeof DocumentSchema>;
-
-/**
- * Uses the actual value object factory method with proper Effect handling
- * runSync is used to run the Effect synchronously, because we are in a synchronous context
- */
-function createDocumentId(value: string): DocumentIdVO {
-  return Effect.runSync(DocumentIdVO.fromString(value));
+export interface IDocumentSchema extends IEntity<DocumentSchemaId> {
+  readonly ownerId: UserId
+  readonly title: string
+  readonly description: Option.Option<string>
+  readonly tags: Option.Option<readonly string[]>
+  readonly currentVersionId: DocumentSchemaVersionId
+  readonly createdAt: Date
+  readonly updatedAt: Option.Option<Date>
 }
 
 /**
- * Helper function to create ChecksumVO from string
- * Uses the actual value object factory method with proper Effect handling
+ * DocumentSchemaEntity — Aggregate root for document domain
+ *
+ * Responsible for managing document metadata and its relationship
+ * to its current DocumentSchemaVersion. The DocumentSchemaVersionEntity remains
+ * immutable, while DocumentSchemaEntity tracks the active version pointer.
  */
-function createChecksum(value: string): ChecksumVO {
-  return Effect.runSync(ChecksumVO.fromString(value));
-}
+export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implements IDocumentSchema {
+  readonly id: DocumentSchemaId
+  readonly createdAt: Date
+  readonly updatedAt: Option.Option<Date>
+  readonly ownerId: UserId
+  readonly title: string
+  readonly description: Option.Option<string>
+  readonly tags: Option.Option<readonly string[]>
+  readonly currentVersionId: DocumentSchemaVersionId
 
-/**
- * Helper function to create DateTimeVO from Date
- * Uses the actual value object factory method with proper Effect handling
- */
-function createDateTime(value: Date): DateTimeVO {
-  return Effect.runSync(DateTimeVO.fromDate(value));
-}
+  private constructor(data: any) {
+    super()
+    this.id = data.id
+    this.ownerId = data.ownerId
+    this.title = data.title
+    this.description = Option.fromNullable(data.description)
+    this.tags = Option.fromNullable(data.tags)
+    this.currentVersionId = data.currentVersionId
+    this.createdAt = data.createdAt
+    this.updatedAt = Option.fromNullable(data.updatedAt)
+  }
 
-/**
- * Helper function to create current DateTimeVO
- * Uses the actual value object factory method with proper Effect handling
- */
-function createCurrentDateTime(): DateTimeVO {
-  return Effect.runSync(DateTimeVO.now());
-}
+  /** Factory for validated entity creation */
+  static create(input: unknown): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
+    return S.decodeUnknown(DocumentSchema)(input).pipe(
+      Effect.map((data) => new DocumentSchemaEntity(data)),
+      Effect.mapError((err) => new DocumentValidationError("DocumentSchema", input, (err as any).message)),
+      Effect.provideService(Clock.Clock, Clock.Clock)
+    )
+  }
 
-/**
- * Document entity class
- * Encapsulates business logic and invariants
- */
-export class DocumentEntity {
-  public readonly id: DocumentIdVO;
-  public readonly filename: string;
-  public readonly originalName: string;
-  public readonly mimeType: string;
-  public readonly size: number;
-  public readonly storageKey: string;
-  public readonly storageProvider: 'local' | 's3' | 'gcs';
-  public readonly checksum?: ChecksumVO;
-  public readonly tags: string[];
-  public readonly metadata: Record<string, unknown>;
-  public readonly uploadedBy: string;
-  public readonly currentVersion: number;
-  public readonly isDeleted: boolean;
-  public readonly createdAt: DateTimeVO;
-  public readonly updatedAt: DateTimeVO;
+  // ------------------------------------------------------------
+  // Derived Properties
+  // ------------------------------------------------------------
 
-  /**
-   * Private constructor - use static factory methods
-   */
-  private constructor(props: {
-    id: DocumentIdVO;
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storageKey: string;
-    storageProvider: 'local' | 's3' | 'gcs';
-    checksum?: ChecksumVO;
-    tags: string[];
-    metadata: Record<string, unknown>;
-    uploadedBy: string;
-    currentVersion: number;
-    isDeleted: boolean;
-    createdAt: DateTimeVO;
-    updatedAt: DateTimeVO;
-  }) {
-    this.id = props.id;
-    this.filename = props.filename;
-    this.originalName = props.originalName;
-    this.mimeType = props.mimeType;
-    this.size = props.size;
-    this.storageKey = props.storageKey;
-    this.storageProvider = props.storageProvider;
-    this.checksum = props.checksum;
-    this.tags = props.tags;
-    this.metadata = props.metadata;
-    this.uploadedBy = props.uploadedBy;
-    this.currentVersion = props.currentVersion;
-    this.isDeleted = props.isDeleted;
-    this.createdAt = props.createdAt;
-    this.updatedAt = props.updatedAt;
+  get descriptionOrEmpty(): string {
+    return Option.getOrElse(this.description, () => "")
+  }
+
+  get tagsOrEmpty(): readonly string[] {
+    return Option.getOrElse(this.tags, () => [])
+  }
+
+  get hasTags(): boolean {
+    return this.tagsOrEmpty.length > 0
+  }
+
+  get hasDescription(): boolean {
+    return Option.isSome(this.description)
+  }
+
+  get isModified(): boolean {
+    return Option.isSome(this.updatedAt)
+  }
+
+  get tagCount(): number {
+    return this.tagsOrEmpty.length
+  }
+
+  // ------------------------------------------------------------
+  // Domain Operations
+  // ------------------------------------------------------------
+
+  /** Rename the document */
+  rename(newTitle: string): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
+    if (!DocumentGuards.isValidTitle(newTitle)) {
+      return Effect.fail(new DocumentValidationError("title", newTitle, "Title is invalid"))
+    }
+
+    const updated = {
+      ...this.toSerialized(),
+      title: newTitle,
+      updatedAt: new Date().toISOString()
+    }
+
+    return DocumentSchemaEntity.create(updated)
+  }
+
+  /** Update or clear document description */
+  updateDescription(newDescription: string | null | undefined): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
+    const desc = newDescription ?? null
+    if (desc !== null && !DocumentGuards.isValidDescription(desc)) {
+      return Effect.fail(new DocumentValidationError("description", desc, "Invalid description"))
+    }
+
+    const updated = {
+      ...this.toSerialized(),
+      description: desc,
+      updatedAt: new Date().toISOString()
+    }
+
+    return DocumentSchemaEntity.create(updated)
+  }
+
+  /** Add one or more new tags, ensuring uniqueness */
+  addTags(newTags: string[]): Effect.Effect<DocumentSchemaEntity, ValidationError | BusinessRuleViolationError, never> {
+    const current = this.tagsOrEmpty
+
+    return DocumentGuards.prepareTagsForAddition(current, newTags).pipe(
+      Effect.flatMap((merged) =>
+        DocumentSchemaEntity.create({
+          ...this.toSerialized(),
+          tags: merged,
+          updatedAt: new Date().toISOString()
+        })
+      )
+    )
+  }
+
+  /** Remove tags while keeping validation consistent */
+  removeTags(tagsToRemove: string[]): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
+    const current = this.tagsOrEmpty
+    if (current.length === 0) return Effect.succeed(this)
+
+    return DocumentGuards.prepareTagsForRemoval(current, tagsToRemove).pipe(
+      Effect.flatMap((remaining) =>
+        DocumentSchemaEntity.create({
+          ...this.toSerialized(),
+          tags: remaining.length > 0 ? remaining : null,
+          updatedAt: new Date().toISOString()
+        })
+      )
+    )
   }
 
   /**
-   * Create a new document
+   * Update the document to reference a new current version.
+   *
+   * This operation belongs here (not in DocumentSchemaVersionEntity),
+   * because the DocumentSchema aggregate root controls which version
+   * is currently active.
    */
-  static create(props: {
-    id: string;
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storageKey: string;
-    storageProvider: 'local' | 's3' | 'gcs';
-    checksum?: string;
-    tags?: string[];
-    metadata?: Record<string, unknown>;
-    uploadedBy: string;
-  }): DocumentEntity {
-    const id = createDocumentId(props.id);
-    const checksum = props.checksum ? createChecksum(props.checksum) : undefined;
-    const now = createCurrentDateTime();
-
-    return new DocumentEntity({
-      id,
-      filename: props.filename,
-      originalName: props.originalName,
-      mimeType: props.mimeType,
-      size: props.size,
-      storageKey: props.storageKey,
-      storageProvider: props.storageProvider,
-      checksum,
-      tags: props.tags || [],
-      metadata: props.metadata || {},
-      uploadedBy: props.uploadedBy,
-      currentVersion: 1,
-      isDeleted: false,
-      createdAt: now,
-      updatedAt: now
-    });
+  updateCurrentVersion(newVersionId: DocumentSchemaVersionId): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
+    const updated = {
+      ...this.toSerialized(),
+      currentVersionId: newVersionId,
+      updatedAt: new Date().toISOString()
+    }
+    return DocumentSchemaEntity.create(updated)
   }
 
   /**
-   * Create document from persistence data
+   * Domain serialization helper
+   *
+   * Builds a plain object representation of this DocumentSchemaEntity
+   * compatible with the DocumentSchema.
+   *
+   * Uses BaseEntity.serialize() for id, createdAt, updatedAt.
    */
-  static fromPersistence(data: Document): DocumentEntity {
-    const id = createDocumentId(data.id);
-    const checksum = data.checksum ? createChecksum(data.checksum) : undefined;
-    const createdAt = createDateTime(data.createdAt);
-    const updatedAt = createDateTime(data.updatedAt);
-
-    return new DocumentEntity({
-      id,
-      filename: data.filename,
-      originalName: data.originalName,
-      mimeType: data.mimeType,
-      size: data.size,
-      storageKey: data.storageKey,
-      storageProvider: data.storageProvider,
-      checksum,
-      // how does this syntax work? 
-      // it's a spread operator, it's creating a new array with the same elements as 
-      // the original array. So it's like this:
-      // tags: [...data.tags] is the same as tags: data.tags.map(tag => tag)
-      tags: [...data.tags],
-      metadata: data.metadata,
-      uploadedBy: data.uploadedBy,
-      currentVersion: data.currentVersion,
-      isDeleted: data.isDeleted,
-      createdAt,
-      updatedAt
-    });
-  }
-
-  /**
-   * Get document ID as string
-   */
-  getId(): string {
-    return this.id.getValue();
-  }
-
-  /**
-   * Get checksum as string
-   */
-  getChecksum(): string | undefined {
-    return this.checksum?.getValue();
-  }
-
-  /**
-   * Convert to plain object for persistence
-   */
-  toPersistence(): Document {
+  private toSerialized(): S.Schema.Type<typeof DocumentSchema> {
     return {
-      id: this.id.getValue() as Document['id'],
-      filename: this.filename,
-      originalName: this.originalName,
-      mimeType: this.mimeType,
-      size: this.size,
-      storageKey: this.storageKey,
-      storageProvider: this.storageProvider,
-      checksum: this.checksum?.getValue() as Document['checksum'],
-      tags: this.tags,
-      metadata: this.metadata,
-      uploadedBy: this.uploadedBy as Document['uploadedBy'],
-      currentVersion: this.currentVersion,
-      isDeleted: this.isDeleted,
-      createdAt: this.createdAt.getValue(),
-      updatedAt: this.updatedAt.getValue()
-    };
+      id: this.id,
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: Option.getOrNull(this.updatedAt)?.toISOString(),
+      ownerId: this.ownerId,
+      title: this.title,
+      description: Option.getOrNull(this.description),
+      tags: Option.getOrNull(this.tags),
+      currentVersionId: this.currentVersionId
+    }
+  }
+
+  /** Required by BaseEntity */
+  isActive(): boolean {
+    return true
   }
 }

@@ -1,21 +1,27 @@
 /**
  * Storage configuration
- * Contains all storage-related configuration settings
+ * Defines storage provider settings and options
  */
 
-import { getEnvVar } from './utils';
-
 export const storageConfig = {
-  provider: getEnvVar('STORAGE_PROVIDER', 'local') as 'local' | 's3' | 'gcs' | 'azure',
+  provider: (process.env.STORAGE_PROVIDER as 'local' | 's3' | 'gcs' | 'azure') || 'local',
   local: {
-    storagePath: getEnvVar('LOCAL_STORAGE_PATH', './storage'),
+    basePath: process.env.LOCAL_STORAGE_PATH || 'local-storage',
   },
-  // Future S3 configuration (not used currently)
   s3: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    region: process.env.AWS_REGION || 'us-east-1',
-    bucket: process.env.AWS_S3_BUCKET || '',
-    endpoint: process.env.AWS_S3_ENDPOINT, // For MinIO compatibility
+    bucket: process.env.S3_BUCKET || '',
+    region: process.env.S3_REGION || 'us-east-1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+  },
+  gcs: {
+    bucket: process.env.GCS_BUCKET || '',
+    projectId: process.env.GCS_PROJECT_ID || '',
+    keyFilename: process.env.GCS_KEY_FILENAME || '',
+  },
+  azure: {
+    accountName: process.env.AZURE_ACCOUNT_NAME || '',
+    accountKey: process.env.AZURE_ACCOUNT_KEY || '',
+    containerName: process.env.AZURE_CONTAINER_NAME || '',
   },
 } as const;

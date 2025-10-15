@@ -1,16 +1,16 @@
 # Headless Document Management System
 
-A comprehensive backend document management system built with **Bun**, **Elysia**, and **TypeScript**. Features clean architecture, JWT authentication, file storage, document versioning, and granular permissions.
+A backend document management system built with Bun, Elysia, and TypeScript. Features clean architecture, JWT authentication, file storage, document versioning, and granular permissions.
 
-## ✨ Features
+## Features
 
-### 🔐 Authentication & User Management
+### Authentication & User Management
 - User registration and login with JWT tokens
 - Password strength validation
 - User profile management
 - Account deactivation
 
-### 📁 File Management
+### File Management
 - Local file storage with organized directory structure
 - File upload with metadata support
 - File listing with filtering and pagination
@@ -18,7 +18,7 @@ A comprehensive backend document management system built with **Bun**, **Elysia*
 - File metadata retrieval
 - File deletion
 
-### 📄 Document Management
+### Document Management
 - Document upload with tags and metadata
 - Document search with advanced filters
 - Document versioning system
@@ -26,14 +26,14 @@ A comprehensive backend document management system built with **Bun**, **Elysia*
 - Document metadata and tags management
 - Document download with secure links
 
-### 🛡️ Security & Permissions
+### Security & Permissions
 - JWT-based authentication
 - Role-based access control
 - Granular document permissions (read, write, delete)
 - Audit logging for compliance
 - Input validation with Zod schemas
 
-### 🏗️ Architecture
+### Architecture
 - Clean Architecture with separation of concerns
 - Repository pattern for data access
 - Workflow layer for business orchestration
@@ -41,7 +41,7 @@ A comprehensive backend document management system built with **Bun**, **Elysia*
 - Infrastructure layer for external concerns
 - Middleware for cross-cutting concerns
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Bun 1.0+
@@ -82,7 +82,7 @@ bun run build
 bun run start
 ```
 
-## 📚 API Endpoints
+## API Endpoints
 
 ### Authentication
 ```
@@ -126,7 +126,7 @@ GET    /health                      # Health check
 GET    /api                         # API documentation
 ```
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -143,7 +143,7 @@ bun test tests/api.test.ts          # API tests
 bun test --coverage
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 src/
@@ -198,7 +198,7 @@ local-storage/         # Local file storage (ignored by git)
 docker-compose.yml    # Docker configuration
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 ```env
@@ -222,7 +222,7 @@ MAX_FILE_SIZE=10485760  # 10MB
 ALLOWED_FILE_TYPES=image/jpeg,image/png,application/pdf
 ```
 
-## 📊 Database Schema
+## Database Schema
 
 The system uses **Drizzle ORM** with PostgreSQL and includes the following tables:
 
@@ -232,7 +232,7 @@ The system uses **Drizzle ORM** with PostgreSQL and includes the following table
 - **document_permissions** - User permissions for documents
 - **audit_logs** - System audit trail
 
-## 🏛️ Architecture Overview
+## Architecture Overview
 
 This project follows **Clean Architecture** principles with clear separation of concerns:
 
@@ -265,7 +265,7 @@ This project follows **Clean Architecture** principles with clear separation of 
 - **Factory Pattern**: Service creation and configuration
 - **Dependency Injection**: Loose coupling between layers
 
-## 🚀 Deployment
+## Deployment
 
 ### Docker Deployment
 ```bash
@@ -282,7 +282,7 @@ bun run build
 bun run start
 ```
 
-## 📝 Development
+## Development
 
 ### Code Organization
 
@@ -297,10 +297,10 @@ bun run start
 - **Storage Abstraction**: Easy to switch to cloud storage (S3, GCS, Azure)
 - **File Organization**: Organized by user and document structure
 
-## 📄 License
+## License
 
 This project is for educational purposes and demonstrates modern backend development practices.
 
 ---
 
-Built with ❤️ using Bun, Elysia, TypeScript, and PostgreSQL
+Built with Bun, Elysia, TypeScript, and PostgreSQL

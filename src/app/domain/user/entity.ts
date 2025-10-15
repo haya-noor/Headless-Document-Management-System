@@ -1,307 +1,241 @@
-/**
- * User domain entity
- * Represents a user with role-based access control
- */
+import { Effect, Option, Schema as S, ParseResult } from "effect"
+import { UserValidationError } from "./errors"
+import { UserId } from "../shared/uuid"
+import { BaseEntity, type IEntity } from "../shared/base.entity"
 
-import { Schema } from '@effect/schema';
-import { Effect } from 'effect';
-import { UserIdVO } from './id';
-import { DateTimeVO } from '../shared/date-time';
+// -----------------------------------------------------------------------------
+// Reusable Schemas
+// -----------------------------------------------------------------------------
 
-/**
- * User role enumeration for RBAC
- */
-export enum UserRole {
-  ADMIN = 'admin',
-  USER = 'user',
+// Common timestamp fields shared by all entities
+export const BaseEntitySchema = S.Struct({
+  id: S.String, 
+  createdAt: S.Date,
+  updatedAt: S.optional(S.Date)
+})
+
+// Common user profile fields
+export const UserProfileFields = S.Struct({
+  firstName: S.String,
+  lastName: S.String,
+  dateOfBirth: S.optional(S.Date),
+  phoneNumber: S.optional(S.String),
+  profileImage: S.optional(S.String)
+})
+
+// Core user fields (specific to User)
+export const UserCoreFields = S.Struct({
+  email: S.String,
+  role: S.Literal("admin", "user"),
+  isActive: S.Boolean
+})
+
+// Full user schema — combines reusable parts
+export const UserSchema = S.extend(S.extend(UserCoreFields, UserProfileFields), BaseEntitySchema)
+
+// -----------------------------------------------------------------------------
+// Derived Types
+// -----------------------------------------------------------------------------
+
+export type UserType = S.Schema.Type<typeof UserSchema>
+export type SerializedUser = S.Schema.Encoded<typeof UserSchema>
+
+// -----------------------------------------------------------------------------
+// Domain Contract
+// -----------------------------------------------------------------------------
+
+export interface IUser extends IEntity<UserId> {
+  readonly email: string
+  readonly firstName: string
+  readonly lastName: string
+  readonly role: "admin" | "user"
+  readonly dateOfBirth: Option.Option<Date>
+  readonly phoneNumber: Option.Option<string>
+  readonly profileImage: Option.Option<string>
 }
 
-/**
- * User entity schema
- * Defines the structure and validation rules for a user
- */
-export const UserSchema = Schema.Struct({
-  id: Schema.String.pipe(Schema.brand('UserId')),
-  email: Schema.String.pipe(
-    Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/),
-    Schema.maxLength(255)
-  ),
-  firstName: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(100)
-  ),
-  lastName: Schema.String.pipe(
-    Schema.minLength(1),
-    Schema.maxLength(100)
-  ),
-  role: Schema.Literal('admin', 'user'),
-  isActive: Schema.Boolean,
-  // Profile fields
-  dateOfBirth: Schema.optional(Schema.Date),
-  phoneNumber: Schema.optional(Schema.String.pipe(Schema.maxLength(20))),
-  profileImage: Schema.optional(Schema.String.pipe(Schema.maxLength(500))),
-  // Timestamps
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
-});
+// -----------------------------------------------------------------------------
+// User Entity
+// -----------------------------------------------------------------------------
 
-export type User = Schema.Schema.Type<typeof UserSchema>;
+export class UserEntity extends BaseEntity<UserId> implements IUser {
+  readonly id: UserId
+  readonly createdAt: Date
+  readonly updatedAt: Option.Option<Date>
+  readonly email: string
+  readonly firstName: string
+  readonly lastName: string
+  readonly role: "admin" | "user"
+  readonly dateOfBirth: Option.Option<Date>
+  readonly phoneNumber: Option.Option<string>
+  readonly profileImage: Option.Option<string>
 
-
-function createUserId(id: string): UserIdVO {
-  return Effect.runSync(UserIdVO.fromString(id));
-}
-
-/*
-Convert an existing Date (from database or API) to DateTimeVO
-used in the fromPersistence method
-*/
-function createDateTime(date: Date): DateTimeVO {
-  return Effect.runSync(DateTimeVO.fromDate(date));
-}
-
-/*
-Gets the current timestamp as a DateTimeVO
-used in the create(), deactivate(), activate() methods
-*/
-function createCurrentDateTime(): DateTimeVO {
-  return Effect.runSync(DateTimeVO.now());
-}
-
-/**
- * User entity class
- * Encapsulates business logic and invariants(like no two users can have the same email etc)
- */
-
-// readonly ensures immutability 
-export class UserEntity {
-  public readonly id: UserIdVO;
-  public readonly email: string;
-  public readonly firstName: string;
-  public readonly lastName: string;
-  public readonly role: UserRole;
-  public readonly isActive: boolean;
-  // Profile fields
-  public readonly dateOfBirth?: Date;
-  public readonly phoneNumber?: string;
-  public readonly profileImage?: string;
-  // Timestamps
-  public readonly createdAt: DateTimeVO;
-  public readonly updatedAt: DateTimeVO;
-
-  /**
-   * Private constructor - use static factory methods
-   */
-  private constructor(props: {
-    id: UserIdVO;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-    isActive: boolean;
-    dateOfBirth?: Date;
-    phoneNumber?: string;
-    profileImage?: string;
-    createdAt: DateTimeVO;
-    updatedAt: DateTimeVO;
-  }) {
-    this.id = props.id;
-    this.email = props.email;
-    this.firstName = props.firstName;
-    this.lastName = props.lastName;
-    this.role = props.role;
-    this.isActive = props.isActive;
-    this.dateOfBirth = props.dateOfBirth;
-    this.phoneNumber = props.phoneNumber;
-    this.profileImage = props.profileImage;
-    this.createdAt = props.createdAt;
-    this.updatedAt = props.updatedAt;
+  private constructor(data: UserType) {
+    super()
+    this.id = data.id as UserId
+    this.createdAt = data.createdAt
+    this.updatedAt = Option.fromNullable(data.updatedAt)
+    this.email = data.email
+    this.firstName = data.firstName
+    this.lastName = data.lastName
+    this.role = data.role
+    this.dateOfBirth = Option.fromNullable(data.dateOfBirth)
+    this.phoneNumber = Option.fromNullable(data.phoneNumber)
+    this.profileImage = Option.fromNullable(data.profileImage)
   }
 
-  /**
-   * Create a new user with minimal required fields
-   */
-  static create(props: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-  }): UserEntity {
-    const now = createCurrentDateTime();
-    
-    return new UserEntity({
-      id: createUserId(props.id),
-      email: props.email,
-      firstName: props.firstName,
-      lastName: props.lastName,
-      role: props.role,
+  // ---------------------------------------------------------------------------
+  // Factory / Validation
+  // ---------------------------------------------------------------------------
+
+  static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError> {
+    return S.decodeUnknown(UserSchema)(input).pipe(
+      Effect.map((data) => new UserEntity(data)),
+      Effect.mapError((error) => UserEntity.toValidationError(error, input))
+    )
+  }
+
+  private static toValidationError(error: unknown, input: SerializedUser): UserValidationError {
+    if (error instanceof UserValidationError) return error
+    const parseError = (error as ParseResult.ParseError).message ?? "Validation failed"
+    return new UserValidationError("user", input, parseError)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Domain Behavior
+  // ---------------------------------------------------------------------------
+
+  get fullName(): string {
+    return `${this.firstName} ${this.lastName}`
+  }
+
+  get hasDateOfBirth(): boolean {
+    return Option.isSome(this.dateOfBirth)
+  }
+
+  get hasPhoneNumber(): boolean {
+    return Option.isSome(this.phoneNumber)
+  }
+
+  get hasProfileImage(): boolean {
+    return Option.isSome(this.profileImage)
+  }
+
+  get isModified(): boolean {
+    return Option.isSome(this.updatedAt)
+  }
+
+  get dateOfBirthOrNull(): Date | null {
+    return Option.getOrNull(this.dateOfBirth)
+  }
+
+  get phoneNumberOrNull(): string | null {
+    return Option.getOrNull(this.phoneNumber)
+  }
+
+  get profileImageOrNull(): string | null {
+    return Option.getOrNull(this.profileImage)
+  }
+
+  isActiveUser(): boolean {
+    return this.isActive()
+  }
+
+  isAdmin(): boolean {
+    return this.role === "admin"
+  }
+
+  hasCompleteProfile(): boolean {
+    return this.hasDateOfBirth && this.hasPhoneNumber && this.hasProfileImage
+  }
+
+  hasMinimalProfile(): boolean {
+    return Boolean(this.firstName && this.lastName && this.email)
+  }
+
+  getProfileCompleteness(): number {
+    const totalFields = 6
+    const completedFields =
+      Number(!!this.firstName) +
+      Number(!!this.lastName) +
+      Number(!!this.email) +
+      Number(this.hasDateOfBirth) +
+      Number(this.hasPhoneNumber) +
+      Number(this.hasProfileImage)
+    return Math.round((completedFields / totalFields) * 100)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Update Operations
+  // ---------------------------------------------------------------------------
+
+  updateEmail(newEmail: string): Effect.Effect<UserEntity, UserValidationError> {
+    return UserEntity.create({
+      ...this.toSerialized(),
+      email: newEmail,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  updateProfile(
+    firstName?: string,
+    lastName?: string,
+    dateOfBirth?: Date | null,
+    phoneNumber?: string | null,
+    profileImage?: string | null
+  ): Effect.Effect<UserEntity, UserValidationError> {
+    return UserEntity.create({
+      ...this.toSerialized(),
+      firstName: firstName ?? this.firstName,
+      lastName: lastName ?? this.lastName,
+      dateOfBirth: (dateOfBirth ?? Option.getOrNull(this.dateOfBirth))?.toISOString() ?? undefined,
+      phoneNumber: phoneNumber ?? Option.getOrNull(this.phoneNumber) ?? undefined,
+      profileImage: profileImage ?? Option.getOrNull(this.profileImage) ?? undefined,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  activate(): Effect.Effect<UserEntity, UserValidationError> {
+    return UserEntity.create({
+      ...this.toSerialized(),
       isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    });
+      updatedAt: new Date().toISOString()
+    })
   }
 
-  /**
-   * Create a new user with complete profile (generic creation)
-   */
-  static createWithCompleteProfile(props: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: UserRole;
-    dateOfBirth?: Date;
-    phoneNumber?: string;
-    profileImage?: string;
-  }): UserEntity {
-    const now = createCurrentDateTime();
-    
-    return new UserEntity({
-      id: createUserId(props.id),
-      email: props.email,
-      firstName: props.firstName,
-      lastName: props.lastName,
-      role: props.role,
-      isActive: true,
-      dateOfBirth: props.dateOfBirth,
-      phoneNumber: props.phoneNumber,
-      profileImage: props.profileImage,
-      createdAt: now,
-      updatedAt: now,
-    });
+  deactivate(): Effect.Effect<UserEntity, UserValidationError> {
+    return UserEntity.create({
+      ...this.toSerialized(),
+      isActive: false,
+      updatedAt: new Date().toISOString()
+    })
   }
 
-  /**
-   * Create user from persistence data
-   */
-  static fromPersistence(data: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isActive: boolean;
-    dateOfBirth?: Date;
-    phoneNumber?: string;
-    profileImage?: string;
-    createdAt: Date;
-    updatedAt: Date;
-  }): UserEntity {
-    return new UserEntity({
-      id: createUserId(data.id),
-      email: data.email,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      role: data.role as UserRole,
-      isActive: data.isActive,
-      dateOfBirth: data.dateOfBirth,
-      phoneNumber: data.phoneNumber,
-      profileImage: data.profileImage,
-      createdAt: createDateTime(data.createdAt),
-      updatedAt: createDateTime(data.updatedAt),
-    });
-  }
+  // ---------------------------------------------------------------------------
+  // Serialization
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Convert to persistence format
-   */
-  toPersistence(): {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isActive: boolean;
-    dateOfBirth?: Date;
-    phoneNumber?: string;
-    profileImage?: string;
-    createdAt: Date;
-    updatedAt: Date;
-  } {
+  toSerialized(): SerializedUser {
     return {
-      id: this.id.getValue(),
+      id: this.id,
       email: this.email,
       firstName: this.firstName,
       lastName: this.lastName,
       role: this.role,
-      isActive: this.isActive,
-      dateOfBirth: this.dateOfBirth,
-      phoneNumber: this.phoneNumber,
-      profileImage: this.profileImage,
-      createdAt: this.createdAt.getValue(),
-      updatedAt: this.updatedAt.getValue(),
-    };
+      isActive: this.isActive(),
+      dateOfBirth: Option.getOrNull(this.dateOfBirth)?.toISOString() ?? undefined,
+      phoneNumber: Option.getOrNull(this.phoneNumber) ?? undefined,
+      profileImage: Option.getOrNull(this.profileImage) ?? undefined,
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: Option.getOrNull(this.updatedAt)?.toISOString() ?? undefined
+    }
   }
 
-  /**
-   * Check if user is admin
-   */
-  isAdmin(): boolean {
-    return this.role === UserRole.ADMIN;
-  }
+  // ---------------------------------------------------------------------------
+  // DDD Base
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Deactivate user
-   */
-  deactivate(): UserEntity {
-    return new UserEntity({
-      ...this,
-      isActive: false,
-      updatedAt: createCurrentDateTime(),
-    });
-  }
-
-  /**
-   * Activate user
-   * ...this is a mutator method, which mutates the state of the object
-   * by mutating the state of the object, it returns a new object with the updated state
-   */
-  activate(): UserEntity {
-    return new UserEntity({
-      ...this,
-      isActive: true,
-      updatedAt: createCurrentDateTime(),
-    });
-  }
-
-  /**
-   * Get full name
-   */
-  getFullName(): string {
-    return `${this.firstName} ${this.lastName}`;
-  }
-
-  /**
-   * Check if user has complete profile
-   * Complete profile requires: dateOfBirth, phoneNumber, and profileImage
-   */
-  hasCompleteProfile(): boolean {
-    return !!(this.dateOfBirth && this.phoneNumber && this.profileImage);
-  }
-
-  /**
-   * Check if user has minimal profile
-   * Minimal profile requires only: firstName, lastName, email
-   */
-  hasMinimalProfile(): boolean {
-    return !!(this.firstName && this.lastName && this.email);
-  }
-
-  /**
-   * Get profile completeness percentage
-   */
-  getProfileCompleteness(): number {
-    const totalFields = 6; // firstName, lastName, email, dateOfBirth, phoneNumber, profileImage
-    let completedFields = 0;
-
-    if (this.firstName) completedFields++;
-    if (this.lastName) completedFields++;
-    if (this.email) completedFields++;
-    if (this.dateOfBirth) completedFields++;
-    if (this.phoneNumber) completedFields++;
-    if (this.profileImage) completedFields++;
-
-    return Math.round((completedFields / totalFields) * 100);
+  isActive(): boolean {
+    return this.isActiveUser()
   }
 }

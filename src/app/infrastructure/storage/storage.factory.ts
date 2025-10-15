@@ -4,7 +4,7 @@
  * Enables easy switching between local storage and cloud storage providers
  */
 
-import { IStorageService, StorageConfig } from '../../app/application/interfaces/storage.interface';
+import { IStorageService, StorageConfig } from '@/app/application/interfaces/storage.interface';
 import { LocalStorageService } from './local-storage';
 import { config } from '../../config';
 

@@ -1,10 +1,8 @@
 /**
- * Access Policy entity exports
- * All access-policy-related domain components
+ * Access Policy module exports
  */
-
-export * from './entity';
-export * from './errors';
-export * from './guards';
-export * from './interface';
-export * from './id';
+export * from "./entity"
+export * from "./errors"
+export * from "./guards"
+export * from "./schema"
+export * from "./value-object"

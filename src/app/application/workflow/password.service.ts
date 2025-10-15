@@ -5,7 +5,7 @@
  */
 
 import { Effect } from 'effect';
-import { ValidationError } from '../../domain/shared/base.interface';
+import { ValidationError } from "../shared/errors";
 
 export class PasswordService {
   /**

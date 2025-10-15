@@ -1,13 +1,8 @@
 /**
- * Document entity exports
- * All document-related domain components
+ * Document module exports
  */
-
-export * from './entity';
-export * from './errors';
-export * from './access-errors';
-export * from './guards';
-export * from './interface';
-export * from './id';
-export * from './metadata';
-export * from './checksum';
+export * from "./entity"
+export * from "./errors"
+export * from "./guards"
+export * from "./schema"
+export * from "./value-object"

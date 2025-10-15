@@ -6,10 +6,11 @@
 
 import { promises as fs } from 'fs';  //fs = file system
 import { createHash } from 'crypto';
-import path, { join, dirname, extname } from 'path';
+import * as path from 'path';
+const { join, dirname, extname } = path;
 import { config } from '../../config';
-import { FileUpload, PreSignedUrlResponse } from '../../app/application/interfaces/file.interface';
-import { IStorageService } from '../../app/application/interfaces/storage.interface';
+import { FileUpload, PreSignedUrlResponse } from '@/app/application/interfaces/file.interface';
+import { IStorageService } from '@/app/application/interfaces/storage.interface';
 // Logger removed - no longer needed for domain-focused project
 
 /**
@@ -69,13 +70,6 @@ export class LocalStorageService implements IStorageService {
 
       await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
 
-      Logger.info('File uploaded successfully to local storage', {
-        key,
-        size: file.size,
-        contentType: file.mimetype,
-        checksum,
-      });
-
       return {
         key,
         checksum,
@@ -109,15 +103,8 @@ export class LocalStorageService implements IStorageService {
         ? `${baseUrl}${downloadPath}?filename=${encodeURIComponent(filename)}`
         : `${baseUrl}${downloadPath}`;
 
-      Logger.info('Download URL generated', {
-        key,
-        expiresIn,
-        filename,
-      });
-
       return {
         url,
-        expiresIn,
         expiresAt: new Date(Date.now() + (expiresIn * 1000))
       };
     } catch (error) {

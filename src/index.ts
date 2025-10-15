@@ -22,6 +22,3 @@ console.log(`
 ║  Integration tests: bun test tests/integration/             ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
-
-// This is a domain-focused project - run tests to see the functionality
-// Domain entities are available through their individual modules

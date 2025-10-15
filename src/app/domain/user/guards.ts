@@ -1,132 +1,36 @@
-/**
- * User domain guards
- * Provides validation and type guards for user operations
- */
-
-import { Schema } from '@effect/schema';
-import { Effect } from 'effect';
-import { UserIdVO } from './id';
-import { DateTimeVO } from '../shared/date-time';
-import { UserValidationError } from './errors';
-import { UserRole } from './entity';
 
 /**
- * User email schema
- * ^[^\s@]+@[^\s@]+\.[^\s@]+$
- * The ^ character asserts the position at the start of the string.
- * [^\s@] matches any character that is not a space or an @.
- * + matches one or more occurrences of the preceding character.
- * @ matches a literal @.
- * [^\s@] matches any character that is not a space or an @.
- * + matches one or more occurrences of the preceding character.
- * . matches a literal .
- * [^\s@] matches any character that is not a space or an @.
- * + matches one or more occurrences of the preceding character.
- * $ character asserts the position at the end of the string.
+ * UserGuards
+ * 
+ * Declarative reusable filters and validators.
+ * Integrates with Effect Schema filtering API.
+ * 
+ * id guarded by shared 
+ * email validated by shared EmailAddress
+ * data fields validated by shared via DateTimeFromAny
+ * password validated by shared via Password + hashedPassword
+ * role/status flags validated at schemal level 
+ * 
  */
-export const UserEmailSchema = Schema.String.pipe(
-  Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/),
-  Schema.maxLength(255)
-);
 
-export type UserEmail = Schema.Schema.Type<typeof UserEmailSchema>;
+import { Schema as S } from "effect"
 
-/**
- * User name schema
- */
-export const UserNameSchema = Schema.String.pipe(
-  Schema.minLength(1),
-  Schema.maxLength(100)
-);
+export class UserGuards {
+  /** Name: required and within limits */
+  static readonly ValidName = S.filter(
+    (name: string) => typeof name === "string" && name.trim().length > 0 && name.trim().length <= 100,
+    { message: () => "Name is required and must be <= 100 characters" }
+  )
 
-export type UserName = Schema.Schema.Type<typeof UserNameSchema>;
+  /** Phone: optional string (<=20 chars) */
+  static readonly ValidPhoneNumber = S.filter(
+    (phone: string) => typeof phone === "string" && phone.length <= 20,
+    { message: () => "Phone number must be <= 20 characters" }
+  )
 
-/**
- * User role schema
- */
-export const UserRoleSchema = Schema.Literal('admin', 'user');
-
-/**
- * Guard functions for user validation
- */
-export const UserGuards = {
-  /**
-   * Validate user ID
-   */
-  isValidUserId: (value: unknown): Effect.Effect<UserIdVO, UserValidationError, never> => {
-    return UserIdVO.fromUnknown(value).pipe(
-      Effect.mapError(() => new UserValidationError({
-        field: 'id',
-        value,
-        message: 'Invalid user ID format'
-      }))
-    );
-  },
-
-  /**
-   * Validate user email
-   */
-  isValidEmail: (value: unknown): Effect.Effect<UserEmail, UserValidationError, never> => {
-    return Schema.decodeUnknown(UserEmailSchema)(value).pipe(
-      Effect.mapError(() => new UserValidationError({
-        field: 'email',
-        value,
-        message: 'Invalid email format'
-      }))
-    );
-  },
-
-  /**
-   * Validate user name
-   */
-  isValidName: (value: unknown): Effect.Effect<UserName, UserValidationError, never> => {
-    return Schema.decodeUnknown(UserNameSchema)(value).pipe(
-      Effect.mapError(() => new UserValidationError({
-        field: 'name',
-        value,
-        message: 'Invalid name format'
-      }))
-    );
-  },
-
-  /**
-   * Validate user role
-   */
-  isValidRole: (value: unknown): Effect.Effect<UserRole, UserValidationError, never> => {
-    return Schema.decodeUnknown(UserRoleSchema)(value).pipe(
-      Effect.map(role => role as UserRole),
-      Effect.mapError(() => new UserValidationError({
-        field: 'role',
-        value,
-        message: 'Invalid role format'
-      }))
-    );
-  },
-
-  /**
-   * Validate date time
-   */
-  isValidDateTime: (value: unknown): Effect.Effect<DateTimeVO, UserValidationError, never> => {
-    return DateTimeVO.fromUnknown(value).pipe(
-      Effect.mapError(() => new UserValidationError({
-        field: 'dateTime',
-        value,
-        message: 'Invalid date time format'
-      }))
-    );
-  },
-
-  /**
-   * Check if user is active
-   */
-  isUserActive: (isActive: boolean): boolean => {
-    return isActive;
-  },
-
-  /**
-   * Check if user is admin
-   */
-  isAdmin: (role: string): boolean => {
-    return role === 'admin';
-  },
-};
+  /** Profile Image: optional string (<=500 chars) */
+  static readonly ValidProfileImage = S.filter(
+    (image: string) => typeof image === "string" && image.length <= 500,
+    { message: () => "Profile image URL cannot exceed 500 characters" }
+  )
+}

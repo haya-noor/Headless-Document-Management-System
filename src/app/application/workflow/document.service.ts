@@ -19,12 +19,12 @@ interface UploadedFile {
   size: number;
 }
 import { DocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../interfaces/document.interface';
-import { Repository } from '../interfaces/base.interface';
+import { Repository } from "../shared/errors";
 import { IStorageService } from '../interfaces/storage.interface';
 import { storageService } from '../../infrastructure/storage/storage.factory';
 // Logger removed - no longer needed for domain-focused project
 import { DocumentEntity } from '../../domain/document/entity';
-import { DocumentVersionEntity } from '../../domain/document-version/entity';
+import { DocumentVersionEntity } from '../../domain/d-version/entity';
 import { DocumentIdVO, ChecksumVO, FileReferenceVO, DateTimeVO } from '../domain/value-objects';
 import { DocumentValidationError, DocumentNotFoundError } from '../domain/errors';
 

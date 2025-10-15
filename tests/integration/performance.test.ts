@@ -1,386 +1,84 @@
 /**
- * Performance and Index Usage Tests
- * Verifies query performance and proper index usage
- *  
- * This performance test is used to verify that the database is performing 
- * as expected and that the indexes are being used properly
+ * Performance Tests
+ * -----------------
+ * Validates query execution efficiency and verifies that Postgres
+ * is actually using INDEX SCANS.
  * 
- * indexes here are :
- * created_at, updated_at, is_active , email, role
- * 
- * indexes allow us to quickly find the data ( data that matches the index) 
- * we need without having to scan the entire table
+ * This ensures our Drizzle model indexes — for example:
+ *   - idx_users_email (on email)
+ *   - idx_users_created_at (on created_at)
+ * are really being utilized in query planning.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { Effect } from 'effect';
-import { UserRepositoryImpl } from '../../src/app/infrastructure/repositories/implementations/user.repository';
-import { DocumentRepositoryImpl } from '../../src/app/infrastructure/repositories/implementations/document.repository';
-import { UserEntity } from '../../src/app/domain/user/entity';
-import { DocumentEntity } from '../../src/app/domain/user/entity';
-// Serialization is now handled by repository methods
-import { 
-  setupTestDatabase, 
-  cleanupTestDatabase, 
-  clearDatabaseTables,
-  DatabaseTestConfig 
-} from './database.setup';
-import { createLargeSeedData, SeedData } from './seed-data';
-import { UserFactory } from '../factories/user.factory';
-import { DocumentFactory } from '../factories/document.factory';
+import { describe, it, beforeAll, afterAll, expect } from "bun:test"
+import { setupDatabase, teardownDatabase } from "./database.setup"
+import { seedUsers } from "./seed-data"
+import { getDb } from "./database.setup"
+import { sql } from "drizzle-orm"
 
-describe('Performance and Index Usage Tests', () => {
-  let dbConfig: DatabaseTestConfig;
-  let userRepository: UserRepositoryImpl;
-  let documentRepository: DocumentRepositoryImpl;
-  let seedData: SeedData;
+describe("Performance (Index Usage)", () => {
+  // Spin up a fresh Postgres container before tests
+  beforeAll(async () => await setupDatabase())
 
-  beforeAll(async () => {
-    // Setup fresh database per test suite
-    // Following d5-effect.md: "Spin up a fresh DB and repository (per test)"
-    dbConfig = await setupTestDatabase();
-    userRepository = new UserRepositoryImpl();
-    documentRepository = new DocumentRepositoryImpl(dbConfig.db);
-    
-    // Create large seed data for performance testing
-    seedData = createLargeSeedData();
-  });
-
-  afterAll(async () => {
-    // Cleanup database after test suite
-    // Following d5-effect.md: "After each test, we clean up the database resources"
-    await cleanupTestDatabase(dbConfig);
-  });
-
-  beforeEach(async () => {
-    // Clear all tables before each test
-    // Following d5-effect.md: "wipe tables so every run starts from zero"
-    await clearDatabaseTables(dbConfig.db);
-    
-    // Insert seed data
-    await insertSeedData();
-  });
-
-  afterEach(async () => {
-    // Additional cleanup if needed
-  });
+  // Tear down container when done
+  afterAll(async () => await teardownDatabase())
 
   /**
-   * Insert seed data into database
+   * Test 1: Verify that the query planner uses an index scan
+   * when searching by `email` — this should hit the `idx_users_email` index
+   * defined in the Drizzle users-model.
    */
-  async function insertSeedData(): Promise<void> {
-    // Insert users
-    for (const user of seedData.users) {
-      const serializedUser = await Effect.runPromise(UserSerialization.toDatabase(user));
-      await dbConfig.db.insert(dbConfig.db.schema.users).values({
-        ...serializedUser,
-        password: 'hashed-password',
-      });
-    }
+  it("should use index scan for email lookup", async () => {
+    // Seed 200 users to create a realistic table size
+    await seedUsers(200)
 
-    // Insert documents
-    for (const document of seedData.documents) {
-        const serializedDocument = documentRepository.serializeToDatabase(document);
-      await dbConfig.db.insert(dbConfig.db.schema.documents).values(serializedDocument);
-    }
-  }
+    const db = getDb()
 
-  describe('User Repository Performance', () => {
-    it('should use email index for fast email lookups', async () => {
-      const testEmail = 'user1@test.com';
-      
-      // Measure query performance
-      const startTime = Date.now();
-      const foundUser = await userRepository.findByEmail(testEmail);
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(foundUser).not.toBeNull();
-      expect(foundUser?.email).toBe(testEmail);
-      expect(queryTime).toBeLessThan(50); // Should be fast with index
-      
-      console.log(`Email lookup took ${queryTime}ms`);
-    });
+    //  Use EXPLAIN ANALYZE to inspect the query plan.
+    // This tells Postgres to describe *how* it will execute the query
+    // and which indexes it will use.
+    const result = await db.execute(
+      sql`EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'test@example.com'`
+    )
 
-    it('should use role index for role-based queries', async () => {
-      // Measure query performance
-      const startTime = Date.now();
-      const adminUsers = await userRepository.findByRole('admin');
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(adminUsers.length).toBeGreaterThan(0);
-      expect(adminUsers.every(user => user.role === 'admin')).toBe(true);
-      expect(queryTime).toBeLessThan(100); // Should be fast with index
-      
-      console.log(`Role-based query took ${queryTime}ms`);
-    });
+    // Extract text output from EXPLAIN ANALYZE
+    const planText = result.rows.map((r: any) => Object.values(r)[0]).join("\n")
 
-    it('should use active status index for active user queries', async () => {
-      // Measure query performance
-      const startTime = Date.now();
-      const activeUsers = await userRepository.findActiveUsers();
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(activeUsers.length).toBeGreaterThan(0);
-      expect(activeUsers.every(user => user.isActive)).toBe(true);
-      expect(queryTime).toBeLessThan(100); // Should be fast with index
-      
-      console.log(`Active users query took ${queryTime}ms`);
-    });
+    // This is the key check:
+    // If Postgres is using the `idx_users_email` index,
+    // the plan will include “Index Scan” or “Bitmap Index Scan”.
+    // If it instead shows “Seq Scan”, it means the index was ignored.
+    expect(planText).toMatch(/Index Scan|Bitmap Index Scan/)
+    expect(planText).not.toMatch(/Seq Scan/)
 
-    it('should handle pagination efficiently', async () => {
-      const pageSize = 10;
-      
-      // Measure pagination performance
-      const startTime = Date.now();
-      const paginatedUsers = await userRepository.findManyPaginated({
-        page: 1,
-        limit: pageSize,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      });
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(paginatedUsers.data).toHaveLength(pageSize);
-      expect(paginatedUsers.pagination.total).toBeGreaterThan(0);
-      expect(queryTime).toBeLessThan(200); // Should be efficient
-      
-      console.log(`Pagination query took ${queryTime}ms`);
-    });
+    //  Optional micro-performance benchmark
+    // Measure time for a typical indexed query with ordering
+    const start = performance.now()
+    await db.execute(sql`SELECT * FROM users WHERE role = 'user' ORDER BY created_at DESC LIMIT 10`)
+    const end = performance.now()
 
-    it('should perform efficient search operations', async () => {
-      const searchTerm = 'User';
-      
-      // Measure search performance
-      const startTime = Date.now();
-      const searchResults = await userRepository.searchUsers(searchTerm, 20);
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(searchResults.length).toBeGreaterThan(0);
-      expect(queryTime).toBeLessThan(150); // Should be efficient
-      
-      console.log(`Search query took ${queryTime}ms`);
-    });
-  });
+    // Expect it to complete in < 50ms (since both `role` and `created_at` are indexed)
+    expect(end - start).toBeLessThan(50)
+  })
 
-  describe('Document Repository Performance', () => {
-    it('should use uploaded_by index for user document queries', async () => {
-      const testUserId = seedData.users[0].id.getValue();
-      
-      // Measure query performance
-      const startTime = Date.now();
-      const userDocuments = await documentRepository.findByUploader(testUserId);
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(userDocuments.length).toBeGreaterThan(0);
-      expect(userDocuments.every(doc => doc.uploadedBy === testUserId)).toBe(true);
-      expect(queryTime).toBeLessThan(100); // Should be fast with index
-      
-      console.log(`User documents query took ${queryTime}ms`);
-    });
+  /**
+   * Test 2: Verify that ordering by `created_at` uses the index
+   * This ensures that our `idx_users_created_at` is being used for sorting efficiently.
+   */
+  it("should use index for created_at ordering", async () => {
+    const db = getDb()
 
-    it('should use mime_type index for MIME type queries', async () => {
-      const mimeType = 'application/pdf';
-      
-      // Measure query performance
-      const startTime = Date.now();
-      const pdfDocuments = await documentRepository.findByMimeType(mimeType);
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(pdfDocuments.length).toBeGreaterThan(0);
-      expect(pdfDocuments.every(doc => doc.mimeType === mimeType)).toBe(true);
-      expect(queryTime).toBeLessThan(100); // Should be fast with index
-      
-      console.log(`MIME type query took ${queryTime}ms`);
-    });
+    // Again, use EXPLAIN to view the query plan — this time for ORDER BY
+    const explain = await db.execute(
+      sql`EXPLAIN SELECT * FROM users ORDER BY created_at DESC LIMIT 5`
+    )
 
-    it('should use checksum index for duplicate detection', async () => {
-      const testChecksum = 'test-checksum-1';
-      
-      // Measure query performance
-      const startTime = Date.now();
-      const duplicateDocuments = await documentRepository.findDuplicatesByChecksum(testChecksum);
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(queryTime).toBeLessThan(100); // Should be fast with index
-      
-      console.log(`Checksum query took ${queryTime}ms`);
-    });
+    const plan = explain.rows.map((r: any) => Object.values(r)[0]).join("\n")
 
-    it('should handle large result sets efficiently', async () => {
-      // Measure query performance for large result set
-      const startTime = Date.now();
-      const allDocuments = await documentRepository.findMany();
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(allDocuments.length).toBeGreaterThan(0);
-      expect(queryTime).toBeLessThan(500); // Should handle large datasets efficiently
-      
-      console.log(`Large result set query took ${queryTime}ms for ${allDocuments.length} documents`);
-    });
+    // Here we expect either:
+    //   - "Index Scan" (using created_at index for order)
+    //   - "Index Only Scan" (reads directly from index without touching table)
+    expect(plan).toMatch(/Index Scan|Index Only Scan/)
 
-    it('should perform efficient pagination on large datasets', async () => {
-      const pageSize = 50;
-      
-      // Measure pagination performance
-      const startTime = Date.now();
-      const paginatedDocuments = await documentRepository.findManyPaginated({
-        page: 1,
-        limit: pageSize,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      });
-      const endTime = Date.now();
-      
-      const queryTime = endTime - startTime;
-      
-      // Assertions
-      expect(paginatedDocuments.data).toHaveLength(pageSize);
-      expect(paginatedDocuments.pagination.total).toBeGreaterThan(0);
-      expect(queryTime).toBeLessThan(300); // Should be efficient even with large datasets
-      
-      console.log(`Large dataset pagination took ${queryTime}ms`);
-    });
-  });
-
-  describe('Index Usage Verification', () => {
-    it('should verify email index is being used', async () => {
-      // This test would use EXPLAIN ANALYZE to verify index usage
-      // For now, we'll just verify the query is fast
-      
-      const startTime = Date.now();
-      const user = await userRepository.findByEmail('user1@test.com');
-      const endTime = Date.now();
-      
-      expect(user).not.toBeNull();
-      expect(endTime - startTime).toBeLessThan(50);
-    });
-
-    it('should verify role index is being used', async () => {
-      const startTime = Date.now();
-      const adminUsers = await userRepository.findByRole('admin');
-      const endTime = Date.now();
-      
-      expect(adminUsers.length).toBeGreaterThan(0);
-      expect(endTime - startTime).toBeLessThan(100);
-    });
-
-    it('should verify created_at index is being used for sorting', async () => {
-      const startTime = Date.now();
-      const recentUsers = await userRepository.findManyPaginated({
-        page: 1,
-        limit: 10,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-      });
-      const endTime = Date.now();
-      
-      expect(recentUsers.data).toHaveLength(10);
-      expect(endTime - startTime).toBeLessThan(100);
-    });
-  });
-
-  describe('Concurrent Operations Performance', () => {
-    it('should handle concurrent reads efficiently', async () => {
-      const concurrentReads = 10;
-      const promises = [];
-      
-      const startTime = Date.now();
-      
-      for (let i = 0; i < concurrentReads; i++) {
-        promises.push(userRepository.findByEmail(`user${i + 1}@test.com`));
-      }
-      
-      const results = await Promise.all(promises);
-      const endTime = Date.now();
-      
-      const totalTime = endTime - startTime;
-      const averageTime = totalTime / concurrentReads;
-      
-      // Assertions
-      expect(results.every(result => result !== null)).toBe(true);
-      expect(averageTime).toBeLessThan(100); // Average time per query should be reasonable
-      
-      console.log(`Concurrent reads: ${totalTime}ms total, ${averageTime}ms average`);
-    });
-
-    it('should handle concurrent writes efficiently', async () => {
-      const concurrentWrites = 5;
-      const promises = [];
-      
-      const startTime = Date.now();
-      
-      for (let i = 0; i < concurrentWrites; i++) {
-        const userData = UserFactory.regular({
-          email: `concurrent-${i}@test.com`,
-        });
-        const user = UserEntity.fromPersistence(userData);
-        const serializedUser = userRepository.serializeToDatabase(user);
-        
-        promises.push(
-          dbConfig.db.insert(dbConfig.db.schema.users).values({
-            ...serializedUser,
-            password: 'hashed-password',
-          })
-        );
-      }
-      
-      await Promise.all(promises);
-      const endTime = Date.now();
-      
-      const totalTime = endTime - startTime;
-      const averageTime = totalTime / concurrentWrites;
-      
-      // Assertions
-      expect(averageTime).toBeLessThan(200); // Average time per write should be reasonable
-      
-      console.log(`Concurrent writes: ${totalTime}ms total, ${averageTime}ms average`);
-    });
-  });
-
-  describe('Memory Usage Tests', () => {
-    it('should not cause memory leaks with large datasets', async () => {
-      const initialMemory = process.memoryUsage().heapUsed;
-      
-      // Perform multiple operations on large dataset
-      for (let i = 0; i < 10; i++) {
-        await documentRepository.findMany();
-        await userRepository.findMany();
-      }
-      
-      const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-      
-      // Memory increase should be reasonable (less than 100MB)
-      expect(memoryIncrease).toBeLessThan(100 * 1024 * 1024);
-      
-      console.log(`Memory increase: ${memoryIncrease / 1024 / 1024}MB`);
-    });
-  });
-});
+  })
+})

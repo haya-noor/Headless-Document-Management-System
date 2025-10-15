@@ -15,9 +15,9 @@ import { Effect } from 'effect';
 import { AccessPolicyEntity, PolicySubjectType, PolicyResourceType } from '../../domain/access-policy/entity';
 import { PolicyIdVO } from '../../domain/access-policy/id';
 import { UserIdVO } from '../../domain/user/id';
-import { DocumentIdVO } from '../../domain/document/id';
+import { DocumentIdVO } from '../../domain/shared/uuid';
 import { AccessPolicyRepository, CreateAccessPolicyDTO, UpdateAccessPolicyDTO, AccessPolicyFilterDTO } from '../interfaces/access-policy.interface';
-import { ValidationError, NotFoundError, ConflictError } from '../../domain/shared/base.interface';
+import { ValidationError, NotFoundError, ConflictError } from "../shared/errors";
 
 export class AccessPolicyService {
   constructor(

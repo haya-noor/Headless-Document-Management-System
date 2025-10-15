@@ -7,8 +7,9 @@ import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { Effect, Option } from 'effect';
 import { databaseService } from '../../../application/workflow';
-import { users } from '../../database/models/schema';
-import { User, PaginationParams, PaginatedResponse } from '../../../application/interfaces';
+import { users } from '../../database/models';
+import { User } from '../../../application/interfaces';
+import { PaginationParams, PaginatedResponse } from '../../../domain/shared/api.interface';
 import { UserRole } from '../../../application/types';
 import {
   UserRepository,
@@ -16,7 +17,16 @@ import {
   UpdateUserDTO,
   UserFilterDTO,
 } from '../../../application/interfaces/user.interface';
+import { Repository } from '../../../domain/shared/errors';
 import { UserEntity } from '../../../domain/user/entity';
+
+// DTO types for user repository
+export interface UserFiltersDTO {
+  email?: string;
+  role?: UserRole;
+  isActive?: boolean;
+  search?: string;
+}
 
 /**
  * User repository implementation

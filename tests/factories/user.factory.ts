@@ -1,154 +1,123 @@
 /**
- * User Entity Test Factory
- * Follows w3-effect.md factory patterns with faker-based data generation
+ * User Factory
+ * ------------
+ * Generates valid User domain entities using Effect + faker
+ * Aligned with schema and Option-based structure in your domain.
  */
 
-import { Effect } from 'effect';
-import { faker } from '@faker-js/faker';
-import { UserEntity, UserRole } from '../../src/app/domain/user/entity';
+import { Effect as E, Option as O } from "effect"
+import { faker } from "../setup"
+import * as fc from "fast-check"
+import { UserEntity } from "../../src/app/domain/user/entity"
+import { UserValidationError } from "../../src/app/domain/user/errors"
+import { makeUserIdSync } from "../../src/app/domain/shared/uuid"
+import { type SerializedUser } from "../../src/app/domain/user/entity"
 
 /**
- * User factory data type
+ * Generators for User fields
  */
-type UserFactoryData = {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'admin' | 'user';
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-/**
- * Rule 6: Base Generator Function
- * Type-safe generation with override capabilities using Faker
- */
-export function generateUser(overrides?: Partial<UserFactoryData>): UserFactoryData {
-  const baseData: UserFactoryData = {
-    id: faker.string.uuid(),
-    email: faker.internet.email(),
-    firstName: faker.person.firstName(),
-    lastName: faker.person.lastName(),
-    role: faker.helpers.arrayElement(['user', 'admin'] as const),
-    isActive: faker.datatype.boolean(),
-    createdAt: faker.date.past(),
-    updatedAt: faker.date.recent(),
-  };
-
-  return {
-    ...baseData,
-    ...overrides,
-  };
+const userGenerators = {
+  id: () => makeUserIdSync(faker.string.uuid()),
+  email: () => faker.internet.email().toLowerCase(),
+  firstName: () => faker.person.firstName(),
+  lastName: () => faker.person.lastName(),
+  role: () => faker.helpers.arrayElement(["admin", "user"]) as "admin" | "user",
+  isActive: () => faker.datatype.boolean(),
+  dateOfBirth: () => faker.date.birthdate({ min: 1970, max: 2000, mode: "year" }).toISOString(),
+  phoneNumber: () => faker.phone.number(),
+  profileImage: () => faker.image.avatar(),
+  createdAt: () => faker.date.past({ years: 1 }).toISOString(),
+  updatedAt: () => faker.date.recent().toISOString(),
 }
 
 /**
- * Rule 7: Scenario-Based Helper Methods
- * Convenient presets for common testing scenarios
+ * Base generator for serialized User
  */
-export const UserFactory = {
-  /**
-   * Generate a regular user with default settings
-   */
-  regular: (overrides?: Partial<UserFactoryData>): UserFactoryData =>
-    generateUser({ role: 'user', isActive: true, ...overrides }),
+export const generateTestUser = (overrides: Partial<SerializedUser> = {}): SerializedUser => {
+  const withDOB = faker.datatype.boolean()
+  const withPhone = faker.datatype.boolean()
+  const withImage = faker.datatype.boolean()
+  const withUpdated = faker.datatype.boolean()
 
-  /**
-   * Generate an admin user
-   */
-  admin: (overrides?: Partial<UserFactoryData>): UserFactoryData =>
-    generateUser({ role: 'admin', isActive: true, ...overrides }),
-
-  /**
-   * Generate an inactive user
-   */
-  inactive: (overrides?: Partial<UserFactoryData>): UserFactoryData =>
-    generateUser({ isActive: false, ...overrides }),
-
-  /**
-   * Generate multiple users
-   */
-  many: (count: number, overrides?: Partial<UserFactoryData>): UserFactoryData[] =>
-    Array.from({ length: count }, () => generateUser(overrides)),
-
-  /**
-   * Generate with specific email domain
-   */
-  withDomain: (domain: string, overrides?: Partial<UserFactoryData>): UserFactoryData => {
-    const email = `${faker.internet.username()}@${domain}`;
-    return generateUser({ email, ...overrides });
-  },
-};
+  return {
+    id: userGenerators.id(),
+    email: userGenerators.email(),
+    firstName: userGenerators.firstName(),
+    lastName: userGenerators.lastName(),
+    role: userGenerators.role(),
+    isActive: userGenerators.isActive(),
+    dateOfBirth: withDOB ? userGenerators.dateOfBirth() : undefined,
+    phoneNumber: withPhone ? userGenerators.phoneNumber() : undefined,
+    profileImage: withImage ? userGenerators.profileImage() : undefined,
+    createdAt: userGenerators.createdAt(),
+    updatedAt: withUpdated ? userGenerators.updatedAt() : undefined,
+    ...overrides,
+  }
+}
 
 /**
- * Rule 9: Entity Creation Utilities
- * Effect-based utilities for creating domain entities
+ * Generate multiple test users
  */
-export const UserEntityFactory = {
-  /**
-   * Create UserEntity from factory data
-   */
-  create: (overrides?: Partial<UserFactoryData>): Effect.Effect<UserEntity, never, never> => {
-    const data = generateUser(overrides);
-    return Effect.succeed(UserEntity.fromPersistence(data));
-  },
+export const generateTestUsers = (count: number): SerializedUser[] =>
+  Array.from({ length: count }, () => generateTestUser())
 
-  /**
-   * Create admin UserEntity
-   */
-  createAdmin: (overrides?: Partial<UserFactoryData>): Effect.Effect<UserEntity, never, never> => {
-    const data = UserFactory.admin(overrides);
-    return Effect.succeed(UserEntity.fromPersistence(data));
-  },
+/**
+ * Scenario: Admin User
+ */
+export const createAdminUser = (overrides: Partial<SerializedUser> = {}): SerializedUser => ({
+  ...generateTestUser(),
+  role: "admin",
+  ...overrides,
+})
 
-  /**
-   * Create regular user UserEntity
-   */
-  createRegular: (overrides?: Partial<UserFactoryData>): Effect.Effect<UserEntity, never, never> => {
-    const data = UserFactory.regular(overrides);
-    return Effect.succeed(UserEntity.fromPersistence(data));
-  },
+/**
+ * Scenario: Regular User
+ */
+export const createRegularUser = (overrides: Partial<SerializedUser> = {}): SerializedUser => ({
+  ...generateTestUser(),
+  role: "user",
+  ...overrides,
+})
 
-  /**
-   * Create inactive UserEntity
-   */
-  createInactive: (overrides?: Partial<UserFactoryData>): Effect.Effect<UserEntity, never, never> => {
-    const data = UserFactory.inactive(overrides);
-    return Effect.succeed(UserEntity.fromPersistence(data));
-  },
+/**
+ * Scenario: Inactive User
+ */
+export const createInactiveUser = (overrides: Partial<SerializedUser> = {}): SerializedUser => ({
+  ...generateTestUser(),
+  isActive: false,
+  ...overrides,
+})
 
-  /**
-   * Create multiple UserEntities
-   */
-  createMany: (count: number, overrides?: Partial<UserFactoryData>): Effect.Effect<UserEntity[], never, never> => {
-    const users = UserFactory.many(count, overrides).map(data => 
-      UserEntity.fromPersistence(data)
-    );
-    return Effect.succeed(users);
-  },
+/**
+ * Create validated UserEntity
+ */
+export const createTestUserEntity = (
+  overrides: Partial<SerializedUser> = {}
+): E.Effect<UserEntity, UserValidationError> =>
+  UserEntity.create(generateTestUser(overrides)).pipe(
+    E.mapError(
+      (err) =>
+        new UserValidationError(
+          "User",
+          overrides,
+          (err as Error).message || "Failed to create UserEntity"
+        )
+    )
+  )
 
-  /**
-   * Create synchronously (for tests that don't use Effect)
-   */
-  createSync: (overrides?: Partial<UserFactoryData>): UserEntity => {
-    const data = generateUser(overrides);
-    return UserEntity.fromPersistence(data);
-  },
-
-  /**
-   * Create admin synchronously
-   */
-  createAdminSync: (overrides?: Partial<UserFactoryData>): UserEntity => {
-    const data = UserFactory.admin(overrides);
-    return UserEntity.fromPersistence(data);
-  },
-
-  /**
-   * Create regular user synchronously
-   */
-  createRegularSync: (overrides?: Partial<UserFactoryData>): UserEntity => {
-    const data = UserFactory.regular(overrides);
-    return UserEntity.fromPersistence(data);
-  },
-};
+/**
+ * Fast-check generator for property-based testing
+ */
+export const userArbitrary = fc.record({
+  id: fc.uuid(),
+  email: fc.emailAddress(),
+  firstName: fc.string({ minLength: 1, maxLength: 100 }),
+  lastName: fc.string({ minLength: 1, maxLength: 100 }),
+  role: fc.constantFrom("admin", "user"),
+  isActive: fc.boolean(),
+  dateOfBirth: fc.oneof(fc.constant(undefined), fc.date().map(d => d.toISOString())),
+  phoneNumber: fc.oneof(fc.constant(undefined), fc.string()),
+  profileImage: fc.oneof(fc.constant(undefined), fc.string()),
+  createdAt: fc.date().map(d => d.toISOString()),
+  updatedAt: fc.oneof(fc.constant(undefined), fc.date().map(d => d.toISOString())),
+})

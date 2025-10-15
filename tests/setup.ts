@@ -1,41 +1,35 @@
 /**
- * Jest Setup File
- * Global test configuration and setup
+ * Global test setup
+ * -----------------
+ * - Initializes Effect runtime
+ * - Configures faker + fast-check for reproducible randomness
+ * - Exports shared helpers for domain and integration tests
  */
 
-import { beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { Effect, Layer, Context } from "effect"
+import { faker } from "@faker-js/faker"
+import fc from "fast-check"
 
-// Global test timeout
-const TEST_TIMEOUT = 30000;
+// Deterministic randomization — ensures reproducible tests
+faker.seed(42)
+fc.configureGlobal({ numRuns: 50, endOnFailure: true })
 
-// Setup global test environment
-beforeAll(async () => {
-  // Set test timeout
-  if (typeof globalThis.setTimeout !== 'undefined') {
-    globalThis.setTimeout(TEST_TIMEOUT);
+// Effect test runtime (used via Effect.runPromise)
+export const runEffect = async <A, E>(fx: Effect.Effect<A, E, never>): Promise<A> =>
+  await Effect.runPromise(fx)
+
+// Helper for generating random UUIDs
+export const randomUuid = (): string => faker.string.uuid()
+
+// Helper for generating random date (within last 10 years)
+export const randomDate = (): Date =>
+  faker.date.between({ from: "2015-01-01T00:00:00.000Z", to: new Date().toISOString() })
+
+// Shared test logger (optional)
+export const testLogger = (scope: string, ...args: any[]) => {
+  if (process.env.DEBUG_TESTS === "true") {
+    console.log(`[${scope}]`, ...args)
   }
-  
-  console.log('🧪 Test environment initialized');
-});
+}
 
-afterAll(async () => {
-  console.log('🧹 Test environment cleaned up');
-});
-
-// Global error handling for unhandled promises
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Global error handling for uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-});
-
-// Clean up after each test
-afterEach(() => {
-  // Clear any timers
-  if (typeof globalThis.clearTimeout !== 'undefined') {
-    globalThis.clearTimeout();
-  }
-});
+export { faker, fc }

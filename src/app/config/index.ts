@@ -7,10 +7,10 @@
 import { serverConfig } from './server.config';
 import { databaseConfig } from './database.config';
 import { jwtConfig } from './jwt.config';
-import { storageConfig } from './storage.config';
 import { uploadConfig } from './upload.config';
 import { paginationConfig } from './pagination.config';
 import { securityConfig } from './security.config';
+import { storageConfig } from './storage.config';
 
 /**
  * Unified application configuration object
@@ -20,10 +20,10 @@ export const config = {
   server: serverConfig,
   database: databaseConfig,
   jwt: jwtConfig,
-  storage: storageConfig,
   upload: uploadConfig,
   pagination: paginationConfig,
   security: securityConfig,
+  storage: storageConfig,
 } as const;
 
 /**
@@ -59,13 +59,13 @@ export function validateConfig(): void {
 }
 
 // Export individual config sections for convenience
-export const { server, database, jwt, storage, upload, pagination, security } = config;
+export const { server, database, jwt, upload, pagination, security, storage } = config;
 
 // Re-export individual configs for direct access
 export { serverConfig } from './server.config';
 export { databaseConfig } from './database.config';
 export { jwtConfig } from './jwt.config';
-export { storageConfig } from './storage.config';
 export { uploadConfig } from './upload.config';
 export { paginationConfig } from './pagination.config';
 export { securityConfig } from './security.config';
+export { storageConfig } from './storage.config';

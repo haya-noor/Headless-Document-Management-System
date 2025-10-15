@@ -1,265 +1,160 @@
 /**
- * AccessPolicy Entity Test Factory
- * Follows w3-effect.md factory patterns with faker-based data generation
+ * Access Policy Factory
+ * ---------------------
+ * Builds valid AccessPolicy entities and serialized inputs for testing
+ * Consistent with Effect-based domain models and schema definitions
  */
 
-import { Effect } from 'effect';
-import { faker } from '@faker-js/faker';
-import { 
-  AccessPolicyEntity, 
-  PermissionAction, 
-  PolicySubjectType, 
-  PolicyResourceType
-} from '../../src/app/domain/access-policy/entity';
+import { Effect as E } from "effect"
+import { faker } from "../setup"
+import * as fc from "fast-check"
+import { AccessPolicyEntity } from "../../src/app/domain/access-policy/entity"
+import { AccessPolicyValidationError } from "../../src/app/domain/access-policy/errors"
+import { type AccessPolicy } from "../../src/app/domain/access-policy/schema"
+import {
+  AccessPolicyId,
+  DocumentId,
+  UserId,
+  makeAccessPolicyIdSync,
+  makeUserIdSync,
+  makeDocumentIdSync,
+} from "../../src/app/domain/shared/uuid"
 
 /**
- * AccessPolicy factory data type
+ * Reusable random generators for AccessPolicy test data
  */
-type AccessPolicyFactoryData = {
-  id: string;
-  name: string;
-  description: string;
-  subjectType: 'user' | 'role';
-  subjectId: string;
-  resourceType: 'document' | 'user';
-  resourceId?: string;
-  actions: string[];
-  isActive: boolean;
-  priority: number;
-  createdAt: Date;
-  updatedAt: Date;
-};
+const accessPolicyGenerators = {
+  id: () => makeAccessPolicyIdSync(faker.string.uuid()),
+  resourceId: () => makeDocumentIdSync(faker.string.uuid()),
+  subjectId: () => makeUserIdSync(faker.string.uuid()),
 
-/**
- * Rule 6: Base Generator Function using Faker
- */
-export function generateAccessPolicy(overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData {
-  const baseData: AccessPolicyFactoryData = {
-    id: faker.string.uuid(),
-    name: faker.company.catchPhrase(), 
-    description: faker.lorem.sentence(),
-    subjectType: faker.helpers.arrayElement(['user', 'role'] as const),
-    subjectId: faker.helpers.arrayElement([faker.string.uuid(), 'admin', 'user', 'guest']),
-    resourceType: faker.helpers.arrayElement(['document', 'user'] as const),
-    resourceId: faker.helpers.maybe(() => faker.string.uuid(), { probability: 0.5 }),
-    actions: faker.helpers.arrayElements(
-      ['read', 'write', 'delete', 'manage'],
-      { min: 1, max: 4 }
-    ),
-    isActive: faker.datatype.boolean(),
-    priority: faker.number.int({ min: 1, max: 1000 }),
-    createdAt: faker.date.past(),
-    updatedAt: faker.date.recent(),
-  };
+  actions: {
+    read: () => ["read"] as const,
+    write: () => ["read", "write"] as const,
+    admin: () => ["read", "write", "delete", "manage"] as const,
+    random: () => {
+      const all = ["read", "write", "delete", "manage"] as const
+      const count = faker.number.int({ min: 1, max: all.length })
+      return faker.helpers.arrayElements(all, count)
+    },
+  },
 
-  return {
-    // ...baseData is a spread operator that spreads the baseData object into the new object
-    // ...overrides is a spread operator that spreads the overrides object into the new object
-    ...baseData,
-    ...overrides,
-  };
+  subjectType: () => faker.helpers.arrayElement(["user", "role"] as const),
+  createdAt: () => faker.date.past({ years: 1 }),
+  updatedAt: () => faker.date.recent({ days: 10 }),
+  isActive: () => faker.datatype.boolean(),
+  priority: () => faker.number.int({ min: 1, max: 1000 }),
 }
 
 /**
- * Rule 7: Scenario-Based Helper Methods
+ * Generate a valid AccessPolicy (serialized form)
  */
-export const AccessPolicyFactory = {
-  /**
-   * Generate user-specific policy (high priority)
-   */
-  userSpecific: (userId: string, actions: PermissionAction[], overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      subjectType: 'user',
-      subjectId: userId,
-      resourceType: 'document',
-      actions: actions as string[],
-      priority: 10,
-      isActive: true,
-      ...overrides
-    }),
+export const generateAccessPolicy = (
+  overrides: Partial<AccessPolicy> = {}
+): AccessPolicy => {
+  const subjectType = overrides.subjectType ?? accessPolicyGenerators.subjectType()
 
-  /**
-   * Generate role-based policy (lower priority)
-   */
-  roleBased: (role: string, actions: PermissionAction[], overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      subjectType: 'role',
-      subjectId: role,
-      resourceType: 'document',
-      actions: actions as string[],
-      priority: 50,
-      isActive: true,
-      ...overrides
-    }),
+  const base: AccessPolicy = {
+    id: accessPolicyGenerators.id(),
+    name: faker.lorem.words({ min: 2, max: 5 }),
+    description: faker.lorem.sentence(),
+    resourceType: "document",
+    resourceId: accessPolicyGenerators.resourceId(),
+    subjectType,
+    subjectId: accessPolicyGenerators.subjectId(),
+    actions: accessPolicyGenerators.actions.random(),
+    isActive: accessPolicyGenerators.isActive(),
+    priority: accessPolicyGenerators.priority(),
+    createdAt: accessPolicyGenerators.createdAt(),
+    updatedAt: accessPolicyGenerators.updatedAt(),
+  }
 
-  /**
-   * Generate read-only policy
-   */
-  readOnly: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      actions: ['read'],
-      isActive: true,
-      ...overrides
-    }),
-
-  /**
-   * Generate full access policy (all actions)
-   */
-  fullAccess: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      actions: ['read', 'write', 'delete', 'manage'],
-      isActive: true,
-      ...overrides
-    }),
-
-  /**
-   * Generate document-specific policy
-   */
-  forDocument: (documentId: string, actions: PermissionAction[], overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      resourceType: 'document',
-      resourceId: documentId,
-      actions: actions as string[],
-      isActive: true,
-      ...overrides
-    }),
-
-  /**
-   * Generate global policy (applies to all resources of type)
-   */
-  global: (resourceType: PolicyResourceType, actions: PermissionAction[], overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({
-      resourceType: resourceType as 'document' | 'user',
-      resourceId: undefined,
-      actions: actions as string[],
-      isActive: true,
-      ...overrides
-    }),
-
-  /**
-   * Generate inactive policy
-   */
-  inactive: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    generateAccessPolicy({ isActive: false, ...overrides }),
-
-  /**
-   * Generate multiple policies
-   */
-  many: (count: number, overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData[] =>
-    Array.from({ length: count }, () => generateAccessPolicy(overrides)),
-
-  /**
-   * Generate admin role policy
-   */
-  adminRole: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    AccessPolicyFactory.roleBased('admin', [
-      PermissionAction.READ,
-      PermissionAction.WRITE,
-      PermissionAction.DELETE,
-      PermissionAction.MANAGE
-    ], { priority: 1, ...overrides }),
-
-  /**
-   * Generate user role policy (read/write only)
-   */
-  userRole: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyFactoryData =>
-    AccessPolicyFactory.roleBased('user', [
-      PermissionAction.READ,
-      PermissionAction.WRITE
-    ], { priority: 100, ...overrides }),
-};
+  return { ...base, ...overrides }
+}
 
 /**
- * Rule 9: Entity Creation Utilities
+ * Create a valid AccessPolicyEntity (Effect-based)
  */
-export const AccessPolicyEntityFactory = {
-  /**
-   * Create AccessPolicyEntity from factory data
-   */
-  create: (overrides?: Partial<AccessPolicyFactoryData>): Effect.Effect<AccessPolicyEntity, never, never> => {
-    const data = generateAccessPolicy(overrides);
-    return Effect.succeed(AccessPolicyEntity.fromPersistence(data));
-  },
+export const createAccessPolicyEntity = (
+  overrides: Partial<AccessPolicy> = {}
+): E.Effect<AccessPolicyEntity, AccessPolicyValidationError> =>
+  AccessPolicyEntity.create(generateAccessPolicy(overrides)).pipe(
+    E.mapError(
+      (err) =>
+        new AccessPolicyValidationError(
+          "AccessPolicy",
+          overrides,
+          (err as Error).message || "Failed to create AccessPolicyEntity"
+        )
+    )
+  )
 
-  /**
-   * Create user-specific AccessPolicyEntity
-   */
-  createUserSpecific: (
-    userId: string,
-    actions: PermissionAction[],
-    overrides?: Partial<AccessPolicyFactoryData>
-  ): Effect.Effect<AccessPolicyEntity, never, never> => {
-    const data = AccessPolicyFactory.userSpecific(userId, actions, overrides);
-    return Effect.succeed(AccessPolicyEntity.fromPersistence(data));
-  },
+/**
+ * Predefined Scenarios
+ */
+export const createUserReadPolicy = (
+  userId: UserId,
+  documentId: DocumentId
+): AccessPolicy =>
+  generateAccessPolicy({
+    subjectType: "user",
+    subjectId: userId,
+    resourceId: documentId,
+    actions: accessPolicyGenerators.actions.read(),
+  })
 
-  /**
-   * Create role-based AccessPolicyEntity
-   */
-  createRoleBased: (
-    role: string,
-    actions: PermissionAction[],
-    overrides?: Partial<AccessPolicyFactoryData>
-  ): Effect.Effect<AccessPolicyEntity, never, never> => {
-    const data = AccessPolicyFactory.roleBased(role, actions, overrides);
-    return Effect.succeed(AccessPolicyEntity.fromPersistence(data));
-  },
+export const createUserWritePolicy = (
+  userId: UserId,
+  documentId: DocumentId
+): AccessPolicy =>
+  generateAccessPolicy({
+    subjectType: "user",
+    subjectId: userId,
+    resourceId: documentId,
+    actions: accessPolicyGenerators.actions.write(),
+  })
 
-  /**
-   * Create read-only AccessPolicyEntity
-   */
-  createReadOnly: (overrides?: Partial<AccessPolicyFactoryData>): Effect.Effect<AccessPolicyEntity, never, never> => {
-    const data = AccessPolicyFactory.readOnly(overrides);
-    return Effect.succeed(AccessPolicyEntity.fromPersistence(data));
-  },
+export const createUserAdminPolicy = (
+  userId: UserId,
+  documentId: DocumentId
+): AccessPolicy =>
+  generateAccessPolicy({
+    subjectType: "user",
+    subjectId: userId,
+    resourceId: documentId,
+    actions: accessPolicyGenerators.actions.admin(),
+  })
 
-  /**
-   * Create full access AccessPolicyEntity
-   */
-  createFullAccess: (overrides?: Partial<AccessPolicyFactoryData>): Effect.Effect<AccessPolicyEntity, never, never> => {
-    const data = AccessPolicyFactory.fullAccess(overrides);
-    return Effect.succeed(AccessPolicyEntity.fromPersistence(data));
-  },
+export const createRolePolicy = (
+  subjectId: UserId,
+  documentId: DocumentId
+): AccessPolicy =>
+  generateAccessPolicy({
+    subjectType: "role",
+    subjectId,
+    resourceId: documentId,
+    actions: accessPolicyGenerators.actions.random(),
+  })
 
-  /**
-   * Create multiple AccessPolicyEntities
-   */
-  createMany: (count: number, overrides?: Partial<AccessPolicyFactoryData>): Effect.Effect<AccessPolicyEntity[], never, never> => {
-    const policies = AccessPolicyFactory.many(count, overrides).map(data => 
-      AccessPolicyEntity.fromPersistence(data)
-    );
-    return Effect.succeed(policies);
-  },
-
-  /**
-   * Create synchronously
-   */
-  createSync: (overrides?: Partial<AccessPolicyFactoryData>): AccessPolicyEntity => {
-    const data = generateAccessPolicy(overrides);
-    return AccessPolicyEntity.fromPersistence(data);
-  },
-
-  /**
-   * Create user-specific synchronously
-   */
-  createUserSpecificSync: (
-    userId: string,
-    actions: PermissionAction[],
-    overrides?: Partial<AccessPolicyFactoryData>
-  ): AccessPolicyEntity => {
-    const data = AccessPolicyFactory.userSpecific(userId, actions, overrides);
-    return AccessPolicyEntity.fromPersistence(data);
-  },
-
-  /**
-   * Create role-based synchronously
-   */
-  createRoleBasedSync: (
-    role: string,
-    actions: PermissionAction[],
-    overrides?: Partial<AccessPolicyFactoryData>
-  ): AccessPolicyEntity => {
-    const data = AccessPolicyFactory.roleBased(role, actions, overrides);
-    return AccessPolicyEntity.fromPersistence(data);
-  },
-};
+/**
+Property-based generator for AccessPolicy
+accessPolicyArbitrary generates random valid inputs (matching your schema).
+Each generated input is passed to AccessPolicyEntity.create.
+fast-check automatically re-runs the test dozens or hundreds 
+of times with new random values, ensuring your schema and entity are robust.
+ */
+export const accessPolicyArbitrary = fc.record({
+  id: fc.uuid(),
+  resourceType: fc.constant("document"),
+  resourceId: fc.uuid(),
+  subjectType: fc.constantFrom("user", "role"),
+  subjectId: fc.uuid(),
+  actions: fc.array(fc.constantFrom("read", "write", "delete", "manage"), {
+    minLength: 1,
+    maxLength: 4,
+  }),
+  isActive: fc.boolean(),
+  priority: fc.integer({ min: 1, max: 1000 }),
+  createdAt: fc.date().map((d) => d.toISOString()),
+  updatedAt: fc.date().map((d) => d.toISOString()),
+})

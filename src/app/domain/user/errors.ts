@@ -1,83 +1,53 @@
 /**
- * User domain errors
- * Defines all domain-specific errors for user operations
+ * User domain errors — extending shared repository/domain errors
+ * UserEmailInvalidError covered in shared 
+ * UserNameInvalidError -> schema level validation error using UserGuards.validName
  */
 
-import { Data } from 'effect';
+import { RepositoryError, ValidationError, ConflictError } from "../shared/errors"
+import { BusinessRuleViolationError } from "../shared/errors"
+import { ParseResult } from "effect"
 
-/**
- * Base user error class
- */
-export class UserError extends Data.TaggedError('UserError')<{
-  readonly message: string;
-  readonly code: string;
-}> {}
+export class UserNotFoundError extends RepositoryError {
+  readonly tag = "UserNotFoundError" as const
+  constructor(public readonly field: string, public readonly value: unknown, details?: string) {
+    super(`User not found for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`, "USER_NOT_FOUND")
+  }
+}
 
-/**
- * User not found error
- */
-export class UserNotFoundError extends Data.TaggedError('UserNotFoundError')<{
-  readonly userId: string;
-  readonly message: string;
-}> {}
+export class UserValidationError extends ValidationError {
+  readonly tag = "UserValidationError" as const
+  constructor(public readonly field: string, public readonly value: unknown, details?: string) {
+    super(`User validation failed for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`)
+  }
+  static fromParseError(input: unknown, error: ParseResult.ParseError, field = "User") {
+    return new UserValidationError(field, input, error.message)
+  }
+}
 
-/**
- * User validation error
- */
-export class UserValidationError extends Data.TaggedError('UserValidationError')<{
-  readonly field: string;
-  readonly value: unknown;
-  readonly message: string;
-}> {}
+export class UserAlreadyExistsError extends ConflictError {
+  readonly tag = "UserAlreadyExistsError" as const
+  constructor(field: string, value: unknown, details?: string) {
+    super(`User already exists for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`, field)
+  }
+}
 
-/**
- * User already exists error
- */
-export class UserAlreadyExistsError extends Data.TaggedError('UserAlreadyExistsError')<{
-  readonly email: string;
-  readonly message: string;
-}> {}
+export class UserInactiveError extends BusinessRuleViolationError {
+  constructor(context?: Record<string, unknown>) {
+    super("USER_INACTIVE", "User is inactive", context)
+  }
+}
 
-/**
- * User inactive error
- */
-export class UserInactiveError extends Data.TaggedError('UserInactiveError')<{
-  readonly userId: string;
-  readonly message: string;
-}> {}
+export class UserRoleError extends BusinessRuleViolationError {
+  constructor(context?: Record<string, unknown>) {
+    super("USER_ROLE_ERROR", "Invalid role assignment", context)
+  }
+}
 
-/**
- * User role error
- * requiredRole: the role that is required for the user
- * actualRole: the role that the user has
- */
-export class UserRoleError extends Data.TaggedError('UserRoleError')<{
-  readonly userId: string;
-  readonly requiredRole: string;
-  readonly actualRole: string;
-  readonly message: string;
-}> {}
 
-/**
- * User creation error
- */
-export class UserCreationError extends Data.TaggedError('UserCreationError')<{
-  readonly email: string;
-  readonly message: string;
-}> {}
-
-/**
- * User update error
- */
-export class UserUpdateError extends Data.TaggedError('UserUpdateError')<{
-  readonly userId: string;
-  readonly message: string;
-}> {}
-
-/**
- * User deletion error
- */
-export class UserDeletionError extends Data.TaggedError('UserDeletionError')<{
-  readonly userId: string;
-  readonly message: string;
-}> {}
+export type UserErrorType =
+  | UserNotFoundError
+  | UserValidationError
+  | UserAlreadyExistsError
+  | UserInactiveError
+  | UserRoleError

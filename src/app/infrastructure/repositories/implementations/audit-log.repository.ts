@@ -8,12 +8,32 @@
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 // Removed databaseService import to avoid circular dependency
-import { auditLogs } from '../../database/models/schema';
-import { AuditLog, PaginationParams, PaginatedResponse } from '../../../app/application/interfaces';
-import { AuditAction } from '../../../app/application/types';
-import { Repository } from '../../../app/application/interfaces/base.interface';
+import { auditLogs } from '../../database/models';
+import { AuditLog } from '../../../application/interfaces';
+import { PaginationParams, PaginatedResponse } from '../../../domain/shared/api.interface';
+import { Repository } from '../../../domain/shared/errors';
+import { AuditAction } from '../../../application/types';
 
-export class AuditLogRepository implements Repository<AuditLog, any, any, any> {
+// DTO types for audit log repository
+export interface AuditLogFiltersDTO {
+  documentId?: string;
+  userId?: string;
+  action?: AuditAction;
+  ipAddress?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+export interface CreateAuditLogDTO {
+  documentId?: string;
+  userId: string;
+  action: AuditAction;
+  details?: Record<string, any>;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export class AuditLogRepository {
   private db: any;
 
   constructor(database?: any) {
