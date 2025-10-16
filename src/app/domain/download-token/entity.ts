@@ -20,14 +20,24 @@ export class DownloadTokenEntity {
   readonly updatedAt!: Option.Option<Date>
 
   private constructor(data: DownloadTokenType) {
-    Object.assign(this, data)
+    Object.assign(this, {
+      ...data,
+      usedAt: data.usedAt ? Option.some(data.usedAt) : Option.none()
+    })
   }
 
   static create(input: SerializedDownloadToken): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
     return S.decodeUnknown(DownloadTokenSchema)(input).pipe(
       Effect.map((parsed) => new DownloadTokenEntity(parsed)),
-      Effect.mapError((err) => new DownloadTokenValidationError((err as ParseResult.ParseError).message || "Validation failed")),
-      Effect.provideService(Clock.Clock, Clock.Clock)
+      Effect.catchAll((err) => {
+        if (err._tag === "ParseError") {
+          return Effect.fail(new DownloadTokenValidationError(err.message || "Validation failed"))
+        }
+        if (err._tag === "RepositoryError") {
+          return Effect.fail(new DownloadTokenValidationError(err.message || "Validation failed"))
+        }
+        return Effect.fail(new DownloadTokenValidationError("Validation failed"))
+      })
     )
   }
 
@@ -37,11 +47,26 @@ export class DownloadTokenEntity {
 
     const updated: SerializedDownloadToken = {
       ...this,
-      usedAt: new Date()
+      id: this.id,
+      token: this.token,
+      documentId: this.documentId,
+      issuedTo: this.issuedTo,
+      expiresAt: this.expiresAt.toISOString(),
+      usedAt: new Date().toISOString(),
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: this.updatedAt ? Option.getOrNull(this.updatedAt)?.toISOString() : undefined
     }
     return S.decodeUnknown(DownloadTokenSchema)(updated).pipe(
       Effect.map((parsed) => new DownloadTokenEntity(parsed)),
-      Effect.mapError((err) => new ValidationError((err as ParseResult.ParseError).message || "Validation failed"))
+      Effect.catchAll((err) => {
+        if (err._tag === "ParseError") {
+          return Effect.fail(new ValidationError(err.message || "Validation failed"))
+        }
+        if (err._tag === "RepositoryError") {
+          return Effect.fail(new ValidationError(err.message || "Validation failed"))
+        }
+        return Effect.fail(new ValidationError("Validation failed"))
+      })
     )
   }
 

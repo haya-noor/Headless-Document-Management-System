@@ -7,11 +7,6 @@ export const EmailAddress = S.String.pipe(
   S.filter((value) => value.trim().length > 0, { message: () => "Email cannot be empty" }),
   S.filter((value) => value.length <= 254, { message: () => "Email cannot exceed 254 characters" }),
   S.filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value), { message: () => "Invalid email format" }),
-  S.transform(
-    S.String,
-    (value: string) => value.toLowerCase().trim(),
-    (value: string) => value
-  ),
   S.brand("EmailAddress")
 )
 

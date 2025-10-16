@@ -1,6 +1,7 @@
 import { Option, Schema as S } from "effect"
 import { AccessPolicyGuards } from "./guards"
 import { AccessPolicyId, UserId, DocumentId } from "../shared/uuid"
+import { DateTimeFromAny } from "../shared/date-time"
 
 /**
  * Domain schema
@@ -20,6 +21,25 @@ export const AccessPolicySchema = S.Struct({
   updatedAt: S.optional(S.Date)
 })
 export type AccessPolicy = S.Schema.Type<typeof AccessPolicySchema>
+
+/**
+ * Serialized form (for input/API)
+ */
+export const AccessPolicySerialized = S.Struct({
+  id: AccessPolicyId,
+  name: AccessPolicyGuards.ValidName,
+  description: AccessPolicyGuards.ValidDescription,
+  subjectType: S.Literal("user", "role"),
+  subjectId: UserId,
+  resourceType: S.Literal("document", "user"),
+  resourceId: S.optional(DocumentId),
+  actions: AccessPolicyGuards.ValidActions,
+  isActive: S.Boolean,
+  priority: AccessPolicyGuards.ValidPriority,
+  createdAt: S.String,
+  updatedAt: S.optional(S.String)
+})
+export type AccessPolicySerialized = S.Schema.Type<typeof AccessPolicySerialized>
 
 /**
  * Database row schema (encoded)

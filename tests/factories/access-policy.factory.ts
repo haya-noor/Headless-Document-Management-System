@@ -10,7 +10,7 @@ import { faker } from "../setup"
 import * as fc from "fast-check"
 import { AccessPolicyEntity } from "../../src/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "../../src/app/domain/access-policy/errors"
-import { type AccessPolicy } from "../../src/app/domain/access-policy/schema"
+import { type AccessPolicy, type AccessPolicySerialized } from "../../src/app/domain/access-policy/schema"
 import {
   AccessPolicyId,
   DocumentId,
@@ -40,8 +40,8 @@ const accessPolicyGenerators = {
   },
 
   subjectType: () => faker.helpers.arrayElement(["user", "role"] as const),
-  createdAt: () => faker.date.past({ years: 1 }),
-  updatedAt: () => faker.date.recent({ days: 10 }),
+  createdAt: () => faker.date.past({ years: 1 }).toISOString(),
+  updatedAt: () => faker.date.recent({ days: 10 }).toISOString(),
   isActive: () => faker.datatype.boolean(),
   priority: () => faker.number.int({ min: 1, max: 1000 }),
 }
@@ -50,11 +50,11 @@ const accessPolicyGenerators = {
  * Generate a valid AccessPolicy (serialized form)
  */
 export const generateAccessPolicy = (
-  overrides: Partial<AccessPolicy> = {}
-): AccessPolicy => {
+  overrides: Partial<AccessPolicySerialized> = {}
+): AccessPolicySerialized => {
   const subjectType = overrides.subjectType ?? accessPolicyGenerators.subjectType()
 
-  const base: AccessPolicy = {
+  const base: AccessPolicySerialized = {
     id: accessPolicyGenerators.id(),
     name: faker.lorem.words({ min: 2, max: 5 }),
     description: faker.lorem.sentence(),
@@ -76,7 +76,7 @@ export const generateAccessPolicy = (
  * Create a valid AccessPolicyEntity (Effect-based)
  */
 export const createAccessPolicyEntity = (
-  overrides: Partial<AccessPolicy> = {}
+  overrides: Partial<AccessPolicySerialized> = {}
 ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError> =>
   AccessPolicyEntity.create(generateAccessPolicy(overrides)).pipe(
     E.mapError(

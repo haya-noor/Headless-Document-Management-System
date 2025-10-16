@@ -12,6 +12,6 @@ export const Optional = <A, I, R>(schema: S.Schema<A, I, R>) =>
 export const BaseEntitySchema = <TId>(idSchema: S.Schema<TId>) =>
   S.Struct({
     id: idSchema,
-    createdAt: S.Date,
-    updatedAt: S.optional(S.Date)
+    createdAt: S.DateFromString,
+    updatedAt: S.optional(S.DateFromString)
   })

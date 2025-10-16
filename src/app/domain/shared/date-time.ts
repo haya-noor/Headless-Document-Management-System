@@ -9,11 +9,7 @@ export type DateTime = S.Schema.Type<typeof DateTime>
 /**
  * ISO-8601 string <-> DateTime
  */
-export const DateTimeIso = S.transform(S.String, DateTime, {
-  decode: (value) => new Date(value),
-  encode: (value) => value,
-  strict: false
-})
+export const DateTimeIso = S.DateFromString.pipe(S.brand("DateTime"))
 export type DateTimeIso = S.Schema.Type<typeof DateTimeIso>
 
 /**

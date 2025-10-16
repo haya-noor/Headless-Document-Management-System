@@ -1,5 +1,4 @@
 import { Schema as S, Option } from "effect"
-import { DateTimeFromAny } from "../shared/date-time"
 import { DocumentId, DocumentVersionId, UserId } from "../shared/uuid"
 import { DocumentVersionGuards } from "./guards"
 import { FileKey, FileSize } from "../shared/metadata"
@@ -19,7 +18,7 @@ export const DocumentVersionSchema = S.Struct({
   tags: S.optional(DocumentVersionGuards.ValidTags),
   metadata: S.optional(S.Record({ key: S.String, value: S.Unknown })),
   uploadedBy: UserId,
-  createdAt: DateTimeFromAny
+  createdAt: S.Date
 })
 
 export type DocumentVersion = S.Schema.Type<typeof DocumentVersionSchema>

@@ -27,7 +27,7 @@ import { type SerializedDownloadToken } from "../../src/app/domain/download-toke
  */
 const downloadTokenGenerators = {
   // Unique identifier for token (UUID)
-  id: () => makeDownloadTokenIdSync(faker.string.uuid()),
+  id: () => makeDownloadTokenIdSync(crypto.randomUUID()),
 
   // Random secure token string (base64, 32 bytes → 43-44 chars)
   token: () =>
@@ -38,10 +38,10 @@ const downloadTokenGenerators = {
       .replace(/=/g, ""), // remove padding
 
   // Linked document ID (UUID)
-  documentId: () => makeDocumentIdSync(faker.string.uuid()),
+  documentId: () => makeDocumentIdSync(crypto.randomUUID()),
 
   // The user to whom this token is issued
-  issuedTo: () => makeUserIdSync(faker.string.uuid()),
+  issuedTo: () => makeUserIdSync(crypto.randomUUID()),
 
   // Expiry date (default 5 minutes from now)
   expiresAt: (minutesFromNow = 5) => {
@@ -74,8 +74,8 @@ export const generateTestDownloadToken = (
     documentId: downloadTokenGenerators.documentId(),
     issuedTo: downloadTokenGenerators.issuedTo(),
     expiresAt: downloadTokenGenerators.expiresAt(10), // expires in 10 minutes
-    usedAt: shouldBeUsed ? O.some(downloadTokenGenerators.usedAt()) : O.none(), // Option type usedAt
-    createdAt: new Date(downloadTokenGenerators.createdAt()), // creation date
+    usedAt: shouldBeUsed ? downloadTokenGenerators.usedAt() : undefined, // usedAt as string or undefined
+    createdAt: downloadTokenGenerators.createdAt(), // creation date
     ...overrides, // allow caller to override any field
   }
 }
@@ -95,9 +95,9 @@ export const generateTestDownloadTokens = (count: number): SerializedDownloadTok
  */
 export const createUnusedToken = (overrides: Partial<SerializedDownloadToken> = {}): SerializedDownloadToken => ({
   ...generateTestDownloadToken(),
-  usedAt: O.none(), // explicitly unused
+  usedAt: undefined, // explicitly unused
   expiresAt: downloadTokenGenerators.expiresAt(15), // valid for 15 minutes
-  createdAt: new Date(),
+  createdAt: new Date().toISOString(),
   ...overrides,
 })
 
@@ -114,8 +114,8 @@ export const createUsedToken = (overrides: Partial<SerializedDownloadToken> = {}
 
   return {
     ...generateTestDownloadToken(),
-    createdAt,
-    usedAt: O.some(usedAt), // mark token as used
+    createdAt: createdAt.toISOString(),
+    usedAt: usedAt.toISOString(), // mark token as used
     expiresAt: expiresAt.toISOString(),
     ...overrides,
   }
@@ -133,9 +133,9 @@ export const createExpiredToken = (overrides: Partial<SerializedDownloadToken> =
 
   return {
     ...generateTestDownloadToken(),
-    createdAt,
+    createdAt: createdAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
-    usedAt: O.none(), // not used, but expired
+    usedAt: undefined, // not used, but expired
     ...overrides,
   }
 }
@@ -147,9 +147,9 @@ export const createExpiredToken = (overrides: Partial<SerializedDownloadToken> =
  */
 export const createExpiringSoonToken = (overrides: Partial<SerializedDownloadToken> = {}): SerializedDownloadToken => ({
   ...generateTestDownloadToken(),
-  usedAt: O.none(),
+  usedAt: undefined,
   expiresAt: new Date(Date.now() + 30 * 1000).toISOString(), // expires in 30 seconds
-  createdAt: new Date(Date.now() - 60 * 1000), // created 1 minute ago
+  createdAt: new Date(Date.now() - 60 * 1000).toISOString(), // created 1 minute ago
   ...overrides,
 })
 
@@ -180,13 +180,36 @@ export const createTestDownloadTokenEntity = (
  * for fuzz or property-based testing.
  */
 export const downloadTokenArbitrary = fc.record({
-  id: fc.uuid(), // must always be a valid UUID
-  token: fc.string({ minLength: 32, maxLength: 128 }), // ensure secure-length token
-  documentId: fc.uuid(),
-  issuedTo: fc.uuid(),
-  // expiry date always in the future
-  expiresAt: fc.date({ min: new Date() }).map((d) => d.toISOString()),
-  // optional usedAt, following Option pattern
-  usedAt: fc.oneof(fc.constant(O.none()), fc.date().map((d) => O.some(d.toISOString()))),
-  createdAt: fc.date(), // creation date anytime
+  id: fc.uuid().map(uuid => makeDownloadTokenIdSync(uuid)), // must always be a valid UUID
+  token: fc.string({ minLength: 32, maxLength: 64 }).map(str => {
+    // Generate a valid base64-like token that meets the URL-safe requirements
+    const padded = str.padEnd(32, '0')
+    const base64 = Buffer.from(padded).toString('base64')
+    const urlSafe = base64
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "")
+    
+    // Ensure it's between 32-64 characters as required by the schema
+    if (urlSafe.length < 32) {
+      return urlSafe.padEnd(32, 'A')
+    }
+    if (urlSafe.length > 64) {
+      return urlSafe.substring(0, 64)
+    }
+    return urlSafe
+  }),
+  documentId: fc.uuid().map(uuid => makeDocumentIdSync(uuid)),
+  issuedTo: fc.uuid().map(uuid => makeUserIdSync(uuid)),
+  // expiry date always in the future but within 24 hours (as per ExpiryWindow constraint)
+  expiresAt: fc.integer({ min: 1, max: 24 * 60 * 60 * 1000 }).map(ms => 
+    new Date(Date.now() + ms).toISOString()
+  ),
+  // optional usedAt, as string or undefined
+  usedAt: fc.oneof(fc.constant(undefined), fc.integer({ min: -365 * 24 * 60 * 60 * 1000, max: 0 }).map(ms => 
+    new Date(Date.now() + ms).toISOString()
+  )),
+  createdAt: fc.integer({ min: -365 * 24 * 60 * 60 * 1000, max: 0 }).map(ms => 
+    new Date(Date.now() + ms).toISOString()
+  ), // creation date anytime in the past
 })

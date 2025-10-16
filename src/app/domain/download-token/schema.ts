@@ -1,10 +1,13 @@
 import { Schema as S, Option } from "effect"
-import { DateFromSelf } from "@effect/schema/DateFromSelf"
 import { DownloadTokenId, DocumentId, UserId } from "../shared/uuid"
-import { BaseEntitySchema } from "../shared/base.entity"
-import { Optional } from "../shared/schema.utils"
+import { BaseEntitySchema, Optional } from "../shared/schema.utils"
 import { DownloadTokenString } from "./value-object"
 import { ExpiryWindow } from "./value-object"
+
+/**
+ * Schema for Option<Date> that converts between string | undefined and Option<Date>
+ */
+const OptionDateSchema = S.optional(S.DateFromString)
 
 /**
  * DownloadToken Schema
@@ -17,8 +20,8 @@ export const DownloadTokenSchema = S.extend(
     token: DownloadTokenString,
     documentId: DocumentId,
     issuedTo: UserId,
-    expiresAt: ExpiryWindow()(DateFromSelf),
-    usedAt: Optional(DateFromSelf)
+    expiresAt: ExpiryWindow()(S.DateFromString),
+    usedAt: OptionDateSchema
   })
 )
 

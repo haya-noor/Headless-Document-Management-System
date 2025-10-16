@@ -1,7 +1,8 @@
 import { Option, Schema as S } from "effect";
 import { UserGuards } from "@/app/domain/user/guards";
-import { DateTimeFromAny } from "@/app/domain/shared/date-time";
+import { DateTimeIso } from "@/app/domain/shared/date-time";
 import { UserId } from "@/app/domain/shared/uuid";
+import { EmailAddress } from "@/app/domain/shared/email";
 
 /** Domain model for a User 
  * 
@@ -11,7 +12,7 @@ import { UserId } from "@/app/domain/shared/uuid";
 */
 export const User = S.Struct({
   id: UserId,
-  email: S.String.pipe(UserGuards.ValidEmail),
+  email: EmailAddress,
   firstName: S.String.pipe(UserGuards.ValidName),
   lastName: S.String.pipe(UserGuards.ValidName),
   role: S.Literal('admin', 'user'),
@@ -19,8 +20,8 @@ export const User = S.Struct({
   dateOfBirth: S.optional(S.Date),
   phoneNumber: S.optional(S.String.pipe(UserGuards.ValidPhoneNumber)),
   profileImage: S.optional(S.String.pipe(UserGuards.ValidProfileImage)),
-  createdAt: DateTimeFromAny,
-  updatedAt: DateTimeFromAny
+  createdAt: DateTimeIso,
+  updatedAt: DateTimeIso
 })
 export type User = S.Schema.Type<typeof User>
 

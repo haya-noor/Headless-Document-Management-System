@@ -40,7 +40,7 @@ const documentVersionGenerators = {
     ]),
   size: () => faker.number.int({ min: 100 * 1024, max: 50 * 1024 * 1024 }),
   uploadedBy: () => makeUserIdSync(faker.string.uuid()),
-  createdAt: () => faker.date.past({ years: 2 }),
+  createdAt: () => faker.date.past({ years: 2 }).toISOString(),
 }
 
 /**
@@ -146,8 +146,10 @@ export const documentVersionArbitrary = fc.record({
   id: fc.uuid(),
   documentId: fc.uuid(),
   version: fc.integer({ min: 1, max: 50 }),
+  filename: fc.string({ minLength: 1, maxLength: 255 }),
   checksum: fc.string({ minLength: 64, maxLength: 64 }),
   storageKey: fc.string({ minLength: 10, maxLength: 200 }),
+  storageProvider: fc.constantFrom("local", "s3", "gcs"),
   mimeType: fc.constantFrom("application/pdf", "image/jpeg", "text/plain"),
   size: fc.integer({ min: 1, max: 100 * 1024 * 1024 }),
   createdAt: fc.date(),

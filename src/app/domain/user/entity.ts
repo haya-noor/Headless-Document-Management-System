@@ -2,6 +2,9 @@ import { Effect, Option, Schema as S, ParseResult } from "effect"
 import { UserValidationError } from "./errors"
 import { UserId } from "../shared/uuid"
 import { BaseEntity, type IEntity } from "../shared/base.entity"
+import { EmailAddress } from "../shared/email"
+import { User } from "./schema" 
+
 
 // -----------------------------------------------------------------------------
 // Reusable Schemas
@@ -25,7 +28,7 @@ export const UserProfileFields = S.Struct({
 
 // Core user fields (specific to User)
 export const UserCoreFields = S.Struct({
-  email: S.String,
+  email: EmailAddress, 
   role: S.Literal("admin", "user"),
   isActive: S.Boolean
 })
@@ -37,8 +40,8 @@ export const UserSchema = S.extend(S.extend(UserCoreFields, UserProfileFields), 
 // Derived Types
 // -----------------------------------------------------------------------------
 
-export type UserType = S.Schema.Type<typeof UserSchema>
-export type SerializedUser = S.Schema.Encoded<typeof UserSchema>
+export type UserType = S.Schema.Type<typeof User>
+export type SerializedUser = S.Schema.Encoded<typeof User>
 
 // -----------------------------------------------------------------------------
 // Domain Contract
@@ -89,7 +92,7 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
   // ---------------------------------------------------------------------------
 
   static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError> {
-    return S.decodeUnknown(UserSchema)(input).pipe(
+    return S.decodeUnknown(User)(input).pipe(
       Effect.map((data) => new UserEntity(data)),
       Effect.mapError((error) => UserEntity.toValidationError(error, input))
     )
@@ -97,8 +100,16 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
 
   private static toValidationError(error: unknown, input: SerializedUser): UserValidationError {
     if (error instanceof UserValidationError) return error
-    const parseError = (error as ParseResult.ParseError).message ?? "Validation failed"
-    return new UserValidationError("user", input, parseError)
+    
+    // Handle ParseResult.ParseError
+    if (error && typeof error === 'object' && 'message' in error) {
+      const parseError = (error as ParseResult.ParseError).message ?? "Validation failed"
+      return new UserValidationError("user", input, parseError)
+    }
+    
+    // Handle other error types
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return new UserValidationError("user", input, errorMessage)
   }
 
   // ---------------------------------------------------------------------------
