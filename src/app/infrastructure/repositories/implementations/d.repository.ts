@@ -1,711 +1,477 @@
 /**
- * Document repository implementation using Drizzle ORM
- * Implements document data access operations
+ * Document Repository - Declarative Implementation
+ * 
+ * Uses Effect combinators and declarative SQL builders
+ * to eliminate imperative control flow.
  */
 
-import { eq, and, or, like, gte, lte, inArray, sql, desc, asc } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
-import { Effect } from 'effect';
-import { documents } from '../../database/models';
-import { Document, DocumentSearchFilters } from '../../../application/interfaces';
-import { PaginationParams, PaginatedResponse } from '../../../domain/shared/api.interface';
-import { DocumentRepository, CreateDocumentDTO, UpdateDocumentDTO } from '../../../application/interfaces/document.interface';
-import { Repository } from '../../../domain/shared/errors';
+import { Effect, Option, pipe, Schema as S } from "effect";
+import { eq, and, like, gte, lte, sql, desc, asc, count } from "drizzle-orm";
 
-export class DocumentRepositoryImpl implements DocumentRepository {
-  private db: any;
+import { databaseService } from "@/app/infrastructure/services/drizzle-service";
+import { documents } from "@/app/infrastructure/database/models";
+import type { InferSelectModel } from "drizzle-orm";
 
-  constructor(database?: any) {
-    this.db = database;
+import { DocumentSchemaEntity } from "@/app/domain/document/entity";
+import { DocumentCodec } from "@/app/domain/document/schema";
+import {
+  DocumentValidationError,
+} from "@/app/domain/document/errors";
+import {
+  DatabaseError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+  type Repository,
+} from "@/app/domain/shared/errors";
+import {
+  PaginatedResponse,
+  PaginationParams,
+} from "@/app/domain/shared/api.interface";
+
+type DocumentModel = InferSelectModel<typeof documents>;
+
+/**
+ * Document Repository Filter Interface
+ */
+export interface DocumentFilter {
+  ownerId?: string;
+  title?: string;
+  tags?: string[];
+  mimeType?: string;
+  minSize?: number;
+  maxSize?: number;
+  dateFrom?: Date;
+  dateTo?: Date;
+  searchTerm?: string;
+}
+
+/**
+const conditions = buildConditions({
+  ownerId: 'user-123',
+  tags: ['project', 'draft'],
+  dateFrom: new Date('2025-01-01'),
+});
+
+we'll get something like:
+[
+  eq(documents.isActive, true),
+  eq(documents.uploadedBy, 'user-123'),
+  sql`${documents.tags} @> '["project","draft"]'`,
+  gte(documents.createdAt, new Date('2025-01-01'))
+]
+
+and we could use it in a query like:
+db.select().from(documents).where(and(...conditions))
+ */
+const conditionBuilders = {
+  isActive: () => eq(documents.isActive, true),
+  
+  ownerId: (id: string) => eq(documents.uploadedBy, id),
+  
+  title: (title: string) => like(documents.filename, `%${title}%`),
+  
+  tags: (tags: string[]) => 
+    tags.length > 0 ? sql`${documents.tags} @> ${JSON.stringify(tags)}` : null,
+  
+  mimeType: (mime: string) => eq(documents.mimeType, mime),
+  
+  minSize: (size: number) => gte(documents.size, size),
+  
+  maxSize: (size: number) => lte(documents.size, size),
+  
+  dateFrom: (date: Date) => gte(documents.createdAt, date),
+  
+  dateTo: (date: Date) => lte(documents.createdAt, date),
+  
+  searchTerm: (term: string) =>
+    sql`(${documents.filename} ILIKE ${`%${term}%`} OR ${documents.originalName} ILIKE ${`%${term}%`})`,
+};
+
+/**
+ * Pure function to build conditions from filter - no side effects
+ */
+const buildConditions = (filter?: DocumentFilter): any[] => {
+  const conditions: any[] = [conditionBuilders.isActive()];
+
+  // Declaratively add conditions based on filter properties
+  return [
+    ...conditions,
+    ...(filter?.ownerId ? [conditionBuilders.ownerId(filter.ownerId)] : []),
+    ...(filter?.title ? [conditionBuilders.title(filter.title)] : []),
+    ...(filter?.tags ? [conditionBuilders.tags(filter.tags)].filter(Boolean) : []),
+    ...(filter?.mimeType ? [conditionBuilders.mimeType(filter.mimeType)] : []),
+    ...(typeof filter?.minSize === "number" ? [conditionBuilders.minSize(filter.minSize)] : []),
+    ...(typeof filter?.maxSize === "number" ? [conditionBuilders.maxSize(filter.maxSize)] : []),
+    ...(filter?.dateFrom ? [conditionBuilders.dateFrom(filter.dateFrom)] : []),
+    ...(filter?.dateTo ? [conditionBuilders.dateTo(filter.dateTo)] : []),
+    ...(filter?.searchTerm ? [conditionBuilders.searchTerm(filter.searchTerm)] : []),
+  ];
+};
+
+/**
+ * Document Repository Implementation
+ */
+export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntity, DocumentFilter> {
+  constructor(private readonly db = databaseService.getDatabase()) {}
+
+  // ---------------------------------------------------------------------------
+  // Private Helpers
+  // ---------------------------------------------------------------------------
+
+  private encodeDocument(doc: DocumentSchemaEntity): Effect.Effect<any, ValidationError> {
+    return Effect.try({
+      try: () => S.encodeSync(DocumentCodec)((doc as any).toSerialized()),
+      catch: (err) =>
+        new ValidationError(
+          `Failed to encode document: ${err instanceof Error ? err.message : String(err)}`,
+          "document"
+        ),
+    });
   }
 
-  /**
-   * Get database instance with null check
-   */
-  private getDb() {
-    if (!this.db) {
-      throw new Error('Database instance not provided to DocumentRepository');
-    }
-    return this.db;
+  private decodeDocument(row: DocumentModel): Effect.Effect<DocumentSchemaEntity, ValidationError> {
+    return pipe(
+      Effect.try({
+        try: () => S.decodeSync(DocumentCodec)(row),
+        catch: (err) =>
+          new ValidationError(
+            `Failed to decode document: ${err instanceof Error ? err.message : String(err)}`,
+            "document"
+          ),
+      }),
+      Effect.flatMap((decoded) => DocumentSchemaEntity.create(decoded))
+    );
   }
 
-  /**
-   * Transform database result to Document type
-   */
-  private transformDocument(document: any): Document {
-    return {
-      ...document,
-      checksum: document.checksum ?? undefined,
-      tags: document.tags ?? undefined,
-      metadata: document.metadata ?? undefined,
+  private fetchOne(
+    query: () => Promise<DocumentModel[]>
+  ): Effect.Effect<Option.Option<DocumentSchemaEntity>, DatabaseError | ValidationError> {
+    return pipe(
+      Effect.tryPromise({
+        try: query,
+        catch: (err) =>
+          new DatabaseError({
+            message: `Database query failed: ${err instanceof Error ? err.message : String(err)}`,
+            cause: err,
+          }),
+      }),
+      Effect.map(Option.fromIterable),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (row) => pipe(this.decodeDocument(row), Effect.map(Option.some)),
+        })
+      )
+    );
+  }
+
+  private handleDatabaseError(operation: string, context?: any) {
+    return (err: unknown) =>
+      new DatabaseError({
+        message: `${operation} failed: ${err instanceof Error ? err.message : String(err)}`,
+        cause: err,
+        ...(context && { context }),
+      });
+  }
+
+  private handleConflict(context: string) {
+    return (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return msg.includes("unique") || msg.includes("duplicate")
+        ? new ConflictError(msg, context)
+        : this.handleDatabaseError(context)(err);
     };
   }
 
-  // Note: Serialization methods removed as DocumentSchemaEntity doesn't match the file document structure
+  // ---------------------------------------------------------------------------
+  // Repository Interface
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Find document by ID
-   */
-  async findById(id: string): Promise<Document | null> {
-    try {
-      const [document] = await this.getDb()
+  findById(id: string): Effect.Effect<Option.Option<DocumentSchemaEntity>, DatabaseError> {
+    return this.fetchOne(() =>
+      this.db
         .select()
         .from(documents)
-        .where(and(eq(documents.id, id), eq(documents.isActive, true)));
-
-      return document ? this.transformDocument(document) : null;
-    } catch (error) {
-      throw new Error(`Failed to find document by ID: ${error}`);
-    }
+        .where(and(eq(documents.id, id), eq(documents.isActive, true)))
+        .limit(1)
+    ).pipe(
+      Effect.mapError(this.handleDatabaseError(`Find document ${id}`))
+    );
   }
 
-  /**
-   * Find multiple documents with optional filtering
-   */
-  async findMany(filters?: DocumentSearchFilters): Promise<Document[]> {
-    try {
-      const query = this.getDb().select().from(documents);
-      const conditions = [eq(documents.isActive, true)];
-
-      if (filters) {
-        if (filters.uploadedBy) {
-          conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
-        }
-        if (filters.mimeType) {
-          conditions.push(eq(documents.mimeType, filters.mimeType));
-        }
-        if (filters.tags && filters.tags.length > 0) {
-          conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
-        }
-        if (filters.filename) {
-          conditions.push(like(documents.filename, `%${filters.filename}%`));
-        }
-        if (filters.minSize) {
-          conditions.push(gte(documents.size, filters.minSize));
-        }
-        if (filters.maxSize) {
-          conditions.push(lte(documents.size, filters.maxSize));
-        }
-        if (filters.dateFrom) {
-          conditions.push(gte(documents.createdAt, filters.dateFrom));
-        }
-        if (filters.dateTo) {
-          conditions.push(lte(documents.createdAt, filters.dateTo));
-        }
-        if (filters.documentIds && filters.documentIds.length > 0) {
-          conditions.push(inArray(documents.id, filters.documentIds));
-        }
-      }
-
-      const result = await query.where(and(...conditions));
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to find documents: ${error}`);
-    }
+  findMany(filter?: DocumentFilter): Effect.Effect<DocumentSchemaEntity[], DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: () =>
+          this.db
+            .select()
+            .from(documents)
+            .where(and(...buildConditions(filter))),   // Apply filter conditions
+        catch: this.handleDatabaseError("Find documents", filter),
+      }),
+      Effect.flatMap((rows) =>
+        Effect.all(rows.map((row) => this.decodeDocument(row)))
+      ),
+      Effect.mapError((err) =>
+        err instanceof DatabaseError
+          ? err
+          : this.handleDatabaseError("Decode documents")(err)
+      )
+    );
   }
 
-  /**
-   * Find documents with pagination
-   */
-  async findManyPaginated(
-    pagination: PaginationParams,
-    filters?: DocumentSearchFilters
-  ): Promise<PaginatedResponse<Document>> {
-    try {
-      const { page, limit } = pagination;
-      const offset = (page - 1) * limit;
+  findManyPaginated(
+    { page, limit, sortBy = "createdAt", sortOrder = "desc" }: PaginationParams,
+    filter?: DocumentFilter
+  ): Effect.Effect<PaginatedResponse<DocumentSchemaEntity>, DatabaseError> {
+    const offset = (page - 1) * limit;
+    const orderBy = sortOrder === "asc" ? asc : desc;
+    const sortColumn = documents[sortBy as keyof typeof documents] ?? documents.createdAt;
+    const conditions = buildConditions(filter);
 
-      const query = this.getDb().select().from(documents);
+    return pipe(
+      // Fetch paginated data
+      Effect.tryPromise({
+        try: () =>
+          this.db
+            .select()
+            .from(documents)
+            .where(and(...conditions))
+            .orderBy(orderBy(sortColumn))
+            .limit(limit)
+            .offset(offset),
+        catch: this.handleDatabaseError("Pagination query"),
+      }),
+      Effect.flatMap((rows) => Effect.all(rows.map((row) => this.decodeDocument(row)))),
+      // Fetch total count in parallel
+      Effect.flatMap((documentsList) =>
+        pipe(
+          Effect.tryPromise({
+            try: () =>
+              this.db
+                .select({ count: count() })
+                .from(documents)
+                .where(and(...conditions)),
+            catch: this.handleDatabaseError("Count query"),
+          }),
+          Effect.map(([result]) => ({
+            documentsList,
+            total: Number(result?.count ?? 0),
+          }))
+        )
+      ),
+      // Build response
+      Effect.map(({ documentsList, total }) => {
+        const totalPages = Math.ceil(total / limit);
+        return {
+          data: documentsList,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNext: page < totalPages,
+            hasPrev: page > 1,
+          },
+        } satisfies PaginatedResponse<DocumentSchemaEntity>;
+      }),
+      Effect.mapError((err) =>
+        err instanceof DatabaseError
+          ? err
+          : this.handleDatabaseError("Pagination failed")(err)
+      )
+    );
+  }
 
-      // it is a query to count the number of documents
-      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(documents);
+  save(
+    doc: DocumentSchemaEntity
+  ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ConflictError | ValidationError> {
+    return pipe(
+      this.exists(doc.id),
+      Effect.flatMap((exists) => exists ? this.update(doc) : this.insert(doc))
+    );
+  }
 
-      const conditions = [eq(documents.isActive, true)];
+  private insert(
+    doc: DocumentSchemaEntity
+  ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ConflictError | ValidationError> {
+    return pipe(
+      this.encodeDocument(doc),
+      Effect.flatMap((row) =>
+        Effect.tryPromise({
+          try: () => this.db.insert(documents).values(row as any),
+          catch: this.handleConflict(`Insert document ${doc.id}`),
+        })
+      ),
+      Effect.as(doc)
+    );
+  }
 
-      if (filters) {
-        if (filters.uploadedBy) {
-          conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
-        }
-        if (filters.mimeType) {
-          conditions.push(eq(documents.mimeType, filters.mimeType));
-        }
-        if (filters.tags && filters.tags.length > 0) {
-          conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
-        }
-        if (filters.filename) {
-          conditions.push(like(documents.filename, `%${filters.filename}%`));
-        }
-        if (filters.minSize) {
-          conditions.push(gte(documents.size, filters.minSize));
-        }
-        if (filters.maxSize) {
-          conditions.push(lte(documents.size, filters.maxSize));
-        }
-        if (filters.dateFrom) {
-          conditions.push(gte(documents.createdAt, filters.dateFrom));
-        }
-        if (filters.dateTo) {
-          conditions.push(lte(documents.createdAt, filters.dateTo));
-        }
-        if (filters.documentIds && filters.documentIds.length > 0) {
-          conditions.push(inArray(documents.id, filters.documentIds));
-        }
-      }
+  // private update(
+  //   doc: DocumentSchemaEntity
+  // ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ValidationError | NotFoundError> {
+  //   return pipe(
+  //     this.exists(doc.id),
+  //     Effect.flatMap((exists) =>
+  //       exists
+  //         ? this.encodeDocument(doc)
+  //         : Effect.fail(
+  //             new NotFoundError({
+  //               message: "Document not found",
+  //               resource: "Document",
+  //               id: doc.id,
+  //             })
+  //           )
+  //     ),
+  //     Effect.flatMap((row) =>
+  //       Effect.tryPromise({
+  //         try: () =>
+  //           this.db
+  //             .update(documents)
+  //             .set(row as any)
+  //             .where(eq(documents.id, doc.id)),
+  //         catch: this.handleDatabaseError(`Update document ${doc.id}`),
+  //       })
+  //     ),
+  //     Effect.as(doc)
+  //   );
+  // }
 
-      // Add sorting
-      const sortBy = filters?.sortBy || 'createdAt';
-      const sortOrder = filters?.sortOrder || 'desc';
-      
-      let orderBy;
-      if (sortBy === 'createdAt') {
-        orderBy = sortOrder === 'desc' ? desc(documents.createdAt) : asc(documents.createdAt);
-      } else if (sortBy === 'updatedAt') {
-        orderBy = sortOrder === 'desc' ? desc(documents.updatedAt) : asc(documents.updatedAt);
-      } else if (sortBy === 'filename') {
-        orderBy = sortOrder === 'desc' ? desc(documents.filename) : asc(documents.filename);
-      } else if (sortBy === 'size') {
-        orderBy = sortOrder === 'desc' ? desc(documents.size) : asc(documents.size);
-      } else {
-        orderBy = desc(documents.createdAt);
-      }
+  delete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
+  return pipe(
+    this.exists(id),
+    Effect.flatMap((exists) =>
+      exists
+        ? Effect.tryPromise({
+            try: () => this.db.delete(documents).where(eq(documents.id, id)),
+            catch: this.handleDatabaseError(`Delete document ${id}`),
+          }).pipe(Effect.as(true)) as Effect.Effect<boolean, DatabaseError | NotFoundError>
+        : Effect.fail(
+            new NotFoundError({
+              message: "Document not found",
+              resource: "Document",
+              id,
+            })
+          )
+    )
+  );
+}
 
-      const [data, countResult] = await Promise.all([
-        query.where(and(...conditions)).orderBy(orderBy).limit(limit).offset(offset),
-        countQuery.where(and(...conditions))
-      ]);
+  // softDelete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
+  //   return pipe(
+  //     this.findById(id),
+  //     Effect.flatMap(
+  //       Option.match({
+  //         onNone: () =>
+  //           Effect.fail(
+  //             new NotFoundError({
+  //               message: "Document not found",
+  //               resource: "Document",
+  //               id,
+  //             })
+  //           ),
+  //         onSome: () =>
+  //           Effect.tryPromise({
+  //             try: () =>
+  //               this.db
+  //                 .update(documents)
+  //                 .set({ isActive: false, updatedAt: new Date() })
+  //                 .where(eq(documents.id, id)),
+  //             catch: this.handleDatabaseError(`Soft delete document ${id}`),
+  //           }).pipe(Effect.as(true)),
+  //       })
+  //     )
+  //   );
+  // }
 
-      const total = Number(countResult[0]?.count || 0);
-      const totalPages = Math.ceil(total / limit);
+  exists(id: string): Effect.Effect<boolean, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: () =>
+          this.db
+            .select({ id: documents.id })
+            .from(documents)
+            .where(and(eq(documents.id, id), eq(documents.isActive, true)))
+            .limit(1),
+        catch: this.handleDatabaseError(`Check exists document ${id}`),
+      }),
+      Effect.map((rows) => rows.length > 0)
+    );
+  }
 
-      return {
-        data: data.map((document: any) => this.transformDocument(document)),
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
+  count(filter?: DocumentFilter): Effect.Effect<number, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const result = await this.db
+            .select({ count: count() })
+            .from(documents)
+            .where(and(...buildConditions(filter)));
+          return Number(result[0]?.count ?? 0);
         },
-      };
-    } catch (error) {
-      throw new Error(`Failed to find paginated documents: ${error}`);
-    }
+        catch: this.handleDatabaseError("Count documents", filter),
+      })
+    );
   }
 
-  /**
-   * Find single document by filters
-   */
-  async findOne(filters: DocumentSearchFilters): Promise<Document | null> {
-    try {
-      const result = await this.findMany(filters);
-      return result[0] || null;
-    } catch (error) {
-      throw new Error(`Failed to find document: ${error}`);
-    }
+  findByChecksum(checksum: string): Effect.Effect<DocumentSchemaEntity[], DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: () =>
+          this.db
+            .select()
+            .from(documents)
+            .where(and(eq(documents.checksum, checksum), eq(documents.isActive, true))),
+        catch: this.handleDatabaseError(`Find by checksum ${checksum}`),
+      }),
+      Effect.flatMap((rows) =>
+        Effect.all(rows.map((row) => this.decodeDocument(row)))
+      )
+    );
   }
 
-  /**
-   * Create new document
-   */
-  async create(data: CreateDocumentDTO): Promise<Document> {
-    try {
-      const documentId = uuidv4();
-      const now = new Date();
-
-      const [document] = await this.getDb()
-        .insert(documents)
-
-        // serializes the data into the database, taking the input DTO 
-        
-        .values({
-          id: documentId,
-          filename: data.filename,
-          originalName: data.originalName,
-          mimeType: data.mimeType,
-          size: data.size,
-          storageKey: data.storageKey,
-          storageProvider: 'local',
-          checksum: data.checksum,
-          tags: data.tags || [],
-          metadata: data.metadata || {},
-          uploadedBy: data.uploadedBy,
-          currentVersion: 1,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-
-        // transform the document to the Document type 
-        // so we can return the document in the correct format
-      return this.transformDocument(document);
-    } catch (error) {
-      throw new Error(`Failed to create document: ${error}`);
-    }
-  }
-
-  /**
-   * Create multiple documents
-   */
-  async createMany(data: CreateDocumentDTO[]): Promise<Document[]> {
-    try {
-      const now = new Date();
-
-      // mapping DTO into DB row (serializing the data)
-
-      const documentsToInsert = data.map(doc => ({
-        id: uuidv4(),
-        filename: doc.filename,
-        originalName: doc.originalName,
-        mimeType: doc.mimeType,
-        size: doc.size,
-        storageKey: doc.storageKey,
-        storageProvider: 'local',
-        checksum: doc.checksum,
-        tags: doc.tags || [],
-        metadata: doc.metadata || {},
-        uploadedBy: doc.uploadedBy,
-        currentVersion: 1,
-        createdAt: now,
-        updatedAt: now,
-      }));
-
-      const result = await this.getDb()
-        .insert(documents)
-        .values(documentsToInsert)
-        .returning();
-
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to create multiple documents: ${error}`);
-    }
-  }
-
-  /**
-   * Update document by ID
-   */
-  async update(id: string, data: UpdateDocumentDTO): Promise<Document | null> {
-    try {
-      const [document] = await this.getDb()
-        .update(documents)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(documents.id, id), eq(documents.isActive, true)))
-        .returning();
-
-      return document ? this.transformDocument(document) : null;
-    } catch (error) {
-      throw new Error(`Failed to update document: ${error}`);
-    }
-  }
-
-  /**
-   * Delete document by ID (hard delete)
-   */
-  async delete(id: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .delete(documents)
-        .where(eq(documents.id, id));
-
-      return result.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete document: ${error}`);
-    }
-  }
-
-  /**
-   * Check if document exists
-   */
-  async exists(id: string): Promise<boolean> {
-    try {
-      const [document] = await this.getDb()
-        .select({ id: documents.id })
-        .from(documents)
-        .where(and(eq(documents.id, id), eq(documents.isActive, true)))
-        .limit(1);
-
-      return !!document;
-    } catch (error) {
-      throw new Error(`Failed to check document existence: ${error}`);
-    }
-  }
-
-  /**
-   * Count documents with optional filters
-   */
-  async count(filters?: DocumentSearchFilters): Promise<number> {
-    try {
-      const query = this.getDb().select({ count: sql`count(*)` }).from(documents);
-      const conditions = [eq(documents.isActive, true)];
-
-      if (filters) {
-        if (filters.uploadedBy) {
-          conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
-        }
-        if (filters.mimeType) {
-          conditions.push(eq(documents.mimeType, filters.mimeType));
-        }
-      }
-
-      const [result] = await query.where(and(...conditions));
-      return Number(result.count);
-    } catch (error) {
-      throw new Error(`Failed to count documents: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents by uploader
-   */
-  async findByUploader(userId: string): Promise<Document[]> {
-    try {
-      return await this.findMany({ uploadedBy: userId });
-    } catch (error) {
-      throw new Error(`Failed to find documents by uploader: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents by tags
-   */
-  async findByTags(tags: string[], matchAll?: boolean): Promise<Document[]> {
-    try {
-      const condition = matchAll
-        ? sql`${documents.tags} @> ${JSON.stringify(tags)}`
-        : sql`${documents.tags} && ${JSON.stringify(tags)}`;
-
-      const result = await this.getDb()
-        .select()
-        .from(documents)
-        .where(and(eq(documents.isActive, true), condition));
-
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to find documents by tags: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents by metadata
-   */
-  async findByMetadata(metadata: Record<string, any>): Promise<Document[]> {
-    try {
-      const result = await this.getDb()
-        .select()
-        .from(documents)
-        .where(and(
-          eq(documents.isActive, true),
-          sql`${documents.metadata} @> ${JSON.stringify(metadata)}`
-        ));
-
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to find documents by metadata: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents by MIME type
-   */
-  async findByMimeType(mimeType: string): Promise<Document[]> {
-    try {
-      return await this.findMany({ mimeType });
-    } catch (error) {
-      throw new Error(`Failed to find documents by MIME type: ${error}`);
-    }
-  }
-
-  /**
-   * Search documents with filters
-   */
-  async searchDocuments(filters: DocumentSearchFilters): Promise<Document[]> {
-    try {
-      return await this.findMany(filters);
-    } catch (error) {
-      throw new Error(`Failed to search documents: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents by filename pattern
-   */
-  async findByFilenamePattern(pattern: string): Promise<Document[]> {
-    try {
-      return await this.findMany({ filename: pattern });
-    } catch (error) {
-      throw new Error(`Failed to find documents by filename pattern: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents within size range
-   */
-  async findBySizeRange(minSize: number, maxSize: number): Promise<Document[]> {
-    try {
-      return await this.findMany({ minSize, maxSize });
-    } catch (error) {
-      throw new Error(`Failed to find documents by size range: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents within date range
-   */
-  async findByDateRange(startDate: Date, endDate: Date): Promise<Document[]> {
-    try {
-      return await this.findMany({ dateFrom: startDate, dateTo: endDate });
-    } catch (error) {
-      throw new Error(`Failed to find documents by date range: ${error}`);
-    }
-  }
-
-  /**
-   * Get document statistics
-   */
-  async getDocumentStats(): Promise<{
+  getStats(): Effect.Effect<{
     totalDocuments: number;
     totalSize: number;
     documentsByMimeType: Record<string, number>;
-    documentsByUploader: Record<string, number>;
-  }> {
-    try {
-      const [totalCount] = await this.getDb()
-        .select({ count: sql`count(*)`, totalSize: sql`sum(${documents.size})` })
-        .from(documents)
-        .where(eq(documents.isActive, true));
+  }, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const [countResult, sizeResult, mimeTypeResult] = await Promise.all([
+            this.db
+              .select({ count: count() })
+              .from(documents)
+              .where(eq(documents.isActive, true)),
+            this.db
+              .select({ total: sql<number>`COALESCE(SUM(${documents.size}), 0)` })
+              .from(documents)
+              .where(eq(documents.isActive, true)),
+            this.db
+              .select({
+                mimeType: documents.mimeType,
+                count: count(),
+              })
+              .from(documents)
+              .where(eq(documents.isActive, true))
+              .groupBy(documents.mimeType),
+          ]);
 
-      const mimeTypeStats = await this.getDb()
-        .select({
-          mimeType: documents.mimeType,
-          count: sql`count(*)`
-        })
-        .from(documents)
-        .where(eq(documents.isActive, true))
-        .groupBy(documents.mimeType);
-
-      const uploaderStats = await this.getDb()
-        .select({
-          uploadedBy: documents.uploadedBy,
-          count: sql`count(*)`
-        })
-        .from(documents)
-        .where(eq(documents.isActive, true))
-        .groupBy(documents.uploadedBy);
-
-      const documentsByMimeType = mimeTypeStats.reduce((acc: any, stat: any) => {
-        acc[stat.mimeType] = Number(stat.count);
-        return acc;
-      }, {} as Record<string, number>);
-
-      const documentsByUploader = uploaderStats.reduce((acc: any, stat: any) => {
-        acc[stat.uploadedBy] = Number(stat.count);
-        return acc;
-      }, {} as Record<string, number>);
-
-      return {
-        totalDocuments: Number(totalCount.count),
-        totalSize: Number(totalCount.totalSize) || 0,
-        documentsByMimeType,
-        documentsByUploader,
-      };
-    } catch (error) {
-      throw new Error(`Failed to get document statistics: ${error}`);
-    }
-  }
-
-  /**
-   * Find duplicate documents by checksum
-   * excludeDocumentId make sures that the document is not checked against itself 
-   */
-  async findDuplicatesByChecksum(checksum: string, excludeDocumentId?: string): Promise<Document[]> {
-    try {
-      const conditions = [eq(documents.isActive, true), eq(documents.checksum, checksum)];
-      
-      if (excludeDocumentId) {
-        conditions.push(sql`${documents.id} != ${excludeDocumentId}`);
-      }
-
-      const result = await this.getDb()
-        .select()
-        .from(documents)
-        .where(and(...conditions));
-
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to find duplicate documents: ${error}`);
-    }
-  }
-
-  /**
-   * Update document tags
-   */
-  async updateTags(documentId: string, tags: string[]): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .update(documents)
-        .set({ tags, updatedAt: new Date() })
-        .where(and(eq(documents.id, documentId), eq(documents.isActive, true)));
-
-      return result.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to update document tags: ${error}`);
-    }
-  }
-
-  /**
-   * Update document metadata
-   */
-  async updateMetadata(documentId: string, metadata: Record<string, any>): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .update(documents)
-        .set({ metadata, updatedAt: new Date() })
-        .where(and(eq(documents.id, documentId), eq(documents.isActive, true)));
-
-      return result.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to update document metadata: ${error}`);
-    }
-  }
-
-  /**
-   * Increment document version
-   */
-  async incrementVersion(documentId: string): Promise<number> {
-    try {
-      const [document] = await this.getDb()
-        .update(documents)
-        .set({ 
-          currentVersion: sql`${documents.currentVersion} + 1`,
-          updatedAt: new Date()
-        })
-        .where(and(eq(documents.id, documentId), eq(documents.isActive, true)))
-        .returning({ currentVersion: documents.currentVersion });
-
-      return document?.currentVersion || 1;
-    } catch (error) {
-      throw new Error(`Failed to increment document version: ${error}`);
-    }
-  }
-
-  /**
-   * Soft delete document
-   */
-  async softDelete(documentId: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .update(documents)
-        .set({ isDeleted: true, updatedAt: new Date() })
-        .where(eq(documents.id, documentId));
-
-      return result.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to soft delete document: ${error}`);
-    }
-  }
-
-  /**
-   * Restore soft deleted document
-   */
-  async restore(documentId: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .update(documents)
-        .set({ isDeleted: false, updatedAt: new Date() })
-        .where(eq(documents.id, documentId));
-
-      return result.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to restore document: ${error}`);
-    }
-  }
-
-  /**
-   * Find deleted documents
-   */
-  async findDeleted(userId?: string): Promise<Document[]> {
-    try {
-      const conditions = [eq(documents.isActive, false)];
-      
-      if (userId) {
-        conditions.push(eq(documents.uploadedBy, userId));
-      }
-
-      const result = await this.getDb()
-        .select()
-        .from(documents)
-        .where(and(...conditions));
-
-      return result.map((document: any) => this.transformDocument(document));
-    } catch (error) {
-      throw new Error(`Failed to find deleted documents: ${error}`);
-    }
-  }
-
-  /**
-   * Update multiple documents by filters
-   */
-  async updateMany(filters: DocumentSearchFilters, data: UpdateDocumentDTO): Promise<number> {
-    try {
-      const conditions = [eq(documents.isActive, true)];
-
-      if (filters.uploadedBy) {
-        conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
-      }
-      if (filters.mimeType) {
-        conditions.push(eq(documents.mimeType, filters.mimeType));
-      }
-      if (filters.tags && filters.tags.length > 0) {
-        conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
-      }
-      if (filters.filename) {
-        conditions.push(like(documents.filename, `%${filters.filename}%`));
-      }
-
-      const result = await this.getDb()
-        .update(documents)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(and(...conditions));
-
-      return result.length;
-    } catch (error) {
-      throw new Error(`Failed to update multiple documents: ${error}`);
-    }
-  }
-
-  /**
-   * Delete multiple documents by filters
-   */
-  async deleteMany(filters: DocumentSearchFilters): Promise<number> {
-    try {
-      const conditions = [eq(documents.isActive, true)];
-
-      if (filters.uploadedBy) {
-        conditions.push(eq(documents.uploadedBy, filters.uploadedBy));
-      }
-      if (filters.mimeType) {
-        conditions.push(eq(documents.mimeType, filters.mimeType));
-      }
-      if (filters.tags && filters.tags.length > 0) {
-        conditions.push(sql`${documents.tags} @> ${JSON.stringify(filters.tags)}`);
-      }
-      if (filters.filename) {
-        conditions.push(like(documents.filename, `%${filters.filename}%`));
-      }
-
-      const result = await this.getDb()
-        .delete(documents)
-        .where(and(...conditions));
-
-      return result.length;
-    } catch (error) {
-      throw new Error(`Failed to delete multiple documents: ${error}`);
-    }
+          return {
+            totalDocuments: Number(countResult[0]?.count ?? 0),
+            totalSize: Number(sizeResult[0]?.total ?? 0),
+            documentsByMimeType: mimeTypeResult.reduce(
+              (acc, row) => {
+                acc[row.mimeType] = Number(row.count);
+                return acc;
+              },
+              {} as Record<string, number>
+            ),
+          };
+        },
+        catch: this.handleDatabaseError("Get document stats"),
+      })
+    );
   }
 }

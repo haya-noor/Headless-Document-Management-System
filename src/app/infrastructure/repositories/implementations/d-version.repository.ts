@@ -1,722 +1,454 @@
 /**
- * Document permission repository implementation using Drizzle ORM
- * Implements document permission data access operations
+ * DocumentVersion Repository - Declarative Implementation with Schema Validation
+ * 
+ * Uses Effect Schema for encode/decode with full validation.
+ * Imports shared types from domain/shared directory.
  */
 
-import { eq, and, sql } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
-// Removed databaseService import to avoid circular dependency
-import { documentPermissions } from '../../database/models';
-import { DocumentPermission } from '../../../application/interfaces';
-import { PaginationParams, PaginatedResponse } from '../../../domain/shared/api.interface';
-import { Permission } from '../../../application/types';
-import { Repository } from "../../../domain/shared/errors";
+import { Effect, Option, pipe, Schema as S } from "effect";
+import { eq, and, desc, sql, count } from "drizzle-orm";
 
-// DTO types for document permission repository
-export interface DocumentPermissionFiltersDTO {
+import { databaseService } from "@/app/infrastructure/services/drizzle-service";
+import { documentVersions } from "@/app/infrastructure/database/models";
+import type { InferSelectModel } from "drizzle-orm";
+
+import { DocumentVersionEntity } from "@/app/domain/d-version/entity";
+import { DocumentVersionSchema, DocumentVersionRow, DocumentVersionCodec } from "@/app/domain/d-version/schema";
+import {
+  DocumentVersionValidationError,
+} from "@/app/domain/d-version/errors";
+
+// ============================================================================
+// SHARED ERROR TYPES (from domain/shared/errors.ts)
+// ============================================================================
+import {
+  DatabaseError,
+  NotFoundError,
+  ConflictError,
+  ValidationError,
+} from "@/app/domain/shared/errors";
+
+// ============================================================================
+// SHARED BRANDED TYPES (from domain/shared/uuid.ts)
+// ============================================================================
+import { DocumentId, DocumentVersionId } from "@/app/domain/shared/uuid";
+
+type DocumentVersionModel = InferSelectModel<typeof documentVersions>;
+
+/**
+ * Filter interface for querying versions
+ */
+export interface DocumentVersionFilter {
   documentId?: string;
-  userId?: string;
-  permission?: Permission;
-  grantedBy?: string;
+  version?: number;
+  uploadedBy?: string;
+  mimeType?: string;
+  minSize?: number;
+  maxSize?: number;
 }
 
-export interface CreateDocumentPermissionDTO {
-  documentId: string;
-  userId: string;
-  permission: Permission;
-  grantedBy: string;
-}
+/**
+ * Pure error creation helpers using shared error types
+ */
+const Errors = {
+  database: (operation: string, cause?: unknown) =>
+    new DatabaseError({
+      message: `${operation} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      cause,
+    }),
 
-export interface UpdateDocumentPermissionDTO {
-  permission?: Permission;
-  grantedBy?: string;
-}
+  notFound: (id: string, resource = "DocumentVersion") =>
+    new NotFoundError({
+      message: `${resource} not found`,
+      resource,
+      id,
+    }),
 
-export class DocumentPermissionRepository {
-  private db: any;
+  conflict: (message: string, field: string) =>
+    new ConflictError(message, field),
 
-  constructor(database?: any) {
-    this.db = database;
-  }
+  validation: (message: string, context: string) =>
+    new ValidationError(message, context),
+};
 
-  /**
-   * Get database instance with null check
-   */
-  private getDb() {
-    if (!this.db) {
-      throw new Error('Database instance not provided to DocumentPermissionRepository');
-    }
-    return this.db;
-  }
+/**
+ * DocumentVersion Repository Implementation
+ */
+export class DocumentVersionDrizzleRepository {
+  constructor(private readonly db = databaseService.getDatabase()) {}
 
-  /**
-   * Find document permission by ID
-   */
-  async findById(id: string): Promise<DocumentPermission | null> {
-    try {
-      const [permission] = await this.getDb()
-        .select()
-        .from(documentPermissions)
-        .where(eq(documentPermissions.id, id));
-
-      return permission || null;
-    } catch (error) {
-      throw new Error(`Failed to find document permission by ID: ${error}`);
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Private Helpers - Schema-based encoding/decoding
+  // ---------------------------------------------------------------------------
 
   /**
-   * Find multiple document permissions with optional filtering
+   * Encodes a DocumentVersionEntity into database row format using Schema
+   * Validates that all required fields are present and valid
    */
-  async findMany(filters?: DocumentPermissionFiltersDTO): Promise<DocumentPermission[]> {
-    try {
-      const query = this.getDb().select().from(documentPermissions);
-      const conditions: any[] = [];
+  private encodeVersion(
+    version: DocumentVersionEntity
+  ): Effect.Effect<DocumentVersionRow, ValidationError> {
+    return pipe(
+      Effect.try({
+        try: () => {
+          // Create serialized representation matching the domain schema
+          const serialized = {
+            id: version.id,
+            documentId: version.documentId,
+            version: version.version,
+            filename: version.filename,
+            mimeType: version.mimeType,
+            size: version.size,
+            storageKey: version.storageKey,
+            storageProvider: version.storageProvider,
+            checksum: Option.getOrNull(version.checksum),
+            tags: Option.getOrNull(version.tags),
+            metadata: Option.getOrNull(version.metadata),
+            uploadedBy: version.uploadedBy,
+            createdAt: version.createdAt,
+          };
 
-      if (filters) {
-        if (filters.documentId) {
-          conditions.push(eq(documentPermissions.documentId, filters.documentId));
-        }
-        if (filters.userId) {
-          conditions.push(eq(documentPermissions.userId, filters.userId));
-        }
-        if (filters.permission) {
-          conditions.push(eq(documentPermissions.permission, filters.permission));
-        }
-        if (filters.grantedBy) {
-          conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
-        }
-      }
-
-      const result = conditions.length > 0 
-        ? await query.where(and(...conditions))
-        : await query;
-
-      return result;
-    } catch (error) {
-      throw new Error(`Failed to find document permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Find document permissions with pagination
-   */
-  async findManyPaginated(
-    pagination: PaginationParams,
-    filters?: DocumentPermissionFiltersDTO
-  ): Promise<PaginatedResponse<DocumentPermission>> {
-    try {
-      const { page, limit } = pagination;
-      const offset = (page - 1) * limit;
-
-      const query = this.getDb().select().from(documentPermissions);
-      const countQuery = this.getDb().select({ count: sql`count(*)` }).from(documentPermissions);
-      const conditions: any[] = [];
-
-      if (filters) {
-        if (filters.documentId) {
-          conditions.push(eq(documentPermissions.documentId, filters.documentId));
-        }
-        if (filters.userId) {
-          conditions.push(eq(documentPermissions.userId, filters.userId));
-        }
-        if (filters.permission) {
-          conditions.push(eq(documentPermissions.permission, filters.permission));
-        }
-        if (filters.grantedBy) {
-          conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
-        }
-      }
-
-      const whereCondition = conditions.length > 0 ? and(...conditions) : undefined;
-
-      const [data, countResult] = await Promise.all([
-        whereCondition 
-          ? query.where(whereCondition).limit(limit).offset(offset)
-          : query.limit(limit).offset(offset),
-        whereCondition 
-          ? countQuery.where(whereCondition)
-          : countQuery
-      ]);
-
-      const total = Number(countResult[0]?.count || 0);
-      const totalPages = Math.ceil(total / limit);
-
-      return {
-        data,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
+          // Validate and transform via codec
+          return S.encodeSync(DocumentVersionCodec)(serialized);
         },
-      };
-    } catch (error) {
-      throw new Error(`Failed to find paginated document permissions: ${error}`);
-    }
+        catch: (err) =>
+          Errors.validation(
+            `Failed to encode version: ${err instanceof Error ? err.message : String(err)}`,
+            "DocumentVersion"
+          ),
+      })
+    );
   }
 
   /**
-   * Find single document permission by filters
+   * Decodes a database row into a DocumentVersionEntity using Schema
+   * Validates that row matches schema before entity creation
    */
-  async findOne(filters: DocumentPermissionFiltersDTO): Promise<DocumentPermission | null> {
-    try {
-      const result = await this.findMany(filters);
-      return result[0] || null;
-    } catch (error) {
-      throw new Error(`Failed to find document permission: ${error}`);
-    }
+  private decodeVersion(
+    row: DocumentVersionModel
+  ): Effect.Effect<DocumentVersionEntity, ValidationError> {
+    return pipe(
+      Effect.try({
+        try: () => {
+          // Decode DB row through codec (validates schema)
+          return S.decodeSync(DocumentVersionCodec)(row);
+        },
+        catch: (err) =>
+          Errors.validation(
+            `Failed to decode version: ${err instanceof Error ? err.message : String(err)}`,
+            "DocumentVersion"
+          ),
+      }),
+      // Create domain entity from validated decoded data
+      Effect.flatMap((decoded) => DocumentVersionEntity.create(decoded))
+    );
   }
 
-  /**
-   * Create new document permission
-   */
-  async create(data: CreateDocumentPermissionDTO): Promise<DocumentPermission> {
-    try {
-      const permissionId = uuidv4();
-      const now = new Date();
-
-      // insert the document permission into the database
-      const [permission] = await this.getDb()
-        .insert(documentPermissions)
-        // serializes the data into the database, taking the input DTO 
-        // and converting it to the database format (DB row)
-        .values({
-          id: permissionId,
-          documentId: data.documentId,
-          userId: data.userId,
-          permission: data.permission,
-          grantedBy: data.grantedBy,
-          createdAt: now,
-          updatedAt: now,
+  private fetchOne(
+    query: () => Promise<DocumentVersionModel[]>
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError | ValidationError> {
+    return pipe(
+      Effect.tryPromise({
+        try: query,
+        catch: (err) => Errors.database("Query", err),
+      }),
+      Effect.map(Option.fromIterable),
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (row) =>
+            pipe(this.decodeVersion(row), Effect.map(Option.some)),
         })
-        .returning();
+      )
+    );
+  }
 
-      return permission;
-    } catch (error) {
-      throw new Error(`Failed to create document permission: ${error}`);
-    }
+  private fetchMany(
+    query: () => Promise<DocumentVersionModel[]>
+  ): Effect.Effect<DocumentVersionEntity[], DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: query,
+        catch: (err) => Errors.database("Query", err),
+      }),
+      Effect.flatMap((rows) =>
+        Effect.all(rows.map((row) => this.decodeVersion(row)))
+      ),
+      Effect.mapError((err) =>
+        err instanceof DatabaseError ? err : Errors.database("Decode", err)
+      )
+    );
+  }
+
+  private executeWrite(
+    operation: () => Promise<any>
+  ): Effect.Effect<void, DatabaseError | ConflictError> {
+    return Effect.tryPromise({
+      try: operation,
+      catch: (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        return msg.includes("unique") || msg.includes("duplicate")
+          ? Errors.conflict(msg, "version")
+          : Errors.database("Write", err);
+      },
+    }).pipe(Effect.as(void 0));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Read Operations
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find version by ID using DocumentVersionId (branded UUID from shared)
+   */
+  findById(
+    id: DocumentVersionId
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError> {
+    return this.fetchOne(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.id, id))
+        .limit(1)
+    ).pipe(
+      Effect.mapError((err) =>
+        err instanceof DatabaseError ? err : Errors.database(`Find ${id}`, err)
+      )
+    );
   }
 
   /**
-   * Create multiple document permissions
+   * Find version by document ID and version number using DocumentId (branded UUID)
    */
-  async createMany(data: CreateDocumentPermissionDTO[]): Promise<DocumentPermission[]> {
-    try {
-      const now = new Date();
-      // mapping DTO into DB row (serializing the data)
-      const permissionsToInsert = data.map(permission => ({
-        id: uuidv4(),
-        documentId: permission.documentId,
-        userId: permission.userId,
-        permission: permission.permission,
-        grantedBy: permission.grantedBy,
-        createdAt: now,
-        updatedAt: now,
-      }));
-
-      const result = await this.getDb()
-        .insert(documentPermissions)
-        .values(permissionsToInsert)
-        .returning();
-
-      return result;
-    } catch (error) {
-      throw new Error(`Failed to create multiple document permissions: ${error}`);
-    }
+  findByDocumentIdAndVersion(
+    documentId: DocumentId,
+    version: number
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError> {
+    return this.fetchOne(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(
+          and(
+            eq(documentVersions.documentId, documentId),
+            eq(documentVersions.version, version)
+          )
+        )
+        .limit(1)
+    );
   }
 
   /**
-   * Update document permission by ID
+   * Find all versions for a document using DocumentId (branded UUID)
    */
-  async update(id: string, data: UpdateDocumentPermissionDTO): Promise<DocumentPermission | null> {
-    try {
-      const [permission] = await this.getDb()
-        .update(documentPermissions)
-        // mapping DTO into DB row (serializing the data)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(eq(documentPermissions.id, id))
-        .returning();
-
-      return permission || null;
-    } catch (error) {
-      throw new Error(`Failed to update document permission: ${error}`);
-    }
+  findByDocumentId(
+    documentId: DocumentId
+  ): Effect.Effect<DocumentVersionEntity[], DatabaseError> {
+    return this.fetchMany(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, documentId))
+        .orderBy(desc(documentVersions.version))
+    );
   }
 
   /**
-   * Delete document permission by ID
+   * Find latest version for a document
    */
-  async delete(id: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(eq(documentPermissions.id, id));
-
-      return result.rowCount > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete document permission: ${error}`);
-    }
+  findLatestByDocumentId(
+    documentId: DocumentId
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError> {
+    return this.fetchOne(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.documentId, documentId))
+        .orderBy(desc(documentVersions.version))
+        .limit(1)
+    );
   }
 
   /**
-   * Check if document permission exists
+   * Get next version number for a document
    */
-  async exists(id: string): Promise<boolean> {
-    try {
-      const [permission] = await this.getDb()
-        .select({ id: documentPermissions.id })
-        .from(documentPermissions)
-        .where(eq(documentPermissions.id, id))
-        .limit(1);
+  getNextVersionNumber(documentId: DocumentId): Effect.Effect<number, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const result = await this.db
+            .select({
+              maxVersion: sql<number>`COALESCE(MAX(${documentVersions.version}), 0)`,
+            })
+            .from(documentVersions)
+            .where(eq(documentVersions.documentId, documentId));
 
-      return !!permission;
-    } catch (error) {
-      throw new Error(`Failed to check document permission existence: ${error}`);
-    }
+          return Number(result[0]?.maxVersion ?? 0) + 1;
+        },
+        catch: (err) => Errors.database("Get next version", err),
+      })
+    );
   }
 
   /**
-   * Count document permissions with optional filters
+   * Check if version exists
    */
-  async count(filters?: DocumentPermissionFiltersDTO): Promise<number> {
-    try {
-      const query = this.getDb().select({ count: sql`count(*)` }).from(documentPermissions);
-      const conditions: any[] = [];
-
-      if (filters) {
-        if (filters.documentId) {
-          conditions.push(eq(documentPermissions.documentId, filters.documentId));
-        }
-        if (filters.userId) {
-          conditions.push(eq(documentPermissions.userId, filters.userId));
-        }
-      }
-
-      const [result] = conditions.length > 0 
-        ? await query.where(and(...conditions))
-        : await query;
-
-      return Number(result.count);
-    } catch (error) {
-      throw new Error(`Failed to count document permissions: ${error}`);
-    }
+  exists(id: DocumentVersionId): Effect.Effect<boolean, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: () =>
+          this.db
+            .select({ id: documentVersions.id })
+            .from(documentVersions)
+            .where(eq(documentVersions.id, id))
+            .limit(1),
+        catch: (err) => Errors.database("Check exists", err),
+      }),
+      Effect.map((rows) => rows.length > 0)
+    );
   }
 
   /**
-   * Find permissions by document ID
+   * Count versions for a document
    */
-  async findByDocumentId(documentId: string): Promise<DocumentPermission[]> {
-    try {
-      return await this.findMany({ documentId });
-    } catch (error) {
-      throw new Error(`Failed to find permissions by document ID: ${error}`);
-    }
+  count(documentId: DocumentId): Effect.Effect<number, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const result = await this.db
+            .select({ count: count() })
+            .from(documentVersions)
+            .where(eq(documentVersions.documentId, documentId));
+          return Number(result[0]?.count ?? 0);
+        },
+        catch: (err) => Errors.database("Count", err),
+      })
+    );
   }
 
   /**
-   * Find permissions by user ID
+   * Find versions by checksum (for duplicate detection)
    */
-  async findByUserId(userId: string): Promise<DocumentPermission[]> {
-    try {
-      return await this.findMany({ userId });
-    } catch (error) {
-      throw new Error(`Failed to find permissions by user ID: ${error}`);
-    }
+  findByChecksum(checksum: string): Effect.Effect<DocumentVersionEntity[], DatabaseError> {
+    return this.fetchMany(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.checksum, checksum))
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Write Operations (Immutable - Insert Only)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Save a new version (insert only, immutable)
+   */
+  save(
+    version: DocumentVersionEntity
+  ): Effect.Effect<DocumentVersionEntity, DatabaseError | ConflictError | ValidationError> {
+    return pipe(
+      this.encodeVersion(version),
+      Effect.flatMap((row) =>
+        this.executeWrite(() => this.db.insert(documentVersions).values(row as any))
+      ),
+      Effect.as(version)
+    );
   }
 
   /**
-   * Find permissions by document and user
+   * Delete version by ID
    */
-  async findByDocumentAndUser(documentId: string, userId: string): Promise<DocumentPermission | null> {
-    try {
-      const permissions = await this.findMany({ documentId, userId });
-      return permissions[0] || null;
-    } catch (error) {
-      throw new Error(`Failed to find permissions by document and user: ${error}`);
-    }
+  delete(id: DocumentVersionId): Effect.Effect<boolean, DatabaseError | NotFoundError> {
+    return pipe(
+      this.exists(id),
+      Effect.flatMap((exists) =>
+        exists
+          ? (pipe(
+              this.executeWrite(() =>
+                this.db.delete(documentVersions).where(eq(documentVersions.id, id))
+              ),
+              Effect.as(true)
+            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>)
+          ? Effect.fail(
+              Errors.notFound(id)
+            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>
+      )
+    );
   }
 
   /**
-   * Check if user has specific permission for document
+   * Delete all versions for a document (cascade operation)
    */
-  async hasPermission(documentId: string, userId: string, permission: string): Promise<boolean> {
-    try {
-      const result = await this.findOne({ documentId, userId, permission: permission as Permission });
-      return !!result;
-    } catch (error) {
-      throw new Error(`Failed to check user permission: ${error}`);
-    }
+  deleteByDocumentId(documentId: DocumentId): Effect.Effect<number, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const result = await this.db
+            .delete(documentVersions)
+            .where(eq(documentVersions.documentId, documentId));
+          return result.rowCount ?? 0;
+        },
+        catch: (err) => Errors.database("Delete cascade", err),
+      })
+    );
   }
 
-  /**
-   * Grant permission to user for document
-   */
-  async grantPermission(permissionData: CreateDocumentPermissionDTO): Promise<DocumentPermission> {
-    try {
-      // Check if permission already exists
-      const existing = await this.findOne({ 
-        documentId: permissionData.documentId, 
-        userId: permissionData.userId, 
-        permission: permissionData.permission 
-      });
-      if (existing) {
-        return existing;
-      }
-
-      return await this.create(permissionData);
-    } catch (error) {
-      throw new Error(`Failed to grant permission: ${error}`);
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Analytics
+  // ---------------------------------------------------------------------------
 
   /**
-   * Revoke permission from user for document
+   * Get repository statistics
    */
-  async revokePermission(documentId: string, userId: string, permission: string): Promise<boolean> {
-    try {
-      const existing = await this.findOne({ documentId, userId, permission: permission as Permission });
-      // if the permission does not exist, then we return false
-      if (!existing) {
-        return false;
-      }
+  getStats(): Effect.Effect<{
+    totalVersions: number;
+    totalSize: number;
+    versionsByMimeType: Record<string, number>;
+    averageVersionsPerDocument: number;
+  }, DatabaseError> {
+    return pipe(
+      Effect.tryPromise({
+        try: async () => {
+          const [countResult, sizeResult, mimeTypeResult, docCountResult] = await Promise.all([
+            this.db.select({ count: count() }).from(documentVersions),
+            this.db
+              .select({ total: sql<number>`COALESCE(SUM(${documentVersions.size}), 0)` })
+              .from(documentVersions),
+            this.db
+              .select({ mimeType: documentVersions.mimeType, count: count() })
+              .from(documentVersions)
+              .groupBy(documentVersions.mimeType),
+            this.db
+              .select({
+                count: sql<number>`COUNT(DISTINCT ${documentVersions.documentId})`,
+              })
+              .from(documentVersions),
+          ]);
 
-      // if the permission exists, then we delete it
-      return await this.delete(existing.id);
-    } catch (error) {
-      throw new Error(`Failed to revoke permission: ${error}`);
-    }
-  }
+          const totalVersions = Number(countResult[0]?.count ?? 0);
+          const totalSize = Number(sizeResult[0]?.total ?? 0);
+          const totalDocuments = Number(docCountResult[0]?.count ?? 1);
 
-  /**
-   * Revoke all permissions for user on document
-   */
-  async revokeAllPermissions(documentId: string, userId: string): Promise<number> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(and(
-          eq(documentPermissions.documentId, documentId),
-          eq(documentPermissions.userId, userId)
-        ));
-
-      return result.rowCount || 0;
-    } catch (error) {
-      throw new Error(`Failed to revoke all permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Delete all permissions for a document
-   */
-  async deleteByDocumentId(documentId: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(eq(documentPermissions.documentId, documentId));
-
-      return result.rowCount > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete permissions by document ID: ${error}`);
-    }
-  }
-
-  /**
-   * Delete all permissions for a user
-   */
-  async deleteByUserId(userId: string): Promise<boolean> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(eq(documentPermissions.userId, userId));
-
-      return result.rowCount > 0;
-    } catch (error) {
-      throw new Error(`Failed to delete permissions by user ID: ${error}`);
-    }
-  }
-
-  /**
-   * Get documents accessible by user
-   */
-  async getAccessibleDocuments(userId: string): Promise<string[]> {
-    try {
-      const permissions = await this.getDb()
-        .selectDistinct({ documentId: documentPermissions.documentId })
-        .from(documentPermissions)
-        .where(eq(documentPermissions.userId, userId));
-
-      return permissions.map((p: any) => p.documentId);
-    } catch (error) {
-      throw new Error(`Failed to get accessible documents: ${error}`);
-    }
-  }
-
-  /**
-   * Get users with access to document
-   */
-  async getDocumentUsers(documentId: string): Promise<Array<{ userId: string; permission: string }>> {
-    try {
-      const permissions = await this.getDb()
-        .select({
-          userId: documentPermissions.userId,
-          permission: documentPermissions.permission,
-        })
-        .from(documentPermissions)
-        .where(eq(documentPermissions.documentId, documentId));
-
-      return permissions;
-    } catch (error) {
-      throw new Error(`Failed to get document users: ${error}`);
-    }
-  }
-
-  /**
-   * Check if user has any permission for document
-   */
-  async hasAnyPermission(documentId: string, userId: string): Promise<boolean> {
-    try {
-      const permissions = await this.findMany({ documentId, userId });
-      return permissions.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to check if user has any permission: ${error}`);
-    }
-  }
-
-  /**
-   * Get user's permissions for document
-   */
-  async getUserPermissions(documentId: string, userId: string): Promise<Permission[]> {
-    try {
-      const permissions = await this.findMany({ documentId, userId });
-      return permissions.map(p => p.permission as Permission);
-    } catch (error) {
-      throw new Error(`Failed to get user permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Update user permission for document
-   */
-  async updatePermission(
-    documentId: string,
-    userId: string,
-    oldPermission: string,
-    newPermission: string,
-    grantedBy: string
-  ): Promise<boolean> {
-    try {
-      const existing = await this.findOne({ documentId, userId, permission: oldPermission as Permission });
-      if (!existing) {
-        return false;
-      }
-
-      const result = await this.getDb()
-        .update(documentPermissions)
-        .set({
-          permission: newPermission,
-          grantedBy,
-          updatedAt: new Date(),
-        })
-        .where(eq(documentPermissions.id, existing.id));
-
-      return result.rowCount > 0;
-    } catch (error) {
-      throw new Error(`Failed to update permission: ${error}`);
-    }
-  }
-
-  /**
-   * Find documents user has specific permission for
-   */
-  async findDocumentsByUserPermission(userId: string, permission: string): Promise<string[]> {
-    try {
-      const permissions = await this.findMany({ userId, permission: permission as Permission });
-      return permissions.map((p: any) => p.documentId);
-    } catch (error) {
-      throw new Error(`Failed to find documents by user permission: ${error}`);
-    }
-  }
-
-  /**
-   * Find users with specific permission for document
-   */
-  async findUsersByDocumentPermission(documentId: string, permission: string): Promise<string[]> {
-    try {
-      const permissions = await this.findMany({ documentId, permission: permission as Permission });
-      return permissions.map(p => p.userId);
-    } catch (error) {
-      throw new Error(`Failed to find users by document permission: ${error}`);
-    }
-  }
-
-  /**
-   * Copy permissions from one document to another
-   */
-  async copyPermissions(sourceDocumentId: string, targetDocumentId: string, grantedBy: string): Promise<number> {
-    try {
-      const sourcePermissions = await this.findByDocumentId(sourceDocumentId);
-      
-      if (sourcePermissions.length === 0) {
-        return 0;
-      }
-
-      const permissionsToCopy = sourcePermissions.map(permission => ({
-        documentId: targetDocumentId,
-        userId: permission.userId,
-        permission: permission.permission as Permission,
-        grantedBy,
-      }));
-
-      const result = await this.createMany(permissionsToCopy);
-      return result.length;
-    } catch (error) {
-      throw new Error(`Failed to copy permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Remove all permissions for a document
-   */
-  async removeAllDocumentPermissions(documentId: string): Promise<number> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(eq(documentPermissions.documentId, documentId));
-
-      return result.rowCount;
-    } catch (error) {
-      throw new Error(`Failed to remove all document permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Remove all permissions for a user
-   */
-  async removeAllUserPermissions(userId: string): Promise<number> {
-    try {
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(eq(documentPermissions.userId, userId));
-
-      return result.rowCount;
-    } catch (error) {
-      throw new Error(`Failed to remove all user permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Update multiple permissions by filters
-   */
-  async updateMany(filters: DocumentPermissionFiltersDTO, data: UpdateDocumentPermissionDTO): Promise<number> {
-    try {
-      const conditions: any[] = [];
-
-      if (filters.documentId) {
-        conditions.push(eq(documentPermissions.documentId, filters.documentId));
-      }
-      if (filters.userId) {
-        conditions.push(eq(documentPermissions.userId, filters.userId));
-      }
-      if (filters.permission) {
-        conditions.push(eq(documentPermissions.permission, filters.permission));
-      }
-      if (filters.grantedBy) {
-        conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
-      }
-
-      const result = await this.getDb()
-        .update(documentPermissions)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(conditions.length > 0 ? and(...conditions) : undefined);
-
-      return result.rowCount;
-    } catch (error) {
-      throw new Error(`Failed to update multiple permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Delete multiple permissions by filters
-   */
-  async deleteMany(filters: DocumentPermissionFiltersDTO): Promise<number> {
-    try {
-      const conditions: any[] = [];
-
-      if (filters.documentId) {
-        conditions.push(eq(documentPermissions.documentId, filters.documentId));
-      }
-      if (filters.userId) {
-        conditions.push(eq(documentPermissions.userId, filters.userId));
-      }
-      if (filters.permission) {
-        conditions.push(eq(documentPermissions.permission, filters.permission));
-      }
-      if (filters.grantedBy) {
-        conditions.push(eq(documentPermissions.grantedBy, filters.grantedBy));
-      }
-
-      const result = await this.getDb()
-        .delete(documentPermissions)
-        .where(conditions.length > 0 ? and(...conditions) : undefined);
-
-      return result.rowCount;
-    } catch (error) {
-      throw new Error(`Failed to delete multiple permissions: ${error}`);
-    }
-  }
-
-  /**
-   * Get permission statistics
-   */
-  async getPermissionStats(): Promise<{
-    totalPermissions: number;
-    permissionsByType: Record<string, number>;
-    documentsWithPermissions: number;
-    usersWithPermissions: number;
-  }> {
-    try {
-      const [totalCount] = await this.getDb()
-        .select({ count: sql`count(*)` })
-        .from(documentPermissions);
-
-      const permissionTypeStats = await this.getDb()
-        .select({
-          permission: documentPermissions.permission,
-          count: sql`count(*)`
-        })
-        .from(documentPermissions)
-        .groupBy(documentPermissions.permission);
-
-      const [documentsCount] = await this.getDb()
-        .selectDistinct({ count: sql`count(distinct ${documentPermissions.documentId})` })
-        .from(documentPermissions);
-
-      const [usersCount] = await this.getDb()
-        .selectDistinct({ count: sql`count(distinct ${documentPermissions.userId})` })
-        .from(documentPermissions);
-
-      const permissionsByType = permissionTypeStats.reduce((acc: any, stat: any) => {
-        acc[stat.permission] = Number(stat.count);
-        return acc;
-      }, {} as Record<string, number>);
-
-      return {
-        totalPermissions: Number(totalCount.count),
-        permissionsByType,
-        documentsWithPermissions: Number(documentsCount.count),
-        usersWithPermissions: Number(usersCount.count),
-      };
-    } catch (error) {
-      throw new Error(`Failed to get permission statistics: ${error}`);
-    }
+          return {
+            totalVersions,
+            totalSize,
+            versionsByMimeType: mimeTypeResult.reduce(
+              (acc, row) => ({
+                ...acc,
+                [row.mimeType]: Number(row.count),
+              }),
+              {} as Record<string, number>
+            ),
+            averageVersionsPerDocument:
+              totalDocuments > 0
+                ? Math.round((totalVersions / totalDocuments) * 100) / 100
+                : 0,
+          };
+        },
+        catch: (err) => Errors.database("Get stats", err),
+      })
+    );
   }
 }

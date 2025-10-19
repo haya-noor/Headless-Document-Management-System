@@ -1,6 +1,8 @@
 /**
  * Storage configuration (contains environment variables for storage providers)
  * Defines storage provider settings and options
+ * Defines storage type (e.g., local, cloud).
+  Supplies credentials and settings for each provider.
  * 
  * Used by:
  * - src/app/infrastructure/storage/storage.factory.ts (for provider selection)

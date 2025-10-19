@@ -1,8 +1,9 @@
+
 import { Effect, Option, pipe, Schema as S } from "effect";
 import { eq, desc, asc, count } from "drizzle-orm";
 
 import { databaseService } from "@/app/infrastructure/services/drizzle-service";
-import { users } from "@/app/infrastructure/database/models";
+import { users } from "@/app/infrastructure/database/user-model";
 import type { InferSelectModel } from "drizzle-orm";
 
 type UserModel = InferSelectModel<typeof users>;
@@ -44,6 +45,10 @@ export interface UserFilter {
  */
 export class UserDrizzleRepository implements Repository<UserEntity, UserFilter> {
   constructor(private readonly db = databaseService.getDatabase()) {}
+
+  // ---------------------------------------------------------------------------
+  // Private Helpers - Encoding/Decoding
+  // ---------------------------------------------------------------------------
 
   /**
    * Encodes a UserEntity into a database row format
@@ -241,7 +246,8 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
                 cause: err,
               }),
           }),
-          Effect.map(([result]) => {
+          Effect.map((results) => {
+            const result = results[0];
             const total = Number(result?.count ?? 0);
             const totalPages = Math.ceil(total / limit);
             return {
@@ -328,41 +334,41 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
   /**
    * Updates an existing user in the database
    */
-  // private update(
-  //   user: UserEntity
-  // ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
-  //   return pipe(
-  //     this.exists(user.id),
-  //     Effect.flatMap((exists) =>
-  //       exists
-  //         ? this.encodeUser(user)
-  //         : Effect.fail(
-  //             new NotFoundError({
-  //               message: "User not found",
-  //               resource: "User",
-  //               id: user.id,
-  //             })
-  //           )
-  //     ),
-  //     Effect.flatMap((row) =>
-  //       Effect.tryPromise({
-  //         try: () =>
-  //           this.db.update(users).set(row as any).where(eq(users.id, user.id)),
-  //         catch: (err) =>
-  //           new DatabaseError({
-  //             message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
-  //             cause: err,
-  //           }),
-  //       })
-  //     ),
-  //     Effect.as(user)
-  //   );
-  // }
+  private update(
+    user: UserEntity
+  ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
+    return pipe(
+      this.exists(user.id),
+      Effect.flatMap((exists) =>
+        exists
+          ? this.encodeUser(user)
+          : Effect.fail(
+              new NotFoundError({
+                message: "User not found",
+                resource: "User",
+                id: user.id,
+              })
+            )
+      ),
+      Effect.flatMap((row) =>
+        Effect.tryPromise({
+          try: () =>
+            this.db.update(users).set(row as any).where(eq(users.id, user.id)),
+          catch: (err) =>
+            new DatabaseError({
+              message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
+              cause: err,
+            }),
+        })
+      ),
+      Effect.as(user)
+    );
+  }
 
   /**
    * Deletes a user by ID (hard delete)
    */
-  delete(id: string): Effect.Effect<boolean, DatabaseError> {
+  delete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
     return pipe(
       this.exists(id),
       Effect.flatMap((exists) =>
@@ -379,9 +385,10 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
               Effect.as(true)
             )
           : Effect.fail(
-              new DatabaseError({
+              new NotFoundError({
                 message: "User not found",
-                cause: undefined,
+                resource: "User",
+                id,
               })
             )
       )
@@ -391,37 +398,37 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
   /**
    * Soft deletes a user by marking them as inactive
    */
-  // softDelete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
-  //   return pipe(
-  //     this.findById(id),
-  //     Effect.flatMap(
-  //       Option.match({
-  //         onNone: () =>
-  //           Effect.fail(
-  //             new NotFoundError({
-  //               message: "User not found",
-  //               resource: "User",
-  //               id,
-  //             })
-  //           ),
-  //         onSome: (user) =>
-  //           pipe(
-  //             user.deactivate(),
-  //             Effect.flatMap((deactivated) => this.save(deactivated)),
-  //             Effect.as(true)
-  //           ),
-  //       })
-  //     ),
-  //     Effect.mapError((err) =>
-  //       err instanceof NotFoundError
-  //         ? err
-  //         : new DatabaseError({
-  //             message: "Failed to soft delete user",
-  //             cause: err,
-  //           })
-  //     )
-  //   );
-  // }
+  softDelete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
+    return pipe(
+      this.findById(id),
+      Effect.flatMap(
+        Option.match({
+          onNone: () =>
+            Effect.fail(
+              new NotFoundError({
+                message: "User not found",
+                resource: "User",
+                id,
+              })
+            ),
+          onSome: (user) =>
+            pipe(
+              user.deactivate(),
+              Effect.flatMap((deactivated) => this.save(deactivated)),
+              Effect.as(true)
+            ),
+        })
+      ),
+      Effect.mapError((err) =>
+        err instanceof NotFoundError
+          ? err
+          : new DatabaseError({
+              message: "Failed to soft delete user",
+              cause: err,
+            })
+      )
+    );
+  }
 
   /**
    * Checks if a user exists by ID

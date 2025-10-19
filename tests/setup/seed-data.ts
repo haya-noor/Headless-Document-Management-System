@@ -50,3 +50,13 @@ export const seedDocuments = async (ownerId: string, count = 3) => {
   await db.insert(documents).values(data)
   return data
 }
+
+export const createMinimalSeedData = async (options?: { users?: number; documents?: number }) => {
+  const [user] = await seedUsers(options?.users ?? 1)
+  const documents = await seedDocuments(user.id, options?.documents ?? 2)
+  return { user, documents }
+}
+
+
+
+

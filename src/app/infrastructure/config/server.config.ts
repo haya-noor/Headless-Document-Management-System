@@ -8,6 +8,8 @@
  *   Line 369: const baseUrl = `http://localhost:${serverConfig.port}`;
  * 
  * Configuration:
+ *  this file exposes the port number for for building URLs to access stored files. 
+ *  used in : (local-storage.ts → to generate file URLs and download links.s)
  * - PORT: number (default: 3002)
  * - Loaded from .env file via getEnvVar utility
  */

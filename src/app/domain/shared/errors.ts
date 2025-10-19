@@ -8,6 +8,8 @@
  * 
  * Every concrete repository implementation (e.g., Prisma, Mongo, REST, etc.)
  * will exist in the infrastructure layer, and depend on this interface.
+ * 
+ * ValidationError, RepositoryError, BusinessRuleViolationError, ConflictError, DatabaseError, NotFoundError
  */
 
 import { Effect, Data, Option } from 'effect'

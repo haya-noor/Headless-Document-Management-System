@@ -10,7 +10,7 @@ import {
   generateTestUser,
   createTestUserEntity,
   userArbitrary,
-} from "../factories/user.factory"
+} from "../factories/user.factory-test"
 
 import { UserEntity } from "../../src/app/domain/user/entity"
 import { UserValidationError } from "../../src/app/domain/user/errors"

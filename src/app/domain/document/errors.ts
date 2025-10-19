@@ -1,43 +1,49 @@
 import { ValidationError, BusinessRuleViolationError, RepositoryError } from "../shared/errors"
-import { ParseResult } from "effect"
+import { ParseResult, Schema as S } from "effect"
 
 /**
  * Document domain errors — all reuse shared base classes
  */
-
 export class DocumentNotFoundError extends RepositoryError {
   readonly tag = "DocumentNotFoundError" as const
+
   constructor(field: string, value: unknown, details?: string) {
-    super(`Document not found for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`, "DOCUMENT_NOT_FOUND")
+    const valueStr = safeStringify(value)
+    const message = `Document not found for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
+    super(message, "DOCUMENT_NOT_FOUND")
   }
 }
 
 export class DocumentValidationError extends ValidationError {
   readonly tag = "DocumentValidationError" as const
+
   constructor(field: string, value: unknown, details?: string) {
-    let valueStr: string
-    try {
-      if (value === null) {
-        valueStr = "null"
-      } else if (value === undefined) {
-        valueStr = "undefined"
-      } else if (typeof value === "object") {
-        valueStr = JSON.stringify(value)
-      } else {
-        valueStr = String(value)
-      }
-    } catch {
-      valueStr = "[unable to stringify]"
-    }
-    super(`Invalid document field ${field}: ${valueStr}${details ? ` - ${details}` : ""}`, field)
+    const valueStr = safeStringify(value)
+    const message = `Invalid document field ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
+    super(message, field)
   }
 
-  static fromParseError(input: unknown, error: ParseResult.ParseError, field = "Document"): DocumentValidationError {
-    return new DocumentValidationError(field, input, error.message)
+  /** Declarative Schema error formatter 
+   * safeStringify is used to avoid circular references 
+  */
+  static fromParseError(input: unknown, error: ParseResult.ParseError, field = "Document") {
+    const formatted = safeStringify(error)
+    return new DocumentValidationError(field, input, formatted)
   }
 }
 
-/** Domain error union type */
+function safeStringify(value: unknown): string {
+  try {
+    if (value === null) return "null"
+    if (value === undefined) return "undefined"
+    if (typeof value === "object") return JSON.stringify(value)
+    return String(value)
+  } catch {
+    return "[unable to stringify]"
+  }
+}
+
+/** Union of all possible domain errors */
 export type DocumentErrorType =
   | DocumentNotFoundError
   | DocumentValidationError

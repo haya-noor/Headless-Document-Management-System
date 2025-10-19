@@ -37,44 +37,27 @@ const digits = (n: number) => {
 }
 
 // -----------------------------
-// field generators (safe ranges)
+// User Field Generators
 // -----------------------------
 
 const userGenerators = {
-  id: () => makeUserIdSync(faker.string.uuid()),
-
-  email: () => faker.internet.email().toLowerCase(),
-
+  id: () => clamp(makeUserIdSync(faker.string.uuid()), 36),  // Clamp to varchar(36)
+  email: () => clamp(faker.internet.email().toLowerCase(), 255), // varchar(255)
   firstName: () => {
-    // Ensure 1..100 chars
     const base = faker.person.firstName()
     return clamp(base.length === 0 ? "A" : base, 100)
   },
-
   lastName: () => {
     const base = faker.person.lastName()
     return clamp(base.length === 0 ? "B" : base, 100)
   },
-
   role: () => faker.helpers.arrayElement(["admin", "user"]) as "admin" | "user",
-
   isActive: () => faker.datatype.boolean(),
-
   dateOfBirth: () =>
-    iso(
-      faker.date.birthdate({
-        min: 1970,
-        max: 2005,
-        mode: "year",
-      })
-    ),
-
-  phoneNumber: () => clamp(digits(20), 20), // <= 20 chars
-
-  profileImage: () => clamp(faker.image.avatar(), 500), // <= 500 chars
-
+    iso(faker.date.birthdate({ min: 1970, max: 2005, mode: "year" })),
+  phoneNumber: () => clamp(digits(20), 20),
+  profileImage: () => clamp(faker.image.avatar(), 500),
   createdAt: () => iso(faker.date.past({ years: 2 })),
-
   updatedAt: () => iso(faker.date.recent({ days: 30 })),
 }
 
@@ -102,11 +85,11 @@ export const generateTestUser = (
     role: userGenerators.role(),
     isActive: userGenerators.isActive(),
     createdAt: userGenerators.createdAt(),
+    updatedAt: withUpdated ? userGenerators.updatedAt() : undefined,
     // optionals (present or omitted)
     dateOfBirth: withDOB ? userGenerators.dateOfBirth() : undefined,
     phoneNumber: withPhone ? userGenerators.phoneNumber() : undefined,
     profileImage: withImage ? userGenerators.profileImage() : undefined,
-    updatedAt: withUpdated ? userGenerators.updatedAt() : undefined,
   }
 
   return { ...base, ...overrides }
@@ -207,3 +190,12 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
   },
   { requiredKeys: ["id", "email", "firstName", "lastName", "role", "isActive", "createdAt"] }
 )
+
+export const UserFactory = {
+  one: generateTestUser,
+  many: generateTestUsers,
+  admin: createAdminUser,
+  regular: createRegularUser,
+  inactive: createInactiveUser,
+  entity: createTestUserEntity,
+}

@@ -53,7 +53,7 @@ export class UserProfile {
   get fullName() { return `${this.data.firstName} ${this.data.lastName}` }
 
   get completeness(): number {
-    const total = 6
+    const total = 6  // total number of fields like firstName, lastName, email, dateOfBirth, phoneNumber, profileImage
     const complete = Object.values(this.data).filter((v) => !!v).length
     return Math.round((complete / total) * 100)
   }
