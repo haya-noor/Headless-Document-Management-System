@@ -13,7 +13,8 @@ import { documents } from "@/app/infrastructure/database/models";
 import type { InferSelectModel } from "drizzle-orm";
 
 import { DocumentSchemaEntity } from "@/app/domain/document/entity";
-import { DocumentCodec } from "@/app/domain/document/schema";
+import { DocumentCodec, DocumentRow } from "@/app/domain/document/schema";
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid";
 import {
   DocumentValidationError,
 } from "@/app/domain/document/errors";
@@ -119,27 +120,43 @@ export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntit
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private encodeDocument(doc: DocumentSchemaEntity): Effect.Effect<any, ValidationError> {
-    return Effect.try({
-      try: () => S.encodeSync(DocumentCodec)((doc as any).toSerialized()),
-      catch: (err) =>
-        new ValidationError(
-          `Failed to encode document: ${err instanceof Error ? err.message : String(err)}`,
-          "document"
-        ),
-    });
+  /**
+   * Encodes a DocumentSchemaEntity to a database row using Effect Schema Codec
+   * Uses the Codec's encode transformation directly
+   */
+  private encodeDocument(doc: DocumentSchemaEntity): Effect.Effect<DocumentRow, ValidationError> {
+    // Extract domain data
+    const domainData = {
+      id: doc.id,
+      ownerId: doc.ownerId,
+      title: doc.title,
+      description: Option.getOrUndefined(doc.description),
+      tags: Option.getOrUndefined(doc.tags),
+      currentVersionId: doc.currentVersionId,
+      createdAt: doc.createdAt,
+      updatedAt: Option.getOrUndefined(doc.updatedAt)
+    };
+
+    // Use Codec's encode to transform Domain -> DB Row
+    return pipe(
+      S.encode(DocumentCodec)(domainData),
+      Effect.mapError((err) =>
+        new ValidationError(`Failed to encode document: ${err.message}`, "Document")
+      )
+    ) as any;
   }
 
-  private decodeDocument(row: DocumentModel): Effect.Effect<DocumentSchemaEntity, ValidationError> {
+  /**
+   * Decodes a database row into a DocumentSchemaEntity using Effect Schema Codec
+   * Uses the Codec's decode transformation directly
+   */
+  private decodeDocument(row: DocumentModel): Effect.Effect<DocumentSchemaEntity, ValidationError | DocumentValidationError> {
+    // Use Codec's decode to transform DB Row -> Domain
     return pipe(
-      Effect.try({
-        try: () => S.decodeSync(DocumentCodec)(row),
-        catch: (err) =>
-          new ValidationError(
-            `Failed to decode document: ${err instanceof Error ? err.message : String(err)}`,
-            "document"
-          ),
-      }),
+      S.decodeUnknown(DocumentCodec)(row),
+      Effect.mapError((err) =>
+        new ValidationError(`Failed to decode document: ${err.message}`, "Document")
+      ),
       Effect.flatMap((decoded) => DocumentSchemaEntity.create(decoded))
     );
   }
@@ -227,7 +244,14 @@ export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntit
   ): Effect.Effect<PaginatedResponse<DocumentSchemaEntity>, DatabaseError> {
     const offset = (page - 1) * limit;
     const orderBy = sortOrder === "asc" ? asc : desc;
-    const sortColumn = documents[sortBy as keyof typeof documents] ?? documents.createdAt;
+    // Type-safe column selection for sorting
+    let sortColumn;
+    if (sortBy === 'filename') sortColumn = documents.filename;
+    else if (sortBy === 'mimeType') sortColumn = documents.mimeType;
+    else if (sortBy === 'size') sortColumn = documents.size;
+    else if (sortBy === 'uploadedBy') sortColumn = documents.uploadedBy;
+    else sortColumn = documents.createdAt;
+    
     const conditions = buildConditions(filter);
 
     return pipe(
@@ -289,7 +313,21 @@ export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntit
   ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ConflictError | ValidationError> {
     return pipe(
       this.exists(doc.id),
-      Effect.flatMap((exists) => exists ? this.update(doc) : this.insert(doc))
+      Effect.flatMap((exists) => 
+        exists 
+          ? pipe(
+              this.updateDoc(doc),
+              Effect.mapError((err) =>
+                err instanceof NotFoundError
+                  ? new DatabaseError({
+                      message: err.message,
+                      cause: err,
+                    })
+                  : err
+              )
+            )
+          : this.insert(doc)
+      )
     );
   }
 
@@ -308,35 +346,41 @@ export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntit
     );
   }
 
-  // private update(
-  //   doc: DocumentSchemaEntity
-  // ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ValidationError | NotFoundError> {
-  //   return pipe(
-  //     this.exists(doc.id),
-  //     Effect.flatMap((exists) =>
-  //       exists
-  //         ? this.encodeDocument(doc)
-  //         : Effect.fail(
-  //             new NotFoundError({
-  //               message: "Document not found",
-  //               resource: "Document",
-  //               id: doc.id,
-  //             })
-  //           )
-  //     ),
-  //     Effect.flatMap((row) =>
-  //       Effect.tryPromise({
-  //         try: () =>
-  //           this.db
-  //             .update(documents)
-  //             .set(row as any)
-  //             .where(eq(documents.id, doc.id)),
-  //         catch: this.handleDatabaseError(`Update document ${doc.id}`),
-  //       })
-  //     ),
-  //     Effect.as(doc)
-  //   );
-  // }
+  private updateDoc(
+    doc: DocumentSchemaEntity
+  ): Effect.Effect<DocumentSchemaEntity, DatabaseError | ValidationError | NotFoundError> {
+    return pipe(
+      this.encodeDocument(doc),
+      Effect.flatMap((row) =>
+        pipe(
+          this.exists(doc.id),
+          Effect.flatMap((exists): Effect.Effect<DocumentSchemaEntity, DatabaseError | NotFoundError> => {
+            if (!exists) {
+              return Effect.fail(
+                new NotFoundError({
+                  message: "Document not found",
+                  resource: "Document",
+                  id: doc.id,
+                })
+              );
+            }
+            
+            return pipe(
+              Effect.tryPromise({
+                try: () =>
+                  this.db
+                    .update(documents)
+                    .set(row as any)
+                    .where(eq(documents.id, doc.id)),
+                catch: this.handleDatabaseError(`Update document ${doc.id}`),
+              }),
+              Effect.as(doc)
+            );
+          })
+        )
+      )
+    );
+  }
 
   delete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
   return pipe(
@@ -427,6 +471,14 @@ export class DocumentDrizzleRepository implements Repository<DocumentSchemaEntit
       }),
       Effect.flatMap((rows) =>
         Effect.all(rows.map((row) => this.decodeDocument(row)))
+      ),
+      Effect.mapError((err) =>
+        err instanceof ValidationError
+          ? new DatabaseError({
+              message: err.message,
+              cause: err,
+            })
+          : err
       )
     );
   }

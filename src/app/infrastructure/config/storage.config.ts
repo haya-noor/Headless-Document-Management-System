@@ -1,8 +1,10 @@
 /**
+ * storage.config.ts → Runtime values from .env (actual configuration data)
+ * 
  * Storage configuration (contains environment variables for storage providers)
  * Defines storage provider settings and options
  * Defines storage type (e.g., local, cloud).
-  Supplies credentials and settings for each provider.
+ * Supplies credentials and settings for each provider.
  * 
  * Used by:
  * - src/app/infrastructure/storage/storage.factory.ts (for provider selection)
@@ -10,26 +12,27 @@
  */
 
 import { getEnvVar } from './utils';
+import type { StorageConfig } from '../storage/storage.interface';
 
-export const storageConfig = {
-  provider: (getEnvVar('STORAGE_PROVIDER', 'local') as 'local' | 's3' | 'gcs' | 'azure'),
+export const storageConfig: StorageConfig = {
+  provider: getEnvVar('STORAGE_PROVIDER', 'local') as 'local' | 's3' | 'gcs' | 'azure',
   local: {
     storagePath: getEnvVar('LOCAL_STORAGE_PATH', 'local-storage'),
   },
   s3: {
-    accessKeyId: getEnvVar('S3_ACCESS_KEY_ID', ''),
-    secretAccessKey: getEnvVar('S3_SECRET_ACCESS_KEY', ''),
+    accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
     region: getEnvVar('S3_REGION', 'us-east-1'),
-    bucket: getEnvVar('S3_BUCKET', ''),
-    endpoint: getEnvVar('S3_ENDPOINT', ''), // For MinIO or other S3-compatible services
+    bucket: process.env.S3_BUCKET || '',
+    endpoint: process.env.S3_ENDPOINT || '', // For MinIO or other S3-compatible services
   },
   gcs: {
-    projectId: getEnvVar('GCS_PROJECT_ID', ''),
-    keyFilename: getEnvVar('GCS_KEY_FILENAME', ''),
-    bucket: getEnvVar('GCS_BUCKET', ''),
+    projectId: process.env.GCS_PROJECT_ID || '',
+    keyFilename: process.env.GCS_KEY_FILENAME || '',
+    bucket: process.env.GCS_BUCKET || '',
   },
   azure: {
-    connectionString: getEnvVar('AZURE_CONNECTION_STRING', ''),
-    containerName: getEnvVar('AZURE_CONTAINER_NAME', ''),
+    connectionString: process.env.AZURE_CONNECTION_STRING || '',
+    containerName: process.env.AZURE_CONTAINER_NAME || '',
   },
-} as const;
+};

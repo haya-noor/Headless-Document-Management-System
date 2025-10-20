@@ -31,7 +31,10 @@ import {
 } from "@/app/domain/shared/uuid";
 import { NotFoundError, ConflictError, DatabaseError, ValidationError } from "@/app/domain/shared/errors";
 
-// Effect runner helpers
+/*
+runEffect: runs an Effect and returns a Promise for async/await testing
+runEffectSync: runs an Effect and returns a value for sync testing
+*/
 const runEffect = <T, E>(fx: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(fx);
 const runEffectSync = <T, E>(fx: Effect.Effect<T, E>): T => Effect.runSync(fx);
 

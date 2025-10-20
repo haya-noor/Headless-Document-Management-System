@@ -12,6 +12,7 @@
 
 import { Effect as E } from "effect"
 import * as fc from "fast-check"
+import crypto from "crypto"
 import { faker } from "../setup"
 
 import { UserEntity, type SerializedUser } from "@/app/domain/user/entity"
@@ -51,6 +52,13 @@ const userGenerators = {
     const base = faker.person.lastName()
     return clamp(base.length === 0 ? "B" : base, 100)
   },
+  password: () => {
+    // Generate a hashed password format (simulating scrypt output)
+    // Format: scrypt:N=16384,r=8,p=1:<saltBase64>:<hashBase64>
+    const salt = Buffer.from(crypto.randomBytes(16)).toString('base64')
+    const hash = Buffer.from(crypto.randomBytes(64)).toString('base64')
+    return `scrypt:N=16384,r=8,p=1:${salt}:${hash}`
+  },
   role: () => faker.helpers.arrayElement(["admin", "user"]) as "admin" | "user",
   isActive: () => faker.datatype.boolean(),
   dateOfBirth: () =>
@@ -82,6 +90,7 @@ export const generateTestUser = (
     email: userGenerators.email(),
     firstName: userGenerators.firstName(),
     lastName: userGenerators.lastName(),
+    password: userGenerators.password(),
     role: userGenerators.role(),
     isActive: userGenerators.isActive(),
     createdAt: userGenerators.createdAt(),
@@ -158,6 +167,13 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
       .string({ minLength: 1, maxLength: 100 })
       .map((s) => clamp(s, 100)),
 
+    password: fc.string({ minLength: 50, maxLength: 200 }).map(() => {
+      // Generate valid hashed password format for property-based testing
+      const salt = Buffer.from(crypto.randomBytes(16)).toString('base64')
+      const hash = Buffer.from(crypto.randomBytes(64)).toString('base64')
+      return `scrypt:N=16384,r=8,p=1:${salt}:${hash}`
+    }),
+
     role: fc.constantFrom("admin", "user"),
 
     isActive: fc.boolean(),
@@ -188,7 +204,7 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
       fc.date({ max: new Date() }).map((d) => d.toISOString())
     ),
   },
-  { requiredKeys: ["id", "email", "firstName", "lastName", "role", "isActive", "createdAt"] }
+  { requiredKeys: ["id", "email", "firstName", "lastName", "password", "role", "isActive", "createdAt"] }
 )
 
 export const UserFactory = {

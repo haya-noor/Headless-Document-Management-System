@@ -81,7 +81,7 @@ afterAll(async () => {
 beforeEach(async () => {
   // Clean all tables before each test to ensure test isolation
   // Each test starts with a fresh database state
-  await cleanupDatabase()
+  await cleanupDatabase(state.testDb.db)
 })
 
 /**
@@ -121,8 +121,8 @@ describe("UserRepository • Save (CREATE)", () => {
     // Using pipe for declarative composition of async operations
     const result = await TestRuntime.run(
       pipe(
-        createAndSaveUser({ email: "newuser@example.com" }),  // Step 1: Create and save
-        Effect.flatMap((user) => findUserById(user.id))       // Step 2: Find by ID
+        createAndSaveUser({ email: "newuser@example.com" }),  
+        Effect.flatMap((user) => findUserById(user.id))      
       )
     )
 

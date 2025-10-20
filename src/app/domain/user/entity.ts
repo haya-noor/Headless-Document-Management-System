@@ -73,6 +73,9 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
   readonly dateOfBirth: Option.Option<Date>
   readonly phoneNumber: Option.Option<string>
   readonly profileImage: Option.Option<string>
+  
+  // Password is stored privately for repository encode/decode but not exposed in public API
+  private readonly _password: string
 
   private constructor(data: UserType) {
     super()
@@ -80,12 +83,18 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
     this.createdAt = data.createdAt
     this.updatedAt = Option.fromNullable(data.updatedAt)
     this.email = data.email
+    this._password = data.password
     this.firstName = data.firstName
     this.lastName = data.lastName
     this.role = data.role
     this.dateOfBirth = Option.fromNullable(data.dateOfBirth)
     this.phoneNumber = Option.fromNullable(data.phoneNumber)
     this.profileImage = Option.fromNullable(data.profileImage)
+  }
+  
+  // Getter for repository use (internal to infrastructure layer)
+  get password(): string {
+    return this._password
   }
 
   // ---------------------------------------------------------------------------
@@ -185,7 +194,7 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
     return UserEntity.create({
       ...this.toSerialized(),
       email: newEmail,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     })
   }
 
@@ -200,10 +209,10 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
       ...this.toSerialized(),
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
-      dateOfBirth: (dateOfBirth ?? Option.getOrNull(this.dateOfBirth))?.toISOString() ?? undefined,
-      phoneNumber: phoneNumber ?? Option.getOrNull(this.phoneNumber) ?? undefined,
-      profileImage: profileImage ?? Option.getOrNull(this.profileImage) ?? undefined,
-      updatedAt: new Date().toISOString()
+      dateOfBirth: dateOfBirth ?? Option.getOrUndefined(this.dateOfBirth),
+      phoneNumber: phoneNumber ?? Option.getOrUndefined(this.phoneNumber),
+      profileImage: profileImage ?? Option.getOrUndefined(this.profileImage),
+      updatedAt: new Date()
     })
   }
 
@@ -211,7 +220,7 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
     return UserEntity.create({
       ...this.toSerialized(),
       isActive: true,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     })
   }
 
@@ -219,7 +228,7 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
     return UserEntity.create({
       ...this.toSerialized(),
       isActive: false,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     })
   }
 
@@ -231,15 +240,16 @@ export class UserEntity extends BaseEntity<UserId> implements IUser {
     return {
       id: this.id,
       email: this.email,
+      password: this.password,  // Include password for repository operations
       firstName: this.firstName,
       lastName: this.lastName,
       role: this.role,
       isActive: this.isActive(),
-      dateOfBirth: Option.getOrNull(this.dateOfBirth)?.toISOString() ?? undefined,
-      phoneNumber: Option.getOrNull(this.phoneNumber) ?? undefined,
-      profileImage: Option.getOrNull(this.profileImage) ?? undefined,
-      createdAt: this.createdAt.toISOString(),
-      updatedAt: Option.getOrNull(this.updatedAt)?.toISOString() ?? undefined
+      dateOfBirth: Option.getOrUndefined(this.dateOfBirth),
+      phoneNumber: Option.getOrUndefined(this.phoneNumber),
+      profileImage: Option.getOrUndefined(this.profileImage),
+      createdAt: this.createdAt,  // Return Date object, not ISO string
+      updatedAt: Option.getOrUndefined(this.updatedAt)
     }
   }
 

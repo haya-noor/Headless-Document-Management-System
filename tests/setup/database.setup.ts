@@ -15,8 +15,9 @@ import { faker } from "@faker-js/faker"
 
 dotenv.config({ path: ".env-test-repo" }) // Load test DB credentials
 
-let client: Client | null = null
-let db: ReturnType<typeof drizzle> | null = null
+// Store active connections per test file
+const activeConnections = new Map<string, { client: Client; db: ReturnType<typeof drizzle> }>()
+let currentTestConnection: { client: Client; db: ReturnType<typeof drizzle> } | null = null
 
 /**
  * Test Database Type
@@ -35,35 +36,40 @@ export const setupDatabase = async (): Promise<TestDatabase> => {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) throw new Error("DATABASE_URL is not defined in .env-test-repo")
 
-  client = new Client({ connectionString })
+  const client = new Client({ connectionString })
   await client.connect()
 
-  db = drizzle(client)
+  const db = drizzle(client)
 
-  return { db, client, connectionString, cleanup: teardownDatabase }
+  // Store the current connection for this test file
+  currentTestConnection = { client, db }
+
+  return { db, client, connectionString, cleanup: () => teardownDatabase(client) }
 }
 
 /**
  * Gracefully shuts down the test database connection.
  */
-export const teardownDatabase = async () => {
-  if (client) await client.end()
+export const teardownDatabase = async (clientToClose?: Client) => {
+  const client = clientToClose || currentTestConnection?.client
+  if (client) {
+    await client.end()
+    if (client === currentTestConnection?.client) {
+      currentTestConnection = null
+    }
+  }
 }
 
 /**
  * Truncates all public tables (use carefully!).
  */
-export const truncateAllTables = async () => {
+export const truncateAllTables = async (dbInstance?: ReturnType<typeof drizzle>) => {
+  const db = dbInstance || currentTestConnection?.db
   if (!db) return
+  
+  // Truncate specific tables in order to avoid foreign key issues
   await db.execute(sql.raw(`
-    DO $$ DECLARE
-      r RECORD;
-    BEGIN
-      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')
-      LOOP
-        EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
-      END LOOP;
-    END $$;
+    TRUNCATE TABLE download_tokens, access_policies, document_versions, documents, users RESTART IDENTITY CASCADE;
   `))
 }
 
@@ -71,15 +77,15 @@ export const truncateAllTables = async () => {
  * Returns active Drizzle instance.
  */
 export const getDb = () => {
-  if (!db) throw new Error("DB not initialized. Did you forget to call setupDatabase()?")
-  return db
+  if (!currentTestConnection?.db) throw new Error("DB not initialized. Did you forget to call setupDatabase()?")
+  return currentTestConnection.db
 }
 
 /**
  * Clears database state (used in beforeEach)
  */
-export const cleanupDatabase = async () => {
-  await truncateAllTables()
+export const cleanupDatabase = async (dbInstance?: ReturnType<typeof drizzle>) => {
+  await truncateAllTables(dbInstance)
 }
 
 /**
@@ -88,18 +94,40 @@ export const cleanupDatabase = async () => {
 export const createTestDocument = async (
   db: any,
   ownerId: string,
-  { title, currentVersionId }: { title: string, currentVersionId: string }
+  overrides: Partial<{
+    title: string
+    currentVersionId: string
+    filename: string
+    originalName: string
+    mimeType: string
+    size: number
+    storageKey: string
+    checksum: string
+  }> = {}
 ) => {
   const id = crypto.randomUUID()
-
+  const filename = overrides.filename ?? faker.system.fileName()
+  const originalName = overrides.originalName ?? faker.system.fileName()
+  
   const [doc] = await db
     .insert(documents)
     .values({
       id,
-      ownerId,
-      title,
-      currentVersionId,
+      uploadedBy: ownerId,
+      filename,
+      originalName,
+      mimeType: overrides.mimeType ?? 'application/pdf',
+      size: overrides.size ?? faker.number.int({ min: 1000, max: 1000000 }),
+      storageKey: overrides.storageKey ?? `documents/${id}/${filename}`,
+      storageProvider: 'local',
+      checksum: overrides.checksum ?? crypto.randomBytes(32).toString('hex'),
+      tags: [],
+      metadata: {},
+      currentVersion: 1,
       createdAt: new Date(),
+      updatedAt: new Date(),
+      isActive: true,
+      ...(overrides as any),
     })
     .returning()
 
@@ -112,12 +140,22 @@ export const createTestDocument = async (
 export const createTestUser = async (db: any, overrides = {}) => {
   const id = crypto.randomUUID()
   const email = (overrides as any).email ?? faker.internet.email().toLowerCase()
+  
+  // Generate a valid hashed password (scrypt format)
+  const salt = Buffer.from(crypto.randomBytes(16)).toString('base64')
+  const hash = Buffer.from(crypto.randomBytes(64)).toString('base64')
+  const password = `scrypt:N=16384,r=8,p=1:${salt}:${hash}`
 
   const [user] = await db
     .insert(users)
     .values({
       id,
       email,
+      firstName: faker.person.firstName(),
+      lastName: faker.person.lastName(),
+      password,
+      role: 'user',
+      isActive: true,
       createdAt: new Date(),
       ...(overrides as any),
     })

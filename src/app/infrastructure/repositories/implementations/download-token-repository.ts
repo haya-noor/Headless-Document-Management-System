@@ -6,14 +6,15 @@
  */
 
 import { Effect, Option, pipe, Schema as S } from "effect";
-import { eq, lt, and } from "drizzle-orm";
+import { eq, lt, and, isNull, isNotNull } from "drizzle-orm";
 
 import { databaseService } from "@/app/infrastructure/services/drizzle-service";
 import { downloadTokens } from "@/app/infrastructure/database/models";
 import type { InferSelectModel } from "drizzle-orm";
 
 import { DownloadTokenEntity } from "@/app/domain/download-token/entity";
-import { DownloadTokenSchema } from "@/app/domain/download-token/schema";
+import { DownloadTokenSchema, DownloadTokenRow, DownloadTokenCodec } from "@/app/domain/download-token/schema";
+import { DownloadTokenString } from "@/app/domain/download-token/value-object";
 import {
   DownloadTokenNotFoundError,
   DownloadTokenValidationError,
@@ -53,58 +54,48 @@ export class DownloadTokenRepository {
   // ---------------------------------------------------------------------------
 
   /**
-   * Encodes a DownloadTokenEntity into database row format using Schema.
-   * Validates that all required fields are present and valid.
+   * Encodes a DownloadTokenEntity to a database row using Effect Schema Codec
+   * Uses the Codec's encode transformation directly
    */
   private encodeToken(
     token: DownloadTokenEntity
-  ): Effect.Effect<DownloadTokenModel, ValidationError> {
-    return pipe(
-      Effect.sync(() => {
-        // Serialize entity to plain object, converting Options to null
-        const serialized = {
-          id: token.id,
-          token: token.token,
-          documentId: token.documentId,
-          issuedTo: token.issuedTo,
-          expiresAt: token.expiresAt,
-          usedAt: Option.getOrNull(token.usedAt),
-          createdAt: token.createdAt,
-          updatedAt: Option.getOrNull(token.updatedAt),
-        };
+  ): Effect.Effect<DownloadTokenRow, ValidationError> {
+    // Extract domain data (entity stores Date objects)
+    const domainData = {
+      id: token.id,
+      token: token.token,
+      documentId: token.documentId,
+      issuedTo: token.issuedTo,
+      expiresAt: token.expiresAt,
+      usedAt: Option.getOrUndefined(token.usedAt),
+      createdAt: token.createdAt,
+      updatedAt: Option.getOrUndefined(token.updatedAt)
+    };
 
-        // Validate and encode via schema
-        return S.encodeSync(DownloadTokenSchema)(serialized);
-      }),
+    // Use Codec's encode to transform Domain -> DB Row
+    return pipe(
+      S.encode(DownloadTokenCodec)(domainData as any),
       Effect.mapError((err) =>
-        new ValidationError(
-          `Failed to encode DownloadToken: ${err instanceof Error ? err.message : String(err)}`,
-          "DownloadTokenEntity"
-        )
+        new ValidationError(`Failed to encode token: ${err.message}`, "DownloadToken")
       )
-    );
+    ) as any;
   }
 
   /**
-   * Decodes a database row into a DownloadTokenEntity using Schema.
-   * Validates that row matches schema before entity creation.
+   * Decodes a database row into a DownloadTokenEntity using Effect Schema Codec
+   * Uses the Codec's decode transformation directly
    */
   private decodeToken(
     row: DownloadTokenModel
-  ): Effect.Effect<DownloadTokenEntity, ValidationError> {
+  ): Effect.Effect<DownloadTokenEntity, ValidationError | DownloadTokenValidationError> {
+    // Use Codec's decode to transform DB Row -> Domain (Context type suppressed with 'as any')
     return pipe(
-      Effect.sync(() => {
-        // Decode DB row through schema (validates structure)
-        return S.decodeSync(DownloadTokenSchema)(row);
-      }),
-      Effect.mapError((err) =>
-        new ValidationError(
-          `Failed to decode DownloadToken: ${err instanceof Error ? err.message : String(err)}`,
-          "DownloadTokenRow"
-        )
+      S.decodeUnknown(DownloadTokenCodec)(row) as any,
+      Effect.mapError((err: any) =>
+        new ValidationError(`Failed to decode token: ${err.message}`, "DownloadToken")
       ),
-      // Create domain entity from validated decoded data
-      Effect.flatMap((decoded) => DownloadTokenEntity.create(decoded))
+      // Create domain entity from decoded data
+      Effect.flatMap((decoded: any) => DownloadTokenEntity.create(decoded))
     );
   }
 
@@ -287,7 +278,7 @@ export class DownloadTokenRepository {
       this.db
         .select()
         .from(downloadTokens)
-        .where(downloadTokens.usedAt.isNotNull())
+        .where(isNotNull(downloadTokens.usedAt))
     );
   }
 
@@ -304,7 +295,7 @@ export class DownloadTokenRepository {
         .where(
           and(
             eq(downloadTokens.documentId, documentId),
-            downloadTokens.usedAt.isNull()
+            isNull(downloadTokens.usedAt)
           )
         )
     );
@@ -463,7 +454,7 @@ export class DownloadTokenRepository {
             .delete(downloadTokens)
             .where(
               and(
-                downloadTokens.usedAt.isNotNull(),
+                isNotNull(downloadTokens.usedAt),
                 lt(downloadTokens.expiresAt, new Date())
               )
             );

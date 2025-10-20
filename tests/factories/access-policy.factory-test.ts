@@ -95,7 +95,7 @@ export const createAccessPolicyEntity = (
 export const createUserReadPolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicy =>
+): AccessPolicySerialized =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -106,7 +106,7 @@ export const createUserReadPolicy = (
 export const createUserWritePolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicy =>
+): AccessPolicySerialized =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -117,7 +117,7 @@ export const createUserWritePolicy = (
 export const createUserAdminPolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicy =>
+): AccessPolicySerialized =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -128,7 +128,7 @@ export const createUserAdminPolicy = (
 export const createRolePolicy = (
   subjectId: UserId,
   documentId: DocumentId
-): AccessPolicy =>
+): AccessPolicySerialized =>
   generateAccessPolicy({
     subjectType: "role",
     subjectId,
@@ -145,6 +145,8 @@ of times with new random values, ensuring your schema and entity are robust.
  */
 export const accessPolicyArbitrary = fc.record({
   id: fc.uuid(),
+  name: fc.string({ minLength: 1, maxLength: 100 }),
+  description: fc.string({ minLength: 1, maxLength: 500 }),
   resourceType: fc.constant("document"),
   resourceId: fc.uuid(),
   subjectType: fc.constantFrom("user", "role"),

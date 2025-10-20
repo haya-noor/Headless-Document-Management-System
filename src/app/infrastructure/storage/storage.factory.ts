@@ -1,13 +1,15 @@
 /**
+ * storage.factory.ts → Factory pattern logic (how to create instances)
+ * 
  * Storage service factory (provides selection of storage service based on 
  * configuration)
  * Creates appropriate storage service instance based on configuration
  * Enables easy switching between local storage and cloud storage providers
  */
 
-import { IStorageService, StorageConfig } from '@/app/application/interfaces/storage.interface';
+import { IStorageService, StorageConfig } from './storage.interface';
 import { LocalStorageService } from './local-storage';
-import { storageConfig as defaultStorageConfig } from '@/app/infrastructure/config/storage.config';
+import { storageConfig as defaultStorageConfig } from '../config/storage.config';
 
 /**
  * Storage service factory class

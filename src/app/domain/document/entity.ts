@@ -3,18 +3,18 @@ import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
 import { DocumentSchema } from "./schema"
 import { DocumentGuards } from "./guards"
 import { DocumentValidationError } from "./errors"
-import { DocumentSchemaId, DocumentSchemaVersionId, UserId } from "@/app/domain/shared/uuid"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
 import { ValidationError, BusinessRuleViolationError } from "@/app/domain/shared/errors"
 
 /**
  * IDocumentSchema — Aggregate contract
  */
-export interface IDocumentSchema extends IEntity<DocumentSchemaId> {
+export interface IDocumentSchema extends IEntity<DocumentId> {
   readonly ownerId: UserId
   readonly title: string
   readonly description: Option.Option<string>
   readonly tags: Option.Option<readonly string[]>
-  readonly currentVersionId: DocumentSchemaVersionId
+  readonly currentVersionId: DocumentVersionId
   readonly createdAt: Date
   readonly updatedAt: Option.Option<Date>
 }
@@ -26,15 +26,15 @@ export interface IDocumentSchema extends IEntity<DocumentSchemaId> {
  * to its current DocumentSchemaVersion. The DocumentSchemaVersionEntity remains
  * immutable, while DocumentSchemaEntity tracks the active version pointer.
  */
-export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implements IDocumentSchema {
-  readonly id: DocumentSchemaId
+export class DocumentSchemaEntity extends BaseEntity<DocumentId> implements IDocumentSchema {
+  readonly id: DocumentId
   readonly createdAt: Date
   readonly updatedAt: Option.Option<Date>
   readonly ownerId: UserId
   readonly title: string
   readonly description: Option.Option<string>
   readonly tags: Option.Option<readonly string[]>
-  readonly currentVersionId: DocumentSchemaVersionId
+  readonly currentVersionId: DocumentVersionId
 
   private constructor(data: any) {
     super()
@@ -52,8 +52,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
   static create(input: unknown): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
     return S.decodeUnknown(DocumentSchema)(input).pipe(
       Effect.map((data) => new DocumentSchemaEntity(data)),
-      Effect.mapError((err) => new DocumentValidationError("DocumentSchema", input, (err as any).message)),
-      Effect.provideService(Clock.Clock, Clock.Clock)
+      Effect.mapError((err) => new DocumentValidationError("DocumentSchema", input, (err as any).message))
     )
   }
 
@@ -98,7 +97,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
     const updated = {
       ...this.toSerialized(),
       title: newTitle,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     }
 
     return DocumentSchemaEntity.create(updated)
@@ -114,7 +113,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
     const updated = {
       ...this.toSerialized(),
       description: desc,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     }
 
     return DocumentSchemaEntity.create(updated)
@@ -129,7 +128,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
         DocumentSchemaEntity.create({
           ...this.toSerialized(),
           tags: merged,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date()
         })
       )
     )
@@ -145,7 +144,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
         DocumentSchemaEntity.create({
           ...this.toSerialized(),
           tags: remaining.length > 0 ? remaining : null,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date()
         })
       )
     )
@@ -158,11 +157,11 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
    * because the DocumentSchema aggregate root controls which version
    * is currently active.
    */
-  updateCurrentVersion(newVersionId: DocumentSchemaVersionId): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
+  updateCurrentVersion(newVersionId: DocumentVersionId): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
     const updated = {
       ...this.toSerialized(),
       currentVersionId: newVersionId,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     }
     return DocumentSchemaEntity.create(updated)
   }
@@ -178,12 +177,12 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentSchemaId> implement
   private toSerialized(): S.Schema.Type<typeof DocumentSchema> {
     return {
       id: this.id,
-      createdAt: this.createdAt.toISOString(),
-      updatedAt: Option.getOrNull(this.updatedAt)?.toISOString(),
+      createdAt: this.createdAt,
+      updatedAt: Option.getOrUndefined(this.updatedAt),
       ownerId: this.ownerId,
       title: this.title,
-      description: Option.getOrNull(this.description),
-      tags: Option.getOrNull(this.tags),
+      description: Option.getOrUndefined(this.description),
+      tags: Option.getOrUndefined(this.tags),
       currentVersionId: this.currentVersionId
     }
   }

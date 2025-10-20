@@ -1,9 +1,9 @@
 // DocumentRepository Integration Test (Vitest + Docker + Faker + FastCheck)
 // -------------------------------------------------------------------------
-// ✅ Tests the DocumentRepositoryImpl in isolation from application layer
-// ✅ Uses effect/Schema validation to test inputs
-// ✅ Randomized input coverage via faker + fast-check
-// ✅ Covers create, read, update, delete, pagination, filters, stats
+// Tests the DocumentRepositoryImpl in isolation from application layer
+// Uses effect/Schema validation to test inputs
+// Randomized input coverage via faker + fast-check
+// Covers create, read, update, delete, pagination, filters, stats
 
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest"

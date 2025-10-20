@@ -1,32 +1,30 @@
-# Testing Guide
+# Run all tests
+npm run test:all
 
-**Test Files:**
-- `tests/domain/user.entity.test.ts` - Tests UserEntity (7 tests)
-- `tests/domain/document.entity.test.ts` - Tests DocumentEntity (6 tests)
-- `tests/domain/access-policy.entity.test.ts` - Tests AccessPolicyEntity (5 tests)
-- `tests/domain/d-version.entity.ts` - Tests DocumentVersionEntity (6 tests)
-- `tests/domain/download-token.entity.ts` - Tests DownloadTokenEntity (11 tests)
+# Run domain tests
+npm test tests/domain/user.entity.test.ts
+npm test tests/domain/access-policy.entity.test.ts
+npm test tests/domain/d-version.entity.test.ts
+npm test tests/domain/document.entity.test.ts
+npm test tests/domain/download-token.entity.test.ts
 
+# Run infrastructure tests
+npm test tests/infra/user-repo.test.ts
+npm test tests/infra/access-policy-repo.test.ts
+npm test tests/infra/d-repo.test.ts
+npm test tests/infra/d-version-repo.test.ts
+npm test tests/infra/d-token-repo.test.ts
+npm test tests/infra/storage.test.ts
 
-# Run specific domain tests
-bun test tests/domain/user.entity.test.ts
-bun test tests/domain/document.entity.test.ts
-bun test tests/domain/access-policy.entity.test.ts
-bun test tests/domain/d-version.entity.test.ts
-bun test tests/domain/download-token.entity.ts
+# Run E2E tests
+npm test tests/document.e2e.test.ts
 
+# Run performance tests
+npm test tests/performance.test.ts
 
+# Run all domain tests
+npm test tests/domain/
 
-tests/infra/
-bun test tests/infra/user-repo.test.ts
-
-
-# Run E2E tests only
-npm test -- document.e2e.test.ts
-
-# Run Performance tests only
-npm test -- performance.test.ts
-
-# Run both
-npm test -- document.e2e.test.ts performance.test.ts
+# Run all infrastructure tests
+npm test tests/infra/
 

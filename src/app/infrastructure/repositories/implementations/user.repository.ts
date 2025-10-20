@@ -9,6 +9,8 @@ type UserModel = InferSelectModel<typeof users>;
 
 import { UserEntity, type SerializedUser } from "@/app/domain/user/entity";
 import { User, UserRow, UserCodec } from "@/app/domain/user/schema";
+import { UserId } from "@/app/domain/shared/uuid";
+import { HashedPassword } from "@/app/domain/shared/password";
 import {
   UserNotFoundError,
   UserAlreadyExistsError,
@@ -46,36 +48,48 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
   constructor(private readonly db = databaseService.getDatabase()) {}
 
   /**
-   * Encodes a UserEntity into a database row format
+   * Encodes a UserEntity to a database row using Effect Schema Codec
+   * Uses the Codec's encode transformation directly
    */
   private encodeUser(user: UserEntity): Effect.Effect<UserRow, ValidationError> {
+    // Extract domain data
+    const domainData = {
+      id: user.id,
+      email: user.email,
+      password: user.password,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      dateOfBirth: Option.getOrUndefined(user.dateOfBirth),
+      phoneNumber: Option.getOrUndefined(user.phoneNumber),
+      profileImage: Option.getOrUndefined(user.profileImage),
+      isActive: user.isActive(),
+      createdAt: user.createdAt,
+      updatedAt: Option.getOrUndefined(user.updatedAt)
+    };
+
+    // Use Codec's encode to transform Domain -> DB Row (Context type suppressed with 'as any')
     return pipe(
-      Effect.try({
-        try: () => S.encodeSync(UserCodec)(user.toSerialized()),
-        catch: (err) =>
-          new ValidationError(
-            `Failed to encode user: ${err instanceof Error ? err.message : String(err)}`,
-            "user"
-          ),
-      })
-    );
+      S.encode(UserCodec)(domainData as any),
+      Effect.mapError((err: any) =>
+        new ValidationError(`Failed to encode user: ${err.message}`, "User")
+      )
+    ) as any;
   }
 
   /**
-   * Decodes a database row into a UserEntity
+   * Decodes a database row into a UserEntity using Effect Schema Codec
+   * Uses the Codec's decode transformation directly
    */
-  private decodeUser(row: UserModel): Effect.Effect<UserEntity, ValidationError> {
+  private decodeUser(row: UserModel): Effect.Effect<UserEntity, ValidationError | UserValidationError> {
+    // Use Codec's decode to transform DB Row -> Domain, then create entity (Context type suppressed with 'as any')
     return pipe(
-      Effect.try({
-        try: () => S.decodeSync(UserCodec)(row),
-        catch: (err) =>
-          new ValidationError(
-            `Failed to decode user: ${err instanceof Error ? err.message : String(err)}`,
-            "user"
-          ),
-      }),
-      Effect.flatMap((decoded) => UserEntity.create(decoded))
-    );
+      S.decodeUnknown(UserCodec)(row),
+      Effect.mapError((err: any) =>
+        new ValidationError(`Failed to decode user: ${err.message}`, "User")
+      ),
+      Effect.flatMap((decoded) => UserEntity.create(decoded as any))
+    ) as any;
   }
 
   /**
@@ -198,7 +212,14 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
   ): Effect.Effect<PaginatedResponse<UserEntity>, DatabaseError> {
     const offset = (page - 1) * limit;
     const orderBy = sortOrder === "asc" ? asc : desc;
-    const sortColumn = users[sortBy as keyof typeof users] ?? users.createdAt;
+    
+    // Type-safe column selection for sorting
+    let sortColumn;
+    if (sortBy === 'email') sortColumn = users.email;
+    else if (sortBy === 'firstName') sortColumn = users.firstName;
+    else if (sortBy === 'lastName') sortColumn = users.lastName;
+    else if (sortBy === 'role') sortColumn = users.role;
+    else sortColumn = users.createdAt;
 
     return pipe(
       Effect.tryPromise({
@@ -283,7 +304,18 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
           onNone: () => this.insert(user),
           onSome: (existing) =>
             existing.id === user.id
-              ? this.update(user)
+              ? pipe(
+                  this.update(user),
+                  // Convert NotFoundError to DatabaseError for save interface consistency
+                  Effect.mapError((err) =>
+                    err instanceof NotFoundError
+                      ? new DatabaseError({
+                          message: err.message,
+                          cause: err,
+                        })
+                      : err
+                  )
+                )
               : Effect.fail(
                   new ConflictError(
                     `User with email ${user.email} already exists`,
@@ -328,36 +360,42 @@ export class UserDrizzleRepository implements Repository<UserEntity, UserFilter>
   /**
    * Updates an existing user in the database
    */
-  // private update(
-  //   user: UserEntity
-  // ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
-  //   return pipe(
-  //     this.exists(user.id),
-  //     Effect.flatMap((exists) =>
-  //       exists
-  //         ? this.encodeUser(user)
-  //         : Effect.fail(
-  //             new NotFoundError({
-  //               message: "User not found",
-  //               resource: "User",
-  //               id: user.id,
-  //             })
-  //           )
-  //     ),
-  //     Effect.flatMap((row) =>
-  //       Effect.tryPromise({
-  //         try: () =>
-  //           this.db.update(users).set(row as any).where(eq(users.id, user.id)),
-  //         catch: (err) =>
-  //           new DatabaseError({
-  //             message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
-  //             cause: err,
-  //           }),
-  //       })
-  //     ),
-  //     Effect.as(user)
-  //   );
-  // }
+  private update(
+    user: UserEntity
+  ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
+    return pipe(
+      this.encodeUser(user),
+      Effect.flatMap((row): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> =>
+        pipe(
+          this.exists(user.id),
+          Effect.flatMap((exists): Effect.Effect<UserEntity, DatabaseError | NotFoundError> => {
+            if (!exists) {
+              return Effect.fail(
+                new NotFoundError({
+                  message: "User not found",
+                  resource: "User",
+                  id: user.id,
+                })
+              ) as Effect.Effect<UserEntity, NotFoundError>;
+            }
+            
+            return pipe(
+              Effect.tryPromise({
+                try: () =>
+                  this.db.update(users).set(row as any).where(eq(users.id, user.id)),
+                catch: (err) =>
+                  new DatabaseError({
+                    message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
+                    cause: err,
+                  }),
+              }),
+              Effect.as(user)
+            ) as Effect.Effect<UserEntity, DatabaseError>;
+          })
+        )
+      )
+    );
+  }
 
   /**
    * Deletes a user by ID (hard delete)

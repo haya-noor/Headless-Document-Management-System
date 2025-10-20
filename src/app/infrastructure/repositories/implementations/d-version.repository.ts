@@ -14,6 +14,7 @@ import type { InferSelectModel } from "drizzle-orm";
 
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity";
 import { DocumentVersionSchema, DocumentVersionRow, DocumentVersionCodec } from "@/app/domain/d-version/schema";
+import { Sha256 } from "@/app/domain/shared/checksum";
 import {
   DocumentVersionValidationError,
 } from "@/app/domain/d-version/errors";
@@ -31,7 +32,7 @@ import {
 // ============================================================================
 // SHARED BRANDED TYPES (from domain/shared/uuid.ts)
 // ============================================================================
-import { DocumentId, DocumentVersionId } from "@/app/domain/shared/uuid";
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid";
 
 type DocumentVersionModel = InferSelectModel<typeof documentVersions>;
 
@@ -82,71 +83,65 @@ export class DocumentVersionDrizzleRepository {
   // ---------------------------------------------------------------------------
 
   /**
-   * Encodes a DocumentVersionEntity into database row format using Schema
-   * Validates that all required fields are present and valid
+   * Encodes a DocumentVersionEntity into database row using Effect Schema Codec
+   * Uses the Codec's encode transformation directly
    */
   private encodeVersion(
     version: DocumentVersionEntity
   ): Effect.Effect<DocumentVersionRow, ValidationError> {
-    return pipe(
-      Effect.try({
-        try: () => {
-          // Create serialized representation matching the domain schema
-          const serialized = {
-            id: version.id,
-            documentId: version.documentId,
-            version: version.version,
-            filename: version.filename,
-            mimeType: version.mimeType,
-            size: version.size,
-            storageKey: version.storageKey,
-            storageProvider: version.storageProvider,
-            checksum: Option.getOrNull(version.checksum),
-            tags: Option.getOrNull(version.tags),
-            metadata: Option.getOrNull(version.metadata),
-            uploadedBy: version.uploadedBy,
-            createdAt: version.createdAt,
-          };
+    // Extract domain data
+    const domainData = {
+      id: version.id,
+      documentId: version.documentId,
+      version: version.version,
+      filename: version.filename,
+      mimeType: version.mimeType,
+      size: version.size,
+      storageKey: version.storageKey,
+      storageProvider: version.storageProvider,
+      checksum: Option.getOrUndefined(version.checksum),
+      tags: Option.getOrUndefined(version.tags),
+      metadata: Option.getOrUndefined(version.metadata),
+      uploadedBy: version.uploadedBy,
+      createdAt: version.createdAt,
+    };
 
-          // Validate and transform via codec
-          return S.encodeSync(DocumentVersionCodec)(serialized);
-        },
-        catch: (err) =>
-          Errors.validation(
-            `Failed to encode version: ${err instanceof Error ? err.message : String(err)}`,
-            "DocumentVersion"
-          ),
-      })
-    );
+    // Use Codec's encode to transform Domain -> DB Row
+    return pipe(
+      S.encode(DocumentVersionCodec)(domainData),
+      Effect.mapError((err) =>
+        Errors.validation(
+          `Failed to encode version: ${err.message}`,
+          "DocumentVersion"
+        )
+      )
+    ) as any;
   }
 
   /**
-   * Decodes a database row into a DocumentVersionEntity using Schema
-   * Validates that row matches schema before entity creation
+   * Decodes a database row into a DocumentVersionEntity using Effect Schema Codec
+   * Uses the Codec's decode transformation directly
    */
   private decodeVersion(
     row: DocumentVersionModel
   ): Effect.Effect<DocumentVersionEntity, ValidationError> {
+    // Use Codec's decode to transform DB Row -> Domain
     return pipe(
-      Effect.try({
-        try: () => {
-          // Decode DB row through codec (validates schema)
-          return S.decodeSync(DocumentVersionCodec)(row);
-        },
-        catch: (err) =>
-          Errors.validation(
-            `Failed to decode version: ${err instanceof Error ? err.message : String(err)}`,
-            "DocumentVersion"
-          ),
-      }),
-      // Create domain entity from validated decoded data
-      Effect.flatMap((decoded) => DocumentVersionEntity.create(decoded))
+      S.decodeUnknown(DocumentVersionCodec)(row),
+      Effect.mapError((err) =>
+        Errors.validation(
+          `Failed to decode version: ${err.message}`,
+          "DocumentVersion"
+        )
+      ),
+      // Create domain entity from decoded data
+      Effect.flatMap((decoded) => DocumentVersionEntity.create(decoded as any))
     );
   }
 
   private fetchOne(
     query: () => Promise<DocumentVersionModel[]>
-  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError | ValidationError> {
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError> {
     return pipe(
       Effect.tryPromise({
         try: query,
@@ -159,6 +154,14 @@ export class DocumentVersionDrizzleRepository {
           onSome: (row) =>
             pipe(this.decodeVersion(row), Effect.map(Option.some)),
         })
+      ),
+      // Convert ValidationError to DatabaseError for consistent error handling
+      Effect.mapError((err) =>
+        err instanceof DatabaseError
+          ? err
+          : err instanceof ValidationError
+          ? Errors.database(`Decode error: ${err.message}`, err)
+          : Errors.database("Fetch one", err)
       )
     );
   }
@@ -371,9 +374,9 @@ export class DocumentVersionDrizzleRepository {
               ),
               Effect.as(true)
             ) as Effect.Effect<boolean, DatabaseError | NotFoundError>)
-          ? Effect.fail(
+          : (Effect.fail(
               Errors.notFound(id)
-            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>
+            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>)
       )
     );
   }

@@ -64,59 +64,57 @@ export class AccessPolicyRepository {
   // ---------------------------------------------------------------------------
 
   /**
-   * Encodes AccessPolicyEntity to database row via codec
-   * Validates type safety and field transformation
+   * Encodes AccessPolicyEntity to database row using Effect Schema Codec
+   * Uses the Codec's encode transformation directly
    */
   private encodePolicy(
     policy: AccessPolicyEntity
   ): Effect.Effect<AccessPolicyRow, ValidationError> {
-    return pipe(
-      Effect.try({
-        try: () => {
-          const serialized = {
-            id: policy.id,
-            name: policy.name,
-            description: policy.description,
-            subjectType: policy.subjectType,
-            subjectId: policy.subjectId,
-            resourceType: policy.resourceType,
-            resourceId: Option.getOrNull(policy.resourceId),
-            actions: policy.actions,
-            isActive: policy.active,
-            priority: policy.priority,
-            createdAt: policy.createdAt,
-            updatedAt: Option.getOrNull(policy.updatedAt),
-          };
+    // Extract domain data
+    const domainData = {
+      id: policy.id,
+      name: policy.name,
+      description: policy.description,
+      subjectType: policy.subjectType,
+      subjectId: policy.subjectId,
+      resourceType: policy.resourceType,
+      resourceId: Option.getOrUndefined(policy.resourceId),
+      actions: policy.actions,
+      isActive: policy.active,
+      priority: policy.priority,
+      createdAt: policy.createdAt,
+      updatedAt: Option.getOrUndefined(policy.updatedAt),
+    };
 
-          // Encode through codec for validation and transformation
-          return S.encodeSync(AccessPolicyCodec)(serialized);
-        },
-        catch: (err) =>
-          Errors.validation(
-            `Failed to encode policy: ${err instanceof Error ? err.message : String(err)}`,
-            "AccessPolicy"
-          ),
-      })
-    );
+    // Use Codec's encode to transform Domain -> DB Row
+    return pipe(
+      S.encode(AccessPolicyCodec)(domainData),
+      Effect.mapError((err) =>
+        Errors.validation(
+          `Failed to encode policy: ${err.message}`,
+          "AccessPolicy"
+        )
+      )
+    ) as any;
   }
 
   /**
-   * Decodes database row to AccessPolicyEntity via codec
-   * Validates and transforms before entity creation
+   * Decodes database row to AccessPolicyEntity using Effect Schema Codec
+   * Uses the Codec's decode transformation directly
    */
   private decodePolicy(
     row: AccessPolicyModel
   ): Effect.Effect<AccessPolicyEntity, ValidationError> {
+    // Use Codec's decode to transform DB Row -> Domain
     return pipe(
-      Effect.try({
-        try: () => S.decodeSync(AccessPolicyCodec)(row),
-        catch: (err) =>
-          Errors.validation(
-            `Failed to decode policy: ${err instanceof Error ? err.message : String(err)}`,
-            "AccessPolicy"
-          ),
-      }),
-      Effect.flatMap((decoded) => AccessPolicyEntity.create(decoded))
+      S.decodeUnknown(AccessPolicyCodec)(row),
+      Effect.mapError((err) =>
+        Errors.validation(
+          `Failed to decode policy: ${err.message}`,
+          "AccessPolicy"
+        )
+      ),
+      Effect.flatMap((decoded) => AccessPolicyEntity.create(decoded as any))
     );
   }
 
@@ -143,10 +141,11 @@ export class AccessPolicyRepository {
 
   /**
    * Fetch multiple rows - composed declaratively
+   * Converts all errors to DatabaseError for consistent error handling
    */
   private fetchMany(
     query: () => Promise<AccessPolicyModel[]>
-  ): Effect.Effect<AccessPolicyEntity[], DatabaseError | ValidationError> {
+  ): Effect.Effect<AccessPolicyEntity[], DatabaseError> {
     return pipe(
       Effect.tryPromise({
         try: query,
@@ -156,7 +155,11 @@ export class AccessPolicyRepository {
         Effect.all(rows.map((row) => this.decodePolicy(row)))
       ),
       Effect.mapError((err) =>
-        err instanceof DatabaseError ? err : Errors.database("Decode", err)
+        err instanceof DatabaseError
+          ? err
+          : err instanceof ValidationError
+          ? Errors.database(`Decode error: ${err.message}`, err)
+          : Errors.database("Decode", err)
       )
     );
   }
@@ -280,8 +283,14 @@ export class AccessPolicyRepository {
       Effect.flatMap(
         Option.match({
           onNone: () => this.insert(policy),
-          onSome: () => this.update(policy),
+          onSome: () => this.update(policy) as Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError>,
         })
+      ),
+      // Convert NotFoundError to DatabaseError for consistent error handling
+      Effect.mapError((err) =>
+        err instanceof NotFoundError
+          ? Errors.database(`Policy ${policy.id} not found during update`, err)
+          : err
       )
     );
   }
@@ -302,23 +311,32 @@ export class AccessPolicyRepository {
     policy: AccessPolicyEntity
   ): Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError | NotFoundError> {
     return pipe(
-      this.exists(policy.id),
-      Effect.flatMap((exists) =>
-        exists
-          ? this.encodePolicy(policy)
-          : Effect.fail(Errors.notFound(policy.id))
-      ),
-      Effect.flatMap((row) =>
-        Effect.tryPromise({
-          try: () =>
-            this.db
-              .update(accessPolicies)
-              .set(row as any)
-              .where(eq(accessPolicies.id, policy.id)),
-          catch: (err) => Errors.database(`Update ${policy.id}`, err),
-        })
-      ),
-      Effect.as(policy)
+      this.encodePolicy(policy),
+      Effect.flatMap((row): Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError | NotFoundError> =>
+        pipe(
+          this.exists(policy.id),
+          Effect.flatMap((exists): Effect.Effect<AccessPolicyEntity, DatabaseError | NotFoundError> => {
+            if (!exists) {
+              return Effect.fail(Errors.notFound(policy.id)) as Effect.Effect<
+                AccessPolicyEntity,
+                NotFoundError
+              >;
+            }
+
+            return pipe(
+              Effect.tryPromise({
+                try: () =>
+                  this.db
+                    .update(accessPolicies)
+                    .set(row as any)
+                    .where(eq(accessPolicies.id, policy.id)),
+                catch: (err) => Errors.database(`Update ${policy.id}`, err),
+              }),
+              Effect.as(policy)
+            ) as Effect.Effect<AccessPolicyEntity, DatabaseError>;
+          })
+        )
+      )
     );
   }
 
@@ -346,28 +364,29 @@ export class AccessPolicyRepository {
   ): Effect.Effect<number, DatabaseError> {
     return pipe(
       Effect.tryPromise({
-        try: async () => {
-          const rows = await this.db
+        try: () =>
+          this.db
             .select({ id: accessPolicies.id })
             .from(accessPolicies)
-            .where(eq(accessPolicies.resourceId, resourceId));
+            .where(eq(accessPolicies.resourceId, resourceId)),
+        catch: (err) => Errors.database("Count by resource", err),
+      }),
+      Effect.flatMap((rows) => {
+        const count = rows.length;
+        if (count === 0) {
+          return Effect.succeed(0);
+        }
 
-          const count = rows.length;
-
-          return count > 0
-            ? pipe(
-                Effect.tryPromise({
-                  try: () =>
-                    this.db
-                      .delete(accessPolicies)
-                      .where(eq(accessPolicies.resourceId, resourceId)),
-                  catch: (err) => Errors.database("Delete by resource", err),
-                }),
-                Effect.as(count)
-              ).pipe(await Effect.runPromise((e) => e))
-            : count;
-        },
-        catch: (err) => Errors.database("Delete by resource", err),
+        return pipe(
+          Effect.tryPromise({
+            try: () =>
+              this.db
+                .delete(accessPolicies)
+                .where(eq(accessPolicies.resourceId, resourceId)),
+            catch: (err) => Errors.database("Delete by resource", err),
+          }),
+          Effect.as(count)
+        );
       })
     );
   }
@@ -375,8 +394,8 @@ export class AccessPolicyRepository {
   deleteByUserId(userId: UserId): Effect.Effect<number, DatabaseError> {
     return pipe(
       Effect.tryPromise({
-        try: async () => {
-          const rows = await this.db
+        try: () =>
+          this.db
             .select({ id: accessPolicies.id })
             .from(accessPolicies)
             .where(
@@ -384,29 +403,30 @@ export class AccessPolicyRepository {
                 eq(accessPolicies.subjectType, "user"),
                 eq(accessPolicies.subjectId, userId)
               )
-            );
+            ),
+        catch: (err) => Errors.database("Count by user", err),
+      }),
+      Effect.flatMap((rows) => {
+        const count = rows.length;
+        if (count === 0) {
+          return Effect.succeed(0);
+        }
 
-          const count = rows.length;
-
-          return count > 0
-            ? pipe(
-                Effect.tryPromise({
-                  try: () =>
-                    this.db
-                      .delete(accessPolicies)
-                      .where(
-                        and(
-                          eq(accessPolicies.subjectType, "user"),
-                          eq(accessPolicies.subjectId, userId)
-                        )
-                      ),
-                  catch: (err) => Errors.database("Delete by user", err),
-                }),
-                Effect.as(count)
-              ).pipe(await Effect.runPromise((e) => e))
-            : count;
-        },
-        catch: (err) => Errors.database("Delete by user", err),
+        return pipe(
+          Effect.tryPromise({
+            try: () =>
+              this.db
+                .delete(accessPolicies)
+                .where(
+                  and(
+                    eq(accessPolicies.subjectType, "user"),
+                    eq(accessPolicies.subjectId, userId)
+                  )
+                ),
+            catch: (err) => Errors.database("Delete by user", err),
+          }),
+          Effect.as(count)
+        );
       })
     );
   }

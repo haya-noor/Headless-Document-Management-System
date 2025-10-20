@@ -166,8 +166,6 @@ export const createTestDownloadTokenEntity = (
     E.mapError(
       (err) =>
         new DownloadTokenValidationError(
-          "DownloadToken",
-          overrides,
           (err as Error).message || "Failed to create DownloadTokenEntity"
         )
     )

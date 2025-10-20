@@ -1,5 +1,6 @@
 /**
  * Server configuration
+ * server.config.ts → Server settings (port for URLs)
  * Contains server-related configuration settings used by storage services
  * 
  * Used by:

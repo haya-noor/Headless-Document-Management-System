@@ -23,8 +23,8 @@ const documentGenerators = {
   description: () => faker.lorem.sentences({ min: 1, max: 3 }),
   tags: () => faker.helpers.arrayElements(["finance", "hr", "legal", "engineering", "marketing", "sales"], 2),
   currentVersionId: () => makeDocumentVersionIdSync(faker.string.uuid()),
-  createdAt: () => faker.date.past({ years: 1 }).toISOString(),
-  updatedAt: () => faker.date.recent().toISOString(),
+  createdAt: () => faker.date.past({ years: 1 }),
+  updatedAt: () => faker.date.recent(),
 }
 
 /**
@@ -35,91 +35,55 @@ export const generateTestDocument = (overrides: Partial<Document> = {}): Documen
   const withTags = faker.datatype.boolean()
   const withUpdatedAt = faker.datatype.boolean()
 
-  const base = {
+  const base: Document = {
     id: documentGenerators.id(),
     ownerId: documentGenerators.ownerId(),
     title: documentGenerators.title(),
-    description: withDescription ? documentGenerators.description() : undefined,
-    tags: withTags ? documentGenerators.tags() : undefined,
+    description: withDescription ? documentGenerators.description() : null,
+    tags: withTags ? documentGenerators.tags() : null,
     currentVersionId: documentGenerators.currentVersionId(),
     createdAt: documentGenerators.createdAt(),
-    updatedAt: withUpdatedAt ? documentGenerators.updatedAt() : undefined,
+    updatedAt: withUpdatedAt ? documentGenerators.updatedAt() : null,
   }
 
-  // Apply overrides and ensure null values become undefined
-  const result = { ...base, ...overrides }
-  
-  // Convert null to undefined for all optional fields
-  if (result.description === null) result.description = undefined
-  if (result.tags === null) result.tags = undefined
-  if (result.updatedAt === null) result.updatedAt = undefined
-  
-  // Also handle the case where overrides might have null values
-  Object.keys(overrides).forEach(key => {
-    if (result[key] === null && ['description', 'tags', 'updatedAt'].includes(key)) {
-      result[key] = undefined
-    }
-  })
-
-  return result
+  return { ...base, ...overrides }
 }
 
 /**
  * Scenario: Complete document
  */
 export const createCompleteDocument = (overrides: Partial<Document> = {}): Document => {
-  const result = {
+  return {
     ...generateTestDocument(),
     description: documentGenerators.description(),
     tags: documentGenerators.tags(),
     updatedAt: documentGenerators.updatedAt(),
     ...overrides,
   }
-  
-  // Ensure null values become undefined
-  if (result.description === null) result.description = undefined
-  if (result.tags === null) result.tags = undefined
-  if (result.updatedAt === null) result.updatedAt = undefined
-  
-  return result
 }
 
 /**
  * Scenario: Minimal document (only required fields)
  */
 export const createMinimalDocument = (overrides: Partial<Document> = {}): Document => {
-  const result = {
+  return {
     ...generateTestDocument(),
-    description: undefined,
-    tags: undefined,
-    updatedAt: undefined,
+    description: null,
+    tags: null,
+    updatedAt: null,
     ...overrides,
   }
-  
-  // Ensure null values become undefined
-  if (result.description === null) result.description = undefined
-  if (result.tags === null) result.tags = undefined
-  if (result.updatedAt === null) result.updatedAt = undefined
-  
-  return result
 }
 
 /**
  * Scenario: Document with specific tags
  */
 export const createDocumentWithTags = (tags: string[], overrides: Partial<Document> = {}): Document => {
-  const result = {
+  return {
     ...generateTestDocument(),
     tags: tags,
     ...overrides,
   }
-  
-  // Ensure null values become undefined
-  if (result.description === null) result.description = undefined
-  if (result.tags === null) result.tags = undefined
-  if (result.updatedAt === null) result.updatedAt = undefined
-  
-  return result
 }
 
 /**

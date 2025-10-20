@@ -7,7 +7,8 @@
     "db:generate": "bun x drizzle-kit generate:pg",
     "db:migrate": "bun x drizzle-kit push:pg",
     "db:studio": "bun x drizzle-kit studio",
-    "test": "bun test tests/",
+    "test": "bun test",
+    "test:all": "bun test tests/",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix"
   },

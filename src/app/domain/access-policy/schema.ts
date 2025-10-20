@@ -42,55 +42,58 @@ export const AccessPolicySerialized = S.Struct({
 export type AccessPolicySerialized = S.Schema.Type<typeof AccessPolicySerialized>
 
 /**
- * Database row schema (encoded)
+ * Database row schema - matches actual DB structure
+ * Uses DateFromSelf to keep Date objects (no serialization to strings)
+ * Note: isActive is varchar 'Y'/'N' in DB, not boolean
  */
 export const AccessPolicyRow = S.Struct({
   id: S.String,
   name: S.String,
-  description: S.String,
+  description: S.Union(S.String, S.Null),
   subjectType: S.String,
-  subjectId: S.String,
+  subjectId: S.Union(S.String, S.Null),
   resourceType: S.String,
-  resourceId: S.optional(S.String),
+  resourceId: S.Union(S.String, S.Null),
   actions: S.Array(S.String),
-  isActive: S.Boolean,
+  isActive: S.String,  // 'Y' or 'N' in database
   priority: S.Number,
-  createdAt: S.Date,
-  updatedAt: S.optional(S.Date)
+  createdAt: S.DateFromSelf,  // Type=Date, Encoded=Date (no serialization)
+  updatedAt: S.DateFromSelf   // Type=Date, Encoded=Date (no serialization)
 })
 export type AccessPolicyRow = S.Schema.Type<typeof AccessPolicyRow>
 
 /**
  * Codec for DB ↔ Domain
+ * Handles conversion between DB format (Y/N strings, nulls) and Domain (booleans, Options)
  */
 export const AccessPolicyCodec = S.transform(AccessPolicyRow, AccessPolicySchema, {
   decode: (r) => ({
     id: S.decodeUnknownSync(AccessPolicyId)(r.id),
     name: r.name,
-    description: r.description,
+    description: r.description || "",
     subjectType: r.subjectType as "user" | "role",
-    subjectId: S.decodeUnknownSync(UserId)(r.subjectId),
+    subjectId: S.decodeUnknownSync(UserId)(r.subjectId || r.id),
     resourceType: r.resourceType as "document" | "user",
-    resourceId: Option.fromNullable(r.resourceId).pipe(Option.map((id) => S.decodeUnknownSync(DocumentId)(id))),
+    resourceId: r.resourceId ? S.decodeUnknownSync(DocumentId)(r.resourceId) : undefined,
     actions: r.actions as ("read" | "write" | "delete" | "manage")[],
-    isActive: r.isActive,
+    isActive: r.isActive === 'Y',  // Convert 'Y'/'N' to boolean
     priority: r.priority,
     createdAt: r.createdAt,
-    updatedAt: Option.fromNullable(r.updatedAt)
+    updatedAt: r.updatedAt
   }),
   encode: (d) => ({
-    id: S.encodeUnknownSync(AccessPolicyId)(d.id),
+    id: d.id,
     name: d.name,
-    description: d.description,
+    description: d.description || null,
     subjectType: d.subjectType,
-    subjectId: S.encodeUnknownSync(UserId)(d.subjectId),
+    subjectId: d.subjectId || null,
     resourceType: d.resourceType,
-    resourceId: d.resourceId ? d.resourceId : null,
+    resourceId: d.resourceId || null,
     actions: d.actions,
-    isActive: d.isActive,
+    isActive: d.isActive ? 'Y' : 'N',  // Convert boolean to 'Y'/'N'
     priority: d.priority,
     createdAt: d.createdAt,
-    updatedAt: Option.getOrNull(d.updatedAt as Option.Option<Date>)
+    updatedAt: d.updatedAt ?? d.createdAt
   }),
   strict: false
 })

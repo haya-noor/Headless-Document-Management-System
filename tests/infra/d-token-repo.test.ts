@@ -67,10 +67,8 @@ describe("DownloadTokenRepository Integration Tests", () => {
     });
     testUserId = user.id as UserId;
 
-    const bootstrapVersionId = crypto.randomUUID();
     const document = await createTestDocument(testDb.db, testUserId, {
-      title: "Document for Download Tokens",
-      currentVersionId: bootstrapVersionId,
+      filename: "test-document.pdf",
     });
     testDocumentId = document.id as DocumentId;
   });
