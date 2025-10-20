@@ -4,8 +4,8 @@
  * UserNameInvalidError -> schema level validation error using UserGuards.validName
  */
 
-import { RepositoryError, ValidationError, ConflictError } from "../shared/errors"
-import { BusinessRuleViolationError } from "../shared/errors"
+import { RepositoryError, ValidationError, ConflictError } from "@/app/domain/shared/errors"
+import { BusinessRuleViolationError } from "@/app/domain/shared/errors"
 import { ParseResult } from "effect"
 
 export class UserNotFoundError extends RepositoryError {

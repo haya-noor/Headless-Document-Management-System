@@ -1,8 +1,8 @@
 import { Effect, Option, ParseResult, Schema as S, Clock } from "effect"
 import { DownloadTokenSchema, DownloadTokenType, SerializedDownloadToken } from "./schema"
-import { BusinessRuleViolationError, ValidationError } from "../shared/errors"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
 import { DownloadTokenAlreadyUsedError, DownloadTokenValidationError } from "./errors"
-import { DocumentId, UserId, DownloadTokenId } from "../shared/uuid"
+import { DocumentId, UserId, DownloadTokenId } from "@/app/domain/shared/uuid"
 import { isExpiredAt, msUntilExpiry } from "./value-object"
 
 /**

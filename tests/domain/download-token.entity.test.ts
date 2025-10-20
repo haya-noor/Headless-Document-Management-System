@@ -18,10 +18,10 @@ import {
   createExpiringSoonToken,
   createTestDownloadTokenEntity,
   downloadTokenArbitrary,
-} from "../factories/download-token.factory"
-import { DownloadTokenEntity } from "../../src/app/domain/download-token/entity"
-import { DownloadTokenValidationError } from "../../src/app/domain/download-token/errors"
-import { BusinessRuleViolationError } from "../../src/app/domain/shared/errors"
+} from "../factories/download-token.factory-test"
+import { DownloadTokenEntity } from "@/app/domain/download-token/entity"
+import { DownloadTokenValidationError } from "@/app/domain/download-token/errors"
+import { BusinessRuleViolationError } from "@/app/domain/shared/errors"
 import * as fc from "fast-check"
 
 describe("DownloadTokenEntity", () => {

@@ -12,8 +12,8 @@ import {
   userArbitrary,
 } from "../factories/user.factory-test"
 
-import { UserEntity } from "../../src/app/domain/user/entity"
-import { UserValidationError } from "../../src/app/domain/user/errors"
+import { UserEntity } from "@/app/domain/user/entity"
+import { UserValidationError } from "@/app/domain/user/errors"
 
 /** Build a valid serialized object, then let tests override specific fields */
 const baseValid = () => generateTestUser({})

@@ -1,4 +1,4 @@
-import { ValidationError, BusinessRuleViolationError, RepositoryError } from "../shared/errors"
+import { ValidationError, BusinessRuleViolationError, RepositoryError } from "@/app/domain/shared/errors"
 import { ParseResult, Schema as S } from "effect"
 
 /**

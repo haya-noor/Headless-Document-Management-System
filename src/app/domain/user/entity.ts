@@ -1,9 +1,9 @@
 import { Effect, Option, Schema as S, ParseResult } from "effect"
 import { UserValidationError } from "./errors"
-import { UserId } from "../shared/uuid"
+import { UserId } from "@/app/domain/shared/uuid"
 
-import { BaseEntity, type IEntity } from "../shared/base.entity"
-import { EmailAddress } from "../shared/email"
+import { BaseEntity, type IEntity } from "@/app/domain/shared/base.entity"
+import { EmailAddress } from "@/app/domain/shared/email"
 import { User } from "./schema" 
 
 

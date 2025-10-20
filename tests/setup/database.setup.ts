@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/node-postgres"
 import { sql } from "drizzle-orm"
 import dotenv from "dotenv"
 import crypto from "crypto"
-import { documents, users } from "../../src/app/infrastructure/database/models/index" 
+import { documents, users } from "@/app/infrastructure/database/models/index" 
 import { faker } from "@faker-js/faker"
 
 dotenv.config({ path: ".env-test-repo" }) // Load test DB credentials
@@ -19,9 +19,19 @@ let client: Client | null = null
 let db: ReturnType<typeof drizzle> | null = null
 
 /**
+ * Test Database Type
+ */
+export type TestDatabase = {
+  db: ReturnType<typeof drizzle>
+  client: Client
+  connectionString: string
+  cleanup?: () => Promise<void>
+}
+
+/**
  * Initializes the Drizzle client using the test DATABASE_URL
  */
-export const setupDatabase = async () => {
+export const setupDatabase = async (): Promise<TestDatabase> => {
   const connectionString = process.env.DATABASE_URL
   if (!connectionString) throw new Error("DATABASE_URL is not defined in .env-test-repo")
 
@@ -30,7 +40,7 @@ export const setupDatabase = async () => {
 
   db = drizzle(client)
 
-  return { db, client, connectionString }
+  return { db, client, connectionString, cleanup: teardownDatabase }
 }
 
 /**
@@ -117,6 +127,6 @@ export const createTestUser = async (db: any, overrides = {}) => {
 }
 
 // Aliases to match test imports
-export const setupTestDatabase = setupDatabase
+export const setupTestDatabase: () => Promise<TestDatabase> = setupDatabase
 export const teardownTestDatabase = teardownDatabase
 export const cleanupDatabaseAlias = cleanupDatabase // for internal calls

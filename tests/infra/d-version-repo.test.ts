@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
-import { Effect as E, Option as O } from "effect";
+import { Effect, Option } from "effect";
 import { eq, sql } from "drizzle-orm";
 
-import { DocumentVersionRepository } from "../../src/app/infrastructure/repositories/implementations/d-version.repository";
+import { DocumentVersionDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d-version.repository";
 import {
   setupTestDatabase,
   cleanupDatabase,
@@ -26,27 +26,24 @@ import {
   makeDocumentIdSync,
   makeDocumentVersionIdSync,
   makeUserIdSync,
-} from "../../src/app/domain/shared/uuid";
-import { NotFoundError, ConflictError, DatabaseError, ValidationError } from "../../src/app/domain/shared/errors";
+  type UserId,
+  type DocumentId,
+} from "@/app/domain/shared/uuid";
+import { NotFoundError, ConflictError, DatabaseError, ValidationError } from "@/app/domain/shared/errors";
 
 // Effect runner helpers
-const runEffect = async <T, E>(fx: Effect.Effect<T, E, any>): Promise<T> => {
-  return await Effect.runPromise(fx);
-};
-
-const runEffectSync = <T, E>(fx: Effect.Effect<T, E, any>): T => {
-  return Effect.runSync(fx);
-};
+const runEffect = <T, E>(fx: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(fx);
+const runEffectSync = <T, E>(fx: Effect.Effect<T, E>): T => Effect.runSync(fx);
 
 describe("DocumentVersionRepository Integration Tests", () => {
   let testDb: TestDatabase;
-  let versionRepository: DocumentVersionRepository;
-  let testUserId: string;
-  let testDocumentId: string;
+  let versionRepository: DocumentVersionDrizzleRepository;
+  let testUserId: UserId;
+  let testDocumentId: DocumentId;
 
   beforeAll(async () => {
     testDb = await setupTestDatabase();
-    versionRepository = new DocumentVersionRepository(testDb.db);
+    versionRepository = new DocumentVersionDrizzleRepository(testDb.db);
   });
 
   afterAll(async () => {
@@ -54,20 +51,20 @@ describe("DocumentVersionRepository Integration Tests", () => {
   });
 
   beforeEach(async () => {
-    await cleanupDatabase(testDb.db);
+    await cleanupDatabase();
 
     // Prerequisites: a user and a document
     const user = await createTestUser(testDb.db, {
       email: "version-owner@example.com",
     });
-    testUserId = user.id;
+    testUserId = user.id as UserId;
 
     const bootstrapVersionId = crypto.randomUUID();
     const document = await createTestDocument(testDb.db, testUserId, {
       title: "Document for Versions",
       currentVersionId: bootstrapVersionId,
     });
-    testDocumentId = document.id;
+    testDocumentId = document.id as DocumentId;
   });
 
   // ============================================================================
@@ -89,7 +86,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
       expect(saved.id).toBe(versionEntity.id);
       expect(saved.documentId).toBe(testDocumentId);
       expect(saved.version).toBe(1);
-      expect(O.getOrNull(saved.checksum)).toBe(versionData.checksum);
+      expect(Option.getOrNull(saved.checksum)).toBe(versionData.checksum);
     });
 
     it("saves multiple versions for the same document", async () => {
@@ -109,7 +106,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
       await runEffect(versionRepository.save(v2));
 
       const versions = await runEffect(
-        versionRepository.findByDocumentId(makeDocumentIdSync(testDocumentId))
+        versionRepository.findByDocumentId(testDocumentId)
       );
 
       expect(versions).toHaveLength(2);
@@ -131,12 +128,9 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
       await runEffect(versionRepository.save(v1));
 
-      const result = await runEffect(
-        versionRepository.save(v1dup).pipe(
-          E.either,
-          E.runPromise
-        )
-      ).catch((err) => err);
+      const result = await versionRepository.save(v1dup)
+        .pipe(Effect.either, Effect.runPromise)
+        .catch((err) => err);
 
       expect(result).toBeInstanceOf(ConflictError);
     });
@@ -158,8 +152,8 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
       const foundOpt = await runEffect(versionRepository.findById(entity.id));
 
-      expect(O.isSome(foundOpt)).toBe(true);
-      const found = O.getOrThrow(foundOpt);
+      expect(Option.isSome(foundOpt)).toBe(true);
+      const found = Option.getOrThrow(foundOpt);
       expect(found.id).toBe(entity.id);
       expect(found.version).toBe(1);
     });
@@ -170,7 +164,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
         versionRepository.findById(nonExistentId)
       );
 
-      expect(O.isNone(foundOpt)).toBe(true);
+      expect(Option.isNone(foundOpt)).toBe(true);
     });
   });
 
@@ -190,13 +184,13 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
       const foundOpt = await runEffect(
         versionRepository.findByDocumentIdAndVersion(
-          makeDocumentIdSync(testDocumentId),
+          testDocumentId,
           3
         )
       );
 
-      expect(O.isSome(foundOpt)).toBe(true);
-      const found = O.getOrThrow(foundOpt);
+      expect(Option.isSome(foundOpt)).toBe(true);
+      const found = Option.getOrThrow(foundOpt);
       expect(found.documentId).toBe(testDocumentId);
       expect(found.version).toBe(3);
     });
@@ -204,12 +198,12 @@ describe("DocumentVersionRepository Integration Tests", () => {
     it("returns None for non-existent version number", async () => {
       const foundOpt = await runEffect(
         versionRepository.findByDocumentIdAndVersion(
-          makeDocumentIdSync(testDocumentId),
+          testDocumentId,
           99
         )
       );
 
-      expect(O.isNone(foundOpt)).toBe(true);
+      expect(Option.isNone(foundOpt)).toBe(true);
     });
   });
 
@@ -241,7 +235,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
       await runEffect(versionRepository.save(v3));
 
       const versions = await runEffect(
-        versionRepository.findByDocumentId(makeDocumentIdSync(testDocumentId))
+        versionRepository.findByDocumentId(testDocumentId)
       );
 
       expect(versions).toHaveLength(3);
@@ -295,12 +289,12 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
       const latestOpt = await runEffect(
         versionRepository.findLatestByDocumentId(
-          makeDocumentIdSync(testDocumentId)
+          testDocumentId
         )
       );
 
-      expect(O.isSome(latestOpt)).toBe(true);
-      const latest = O.getOrThrow(latestOpt);
+      expect(Option.isSome(latestOpt)).toBe(true);
+      const latest = Option.getOrThrow(latestOpt);
       expect(latest.version).toBe(3);
     });
 
@@ -315,7 +309,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
         versionRepository.findLatestByDocumentId(makeDocumentIdSync(newDoc.id))
       );
 
-      expect(O.isNone(latestOpt)).toBe(true);
+      expect(Option.isNone(latestOpt)).toBe(true);
     });
   });
 
@@ -327,7 +321,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
     it("returns 1 for document with no versions", async () => {
       const next = await runEffect(
         versionRepository.getNextVersionNumber(
-          makeDocumentIdSync(testDocumentId)
+          testDocumentId
         )
       );
 
@@ -352,7 +346,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
       const next = await runEffect(
         versionRepository.getNextVersionNumber(
-          makeDocumentIdSync(testDocumentId)
+          testDocumentId
         )
       );
 
@@ -411,7 +405,7 @@ describe("DocumentVersionRepository Integration Tests", () => {
       await runEffect(versionRepository.save(v2));
 
       const cnt = await runEffect(
-        versionRepository.count(makeDocumentIdSync(testDocumentId))
+        versionRepository.count(testDocumentId)
       );
 
       expect(cnt).toBe(2);
@@ -419,11 +413,10 @@ describe("DocumentVersionRepository Integration Tests", () => {
 
     it("returns 0 for document with no versions", async () => {
       const cnt = await runEffect(
-        versionRepository.count(makeDocumentIdSync(testDocumentId))
+        versionRepository.count(testDocumentId)
       );
 
       expect(cnt).toBe(0);
     });
   });
-
-  // ============
+});

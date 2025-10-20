@@ -1,6 +1,6 @@
 import { Schema as S, Option } from "effect"
 import { DocumentGuards } from "./guards"
-import { DocumentId, DocumentVersionId, UserId } from "../shared/uuid"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
 
 /**
  * Declarative Document Schema

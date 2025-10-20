@@ -15,22 +15,17 @@ import {
   cleanupDatabase,
   createTestUser,
   type TestDatabase,
-} from "../setup/database.setup"
+} from "./setup/database.setup"
 
-import { DocumentVersionDrizzleRepository } from "../../src/app/infrastructure/repositories/implementations/d-version.repository"
-import { DocumentDrizzleRepository } from "../../src/app/infrastructure/repositories/implementations/d.repository"
-import { createTestDocumentVersionEntity } from "../factories/d-version.factory-test"
-import { createTestDocumentEntity } from "../factories/document.factory-test"
-import { Effect as E } from "effect"
+import { DocumentVersionDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d-version.repository"
+import { DocumentDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d.repository"
+import { createTestDocumentVersionEntity } from "./factories/d-version.factory-test"
+import { createTestDocumentEntity } from "./factories/document.factory-test"
+import { Effect, Option } from "effect"
+import type { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
+import type { Sha256 } from "@/app/domain/shared/checksum"
 
-// ============================================================================
-// SHARED BRANDED TYPES (from domain/shared/uuid.ts)
-// ============================================================================
-import { makeDocumentIdSync } from "../../src/app/domain/shared/uuid"
-
-const runEffect = async <T>(effect: E.Effect<T, any, any>): Promise<T> => {
-  return await E.runPromise(effect)
-}
+const runEffect = <T, E>(effect: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(effect)
 
 /**
  * Check if EXPLAIN plan uses an index
@@ -51,11 +46,11 @@ describe("Performance: Index Usage Verification", () => {
   })
 
   afterAll(async () => {
-    await testDb.cleanup()
+    await testDb.cleanup?.()
   })
 
   beforeEach(async () => {
-    await cleanupDatabase(testDb.db)
+    await cleanupDatabase()
   })
 
   describe("Document Versions Index Performance", () => {
@@ -65,10 +60,10 @@ describe("Performance: Index Usage Verification", () => {
       })
 
       // Create document with 2 versions
-      const vId = crypto.randomUUID()
-      const docEntity = E.runSync(
+      const vId = crypto.randomUUID() as DocumentVersionId
+      const docEntity = Effect.runSync(
         createTestDocumentEntity({
-          id: crypto.randomUUID(),
+          id: crypto.randomUUID() as DocumentId,
           ownerId: owner.id,
           title: "Performance Test Doc",
           currentVersionId: vId,
@@ -78,9 +73,9 @@ describe("Performance: Index Usage Verification", () => {
       const doc = await runEffect(documentRepo.save(docEntity))
 
       for (let v = 1; v <= 2; v++) {
-        const vEntity = E.runSync(
+        const vEntity = Effect.runSync(
           createTestDocumentVersionEntity({
-            id: v === 1 ? vId : crypto.randomUUID(),
+            id: (v === 1 ? vId : crypto.randomUUID()) as DocumentVersionId,
             documentId: doc.id,
             version: v,
             filename: `doc-v${v}.pdf`,
@@ -88,7 +83,7 @@ describe("Performance: Index Usage Verification", () => {
             size: 1024 * v,
             storageKey: `documents/${doc.id}/v${v}.pdf`,
             storageProvider: "local" as const,
-            checksum: String(v).padEnd(64, "0"),
+            checksum: String(v).padEnd(64, "0") as Sha256,
             uploadedBy: owner.id,
             createdAt: new Date(),
           })
@@ -114,14 +109,13 @@ describe("Performance: Index Usage Verification", () => {
       const targetChecksum = "a".repeat(64)
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Checksum Doc ${i}`,
             currentVersionId: vId,
-            checksum: i === 0 ? targetChecksum : `${i}`.padEnd(64, "0"),
             createdAt: new Date(),
           })
         )
@@ -144,10 +138,10 @@ describe("Performance: Index Usage Verification", () => {
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Active Doc ${i}`,
             currentVersionId: vId,
@@ -173,10 +167,10 @@ describe("Performance: Index Usage Verification", () => {
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Timeline Doc ${i}`,
             currentVersionId: vId,
@@ -261,10 +255,10 @@ describe("Performance: Index Usage Verification", () => {
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Perf Doc ${i}`,
             currentVersionId: vId,
@@ -284,25 +278,16 @@ describe("Performance: Index Usage Verification", () => {
       expect((result.rows as any[]).length).toBeGreaterThan(0)
       expect(elapsed).toBeLessThan(100) // Should complete in < 100ms
     })
-  })
-})
-sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${doc.id}`
-      )
-
-      const planText = (result.rows as any[]).map((r) => Object.values(r)[0]).join("\n")
-      expect(usesIndex(planText)).toBe(true)
-      expect(planText).toContain("idx_document_versions_document_id")
-    })
 
     it("idx_document_versions_version: should use index for version ordering", async () => {
       const owner = await createTestUser(testDb.db, {
         email: "version-order@example.com",
       })
 
-      const vId = crypto.randomUUID()
-      const docEntity = E.runSync(
+      const vId = crypto.randomUUID() as DocumentVersionId
+      const docEntity = Effect.runSync(
         createTestDocumentEntity({
-          id: crypto.randomUUID(),
+          id: crypto.randomUUID() as DocumentId,
           ownerId: owner.id,
           title: "Version Ordering",
           currentVersionId: vId,
@@ -312,9 +297,9 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
       const doc = await runEffect(documentRepo.save(docEntity))
 
       for (let v = 1; v <= 2; v++) {
-        const vEntity = E.runSync(
+        const vEntity = Effect.runSync(
           createTestDocumentVersionEntity({
-            id: v === 1 ? vId : crypto.randomUUID(),
+            id: (v === 1 ? vId : crypto.randomUUID()) as DocumentVersionId,
             documentId: doc.id,
             version: v,
             filename: `v${v}.pdf`,
@@ -322,7 +307,7 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
             size: 1024,
             storageKey: `documents/${doc.id}/v${v}.pdf`,
             storageProvider: "local" as const,
-            checksum: String(v).padEnd(64, "0"),
+            checksum: String(v).padEnd(64, "0") as Sha256,
             uploadedBy: owner.id,
             createdAt: new Date(),
           })
@@ -346,10 +331,10 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
 
       // Create 2 documents with 2 versions each
       for (let d = 0; d < 2; d++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Doc ${d}`,
             currentVersionId: vId,
@@ -359,9 +344,9 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
         const doc = await runEffect(documentRepo.save(docEntity))
 
         for (let v = 1; v <= 2; v++) {
-          const vEntity = E.runSync(
+          const vEntity = Effect.runSync(
             createTestDocumentVersionEntity({
-              id: v === 1 ? vId : crypto.randomUUID(),
+              id: (v === 1 ? vId : crypto.randomUUID()) as DocumentVersionId,
               documentId: doc.id,
               version: v,
               filename: `doc${d}-v${v}.pdf`,
@@ -369,7 +354,7 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
               size: 1024,
               storageKey: `documents/${doc.id}/v${v}.pdf`,
               storageProvider: "local" as const,
-              checksum: `${d}${v}`.padEnd(64, "0"),
+              checksum: `${d}${v}`.padEnd(64, "0") as Sha256,
               uploadedBy: owner.id,
               createdAt: new Date(),
             })
@@ -394,10 +379,10 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Timeline Doc ${i}`,
             currentVersionId: vId,
@@ -406,7 +391,7 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
         )
         const doc = await runEffect(documentRepo.save(docEntity))
 
-        const vEntity = E.runSync(
+        const vEntity = Effect.runSync(
           createTestDocumentVersionEntity({
             id: vId,
             documentId: doc.id,
@@ -416,7 +401,7 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
             size: 1024,
             storageKey: `documents/${doc.id}/v1.pdf`,
             storageProvider: "local" as const,
-            checksum: String(i).padEnd(64, "0"),
+            checksum: String(i).padEnd(64, "0") as Sha256,
             uploadedBy: owner.id,
             createdAt: new Date(),
           })
@@ -441,10 +426,10 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Document ${i}`,
             currentVersionId: vId,
@@ -470,14 +455,13 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
+        const vId = crypto.randomUUID() as DocumentVersionId
         const mimeType = i % 2 === 0 ? "application/pdf" : "image/jpeg"
-        const docEntity = E.runSync(
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `Doc ${i}`,
-            mimeType,
             currentVersionId: vId,
             createdAt: new Date(),
           })
@@ -501,14 +485,13 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
       })
 
       for (let i = 0; i < 2; i++) {
-        const vId = crypto.randomUUID()
-        const docEntity = E.runSync(
+        const vId = crypto.randomUUID() as DocumentVersionId
+        const docEntity = Effect.runSync(
           createTestDocumentEntity({
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as DocumentId,
             ownerId: owner.id,
             title: `S3 Doc ${i}`,
             currentVersionId: vId,
-            storageProvider: "s3",
             createdAt: new Date(),
           })
         )
@@ -517,3 +500,12 @@ sql`EXPLAIN (FORMAT TEXT) SELECT * FROM document_versions WHERE document_id = ${
 
       const db = testDb.db
       const result = await db.execute(
+        sql`EXPLAIN (FORMAT TEXT) SELECT * FROM documents WHERE storage_provider = 's3'`
+      )
+
+      const planText = (result.rows as any[]).map((r) => Object.values(r)[0]).join("\n")
+      expect(usesIndex(planText)).toBe(true)
+      expect(planText).toContain("idx_documents_storage_provider")
+    })
+  })
+})

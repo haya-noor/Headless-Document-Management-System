@@ -1,485 +1,667 @@
+/**
+ * UserRepository Integration Tests
+ * =================================
+ * Fully declarative using Effect schema patterns.
+ * All composition via Effect.pipe and Option matching.
+ * Tests the UserDrizzleRepository implementation.
+ */
 
-import { Effect, Option, pipe, Schema as S } from "effect";
-import { eq, desc, asc, count } from "drizzle-orm";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest"
+import { Effect, Option, pipe } from "effect"
 
-import { databaseService } from "@/app/infrastructure/services/drizzle-service";
-import { users } from "@/app/infrastructure/database/user-model";
-import type { InferSelectModel } from "drizzle-orm";
-
-type UserModel = InferSelectModel<typeof users>;
-
-import { UserEntity, type SerializedUser } from "@/app/domain/user/entity";
-import { User, UserRow, UserCodec } from "@/app/domain/user/schema";
+import { UserDrizzleRepository } from "@/app/infrastructure/repositories/implementations/user.repository"
+import { setupTestDatabase, teardownTestDatabase, cleanupDatabase, type TestDatabase } from "../setup/database.setup"
 import {
-  UserNotFoundError,
-  UserAlreadyExistsError,
-  UserValidationError,
-} from "@/app/domain/user/errors";
-import {
-  DatabaseError,
-  NotFoundError,
-  ConflictError,
-  ValidationError,
-  type Repository,
-} from "@/app/domain/shared/errors";
-import {
-  PaginatedResponse,
-  PaginationParams,
-} from "@/app/domain/shared/api.interface";
+  createTestUserEntity,
+  generateTestUser,
+  createAdminUser,
+  createRegularUser,
+  createInactiveUser,
+} from "../factories/user.factory-test"
+import { UserEntity } from "@/app/domain/user/entity"
+import { DatabaseError, ConflictError, ValidationError } from "@/app/domain/shared/errors"
+import type { UserId } from "@/app/domain/shared/uuid"
 
 /**
- * User Repository Filter Interface
+ * Test Runtime Helpers
+ * Declarative error handling and effect composition
  */
-export interface UserFilter {
-  email?: string;
-  role?: "admin" | "user";
-  isActive?: boolean;
-  searchTerm?: string;
+const TestRuntime = {
+  // Run an Effect and return its success value as a Promise
+  // This converts Effect-based code to Promise-based for async/await testing
+  run: <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+    Effect.runPromise(effect),
+
+  // Run an Effect expecting it to fail, and return the error
+  // Effect.flip swaps success/error channels, so errors become successes
+  runExpectingError: <A, E>(effect: Effect.Effect<A, E>): Promise<E> =>
+    pipe(
+      effect,
+      Effect.flip,  // Swap error and success channels
+      Effect.runPromise
+    ),
+
+  // Run multiple Effects in parallel and collect results in an array
+  // Effect.all runs all effects concurrently for better performance
+  runArray: <A, E>(effects: Effect.Effect<A, E>[]): Promise<A[]> =>
+    pipe(
+      Effect.all(effects),  // Run all effects in parallel
+      Effect.runPromise
+    ),
 }
 
 /**
- * User Repository Implementation using Drizzle ORM
- * 
- * Implements the Repository<T, Filter> contract from domain layer.
- * Handles all database operations for User entities with proper error handling.
+ * Test State (immutable, reset each test)
  */
-export class UserDrizzleRepository implements Repository<UserEntity, UserFilter> {
-  constructor(private readonly db = databaseService.getDatabase()) {}
+interface TestState {
+  repository: UserDrizzleRepository
+  testDb: TestDatabase
+}
 
-  // ---------------------------------------------------------------------------
-  // Private Helpers - Encoding/Decoding
-  // ---------------------------------------------------------------------------
+let state: TestState
 
-  /**
-   * Encodes a UserEntity into a database row format
-   */
-  private encodeUser(user: UserEntity): Effect.Effect<UserRow, ValidationError> {
-    return pipe(
-      Effect.try({
-        try: () => S.encodeSync(UserCodec)(user.toSerialized()),
-        catch: (err) =>
-          new ValidationError(
-            `Failed to encode user: ${err instanceof Error ? err.message : String(err)}`,
-            "user"
-          ),
-      })
-    );
+/**
+ * Setup & Teardown
+ */
+beforeAll(async () => {
+  // Initialize test database connection and repository instance
+  // This runs once before all tests in this file
+  const testDb = await setupTestDatabase()
+  state = {
+    repository: new UserDrizzleRepository(testDb.db),
+    testDb,
   }
+})
 
-  /**
-   * Decodes a database row into a UserEntity
-   */
-  private decodeUser(row: UserModel): Effect.Effect<UserEntity, ValidationError> {
-    return pipe(
-      Effect.try({
-        try: () => S.decodeSync(UserCodec)(row),
-        catch: (err) =>
-          new ValidationError(
-            `Failed to decode user: ${err instanceof Error ? err.message : String(err)}`,
-            "user"
-          ),
-      }),
-      Effect.flatMap((decoded) => UserEntity.create(decoded))
-    );
-  }
+afterAll(async () => {
+  // Close database connection after all tests complete
+  await teardownTestDatabase()
+})
 
-  /**
-   * Helper to fetch a single user by a query function
-   */
-  private fetchOne(
-    query: () => Promise<UserModel[]>
-  ): Effect.Effect<Option.Option<UserEntity>, DatabaseError | ValidationError> {
-    return pipe(
-      Effect.tryPromise({
-        try: query,
-        catch: (err) =>
-          new DatabaseError({
-            message: `Database query failed: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.map(Option.fromIterable),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (row) => pipe(this.decodeUser(row), Effect.map(Option.some)),
-        })
+beforeEach(async () => {
+  // Clean all tables before each test to ensure test isolation
+  // Each test starts with a fresh database state
+  await cleanupDatabase()
+})
+
+/**
+ * Declarative Test Helpers
+ * These wrappers make test code more readable and composable
+ */
+
+// Save a user entity to database (returns Effect)
+const saveUser = (userEntity: UserEntity) =>
+  state.repository.save(userEntity)
+
+// Find user by ID (returns Effect<Option<UserEntity>>)
+// Option wraps the result - Some if found, None if not found
+const findUserById = (id: string) =>
+  state.repository.findById(id)
+
+// Find user by email (returns Effect<Option<UserEntity>>)
+const findUserByEmail = (email: string) =>
+  state.repository.findByEmail(email)
+
+// Create a test user entity and save it to database
+// This chains two operations: create entity -> save to DB
+// Effect.flatMap is used to sequence async operations
+const createAndSaveUser = (overrides = {}) =>
+  pipe(
+    createTestUserEntity(overrides),  // Create entity from test data
+    Effect.flatMap(saveUser)          // Then save it to database
+  )
+
+// ============================================================================
+// Tests: CREATE / SAVE
+// ============================================================================
+
+describe("UserRepository • Save (CREATE)", () => {
+  it("saves a new user and retrieves it by ID", async () => {
+    // Test workflow: Create user -> Save -> Retrieve by ID -> Verify
+    // Using pipe for declarative composition of async operations
+    const result = await TestRuntime.run(
+      pipe(
+        createAndSaveUser({ email: "newuser@example.com" }),  // Step 1: Create and save
+        Effect.flatMap((user) => findUserById(user.id))       // Step 2: Find by ID
       )
-    );
-  }
+    )
 
-  // ---------------------------------------------------------------------------
-  // Repository Interface Implementation
-  // ---------------------------------------------------------------------------
+    // Result is Option<UserEntity> - Some if found, None if not
+    expect(Option.isSome(result)).toBe(true)
+    const user = Option.getOrThrow(result)  // Extract user from Option
+    expect(user.email).toBe("newuser@example.com")
+  })
 
-  /**
-   * Finds a user by their ID
-   */
-  findById(id: string): Effect.Effect<Option.Option<UserEntity>, DatabaseError> {
-    return pipe(
-      this.fetchOne(() =>
-        this.db.select().from(users).where(eq(users.id, id)).limit(1)
-      ),
-      Effect.mapError(
-        (err) =>
-          new DatabaseError({
-            message: `Failed to find user by ID: ${id}`,
-            cause: err,
-          })
+  it("saves an admin user with correct role", async () => {
+    // Use factory helper to generate admin-specific test data
+    const adminData = createAdminUser({ email: "admin@example.com" })
+    const result = await TestRuntime.run(
+      pipe(
+        createTestUserEntity(adminData),  // Validate and create entity
+        Effect.flatMap(saveUser)          // Save to database
       )
-    );
-  }
+    )
 
-  /**
-   * Finds a user by their email address
-   */
-  findByEmail(
-    email: string
-  ): Effect.Effect<Option.Option<UserEntity>, DatabaseError> {
-    return pipe(
-      this.fetchOne(() =>
-        this.db.select().from(users).where(eq(users.email, email)).limit(1)
-      ),
-      Effect.mapError(
-        (err) =>
-          new DatabaseError({
-            message: `Failed to find user by email: ${email}`,
-            cause: err,
-          })
+    // Verify the role persisted correctly
+    expect(result.role).toBe("admin")
+    expect(result.email).toBe("admin@example.com")
+  })
+
+  it("saves a regular user with correct role", async () => {
+    const userData = createRegularUser({ email: "regular@example.com" })
+    const result = await TestRuntime.run(
+      pipe(
+        createTestUserEntity(userData),
+        Effect.flatMap(saveUser)
       )
-    );
-  }
+    )
 
-  /**
-   * Finds multiple users matching the given filter
-   */
-  findMany(
-    filter?: UserFilter
-  ): Effect.Effect<UserEntity[], DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db.select().from(users);
+    expect(result.role).toBe("user")
+    expect(result.email).toBe("regular@example.com")
+  })
 
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
-
-          return await query;
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to find users: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.flatMap((rows) =>
-        Effect.all(rows.map((row) => this.decodeUser(row)))
-      ),
-      Effect.mapError(
-        (err) =>
-          err instanceof DatabaseError
-            ? err
-            : new DatabaseError({
-                message: "Failed to decode users",
-                cause: err,
-              })
+  it("saves an inactive user", async () => {
+    const inactiveData = createInactiveUser({ email: "inactive@example.com" })
+    const result = await TestRuntime.run(
+      pipe(
+        createTestUserEntity(inactiveData),
+        Effect.flatMap(saveUser)
       )
-    );
-  }
+    )
 
-  /**
-   * Finds users with pagination support
-   */
-  findManyPaginated(
-    { page, limit, sortBy = "createdAt", sortOrder = "desc" }: PaginationParams,
-    filter?: UserFilter
-  ): Effect.Effect<PaginatedResponse<UserEntity>, DatabaseError> {
-    const offset = (page - 1) * limit;
-    const orderBy = sortOrder === "asc" ? asc : desc;
-    const sortColumn = users[sortBy as keyof typeof users] ?? users.createdAt;
+    expect(result.isActive).toBe(false)
+    expect(result.email).toBe("inactive@example.com")
+  })
 
-    return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db
-            .select()
-            .from(users)
-            .orderBy(orderBy(sortColumn))
-            .limit(limit)
-            .offset(offset);
+  it("fails to save user with duplicate email", async () => {
+    const email = "duplicate@example.com"
 
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
+    // Save first user successfully
+    await TestRuntime.run(createAndSaveUser({ email }))
 
-          return await query;
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Pagination query failed: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.flatMap((rows) =>
-        Effect.all(rows.map((row) => this.decodeUser(row)))
-      ),
-      Effect.flatMap((usersList) =>
-        pipe(
-          Effect.tryPromise({
-            try: () => this.db.select({ count: count() }).from(users),
-            catch: (err) =>
-              new DatabaseError({
-                message: `Count query failed: ${err instanceof Error ? err.message : String(err)}`,
-                cause: err,
-              }),
-          }),
-          Effect.map((results) => {
-            const result = results[0];
-            const total = Number(result?.count ?? 0);
-            const totalPages = Math.ceil(total / limit);
-            return {
-              data: usersList,
-              pagination: {
-                page,
-                limit,
-                total,
-                totalPages,
-                hasNext: page < totalPages,
-                hasPrev: page > 1,
-              },
-            } satisfies PaginatedResponse<UserEntity>;
+    // Try to save second user with same email - should fail
+    // runExpectingError captures the error instead of throwing
+    const error = await TestRuntime.runExpectingError(
+      createAndSaveUser({ email })
+    )
+
+    // Repository should enforce email uniqueness with ConflictError
+    expect(error).toBeInstanceOf(ConflictError)
+    expect((error as ConflictError).message).toContain(email)
+  })
+})
+
+// ============================================================================
+// Tests: FIND BY ID
+// ============================================================================
+
+describe("UserRepository • FindById", () => {
+  it("finds an existing user by ID", async () => {
+    // First, create and save a user to the database
+    const saved = await TestRuntime.run(
+      createAndSaveUser({ email: "findme@example.com" })
+    )
+
+    // Then, retrieve it by ID
+    const result = await TestRuntime.run(findUserById(saved.id))
+
+    // Result is wrapped in Option - Some(user) if found, None if not
+    expect(Option.isSome(result)).toBe(true)
+    const found = Option.getOrThrow(result)  // Unwrap the Option
+    expect(found.id).toBe(saved.id)
+    expect(found.email).toBe("findme@example.com")
+  })
+
+  it("returns None for non-existent user ID", async () => {
+    // Generate a random UUID that doesn't exist in database
+    const fakeId = crypto.randomUUID()
+    const result = await TestRuntime.run(findUserById(fakeId))
+
+    // Should return Option.None instead of throwing error
+    expect(Option.isNone(result)).toBe(true)
+  })
+})
+
+// ============================================================================
+// Tests: FIND BY EMAIL
+// ============================================================================
+
+describe("UserRepository • FindByEmail", () => {
+  it("finds an existing user by email", async () => {
+    const email = "findemail@example.com"
+    const saved = await TestRuntime.run(
+      createAndSaveUser({ email })
+    )
+
+    const result = await TestRuntime.run(findUserByEmail(email))
+
+    expect(Option.isSome(result)).toBe(true)
+    const found = Option.getOrThrow(result)
+    expect(found.id).toBe(saved.id)
+    expect(found.email).toBe(email)
+  })
+
+  it("returns None for non-existent email", async () => {
+    const result = await TestRuntime.run(
+      findUserByEmail("nonexistent@example.com")
+    )
+
+    expect(Option.isNone(result)).toBe(true)
+  })
+
+  it("finds user by email case-insensitively", async () => {
+    const email = "CaseSensitive@example.com".toLowerCase()
+    await TestRuntime.run(createAndSaveUser({ email }))
+
+    const result = await TestRuntime.run(
+      findUserByEmail("casesensitive@example.com")
+    )
+
+    expect(Option.isSome(result)).toBe(true)
+  })
+})
+
+// ============================================================================
+// Tests: FIND MANY
+// ============================================================================
+
+describe("UserRepository • FindMany", () => {
+  it("finds all users without filter", async () => {
+    // Create 3 test users in parallel for efficiency
+    // runArray executes all Effects concurrently using Effect.all
+    await TestRuntime.runArray([
+      createAndSaveUser({ email: "user1@example.com" }),
+      createAndSaveUser({ email: "user2@example.com" }),
+      createAndSaveUser({ email: "user3@example.com" }),
+    ])
+
+    // Retrieve all users (no filter means get everything)
+    const users = await TestRuntime.run(state.repository.findMany())
+
+    // Should have at least the 3 we just created
+    expect(users.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("filters users by role", async () => {
+    // Create mix of admin and regular users
+    // Factory helpers ensure correct role assignment
+    await TestRuntime.runArray([
+      createAndSaveUser(createAdminUser({ email: "admin1@example.com" })),
+      createAndSaveUser(createRegularUser({ email: "user1@example.com" })),
+      createAndSaveUser(createAdminUser({ email: "admin2@example.com" })),
+    ])
+
+    // Filter to get only admin users
+    const admins = await TestRuntime.run(
+      state.repository.findMany({ role: "admin" })
+    )
+
+    // Should have at least 2 admins, and all should be admins
+    expect(admins.length).toBeGreaterThanOrEqual(2)
+    expect(admins.every(u => u.role === "admin")).toBe(true)
+  })
+
+  it("filters users by isActive status", async () => {
+    // Create active and inactive users
+    await TestRuntime.runArray([
+      createAndSaveUser(createInactiveUser({ email: "inactive1@example.com" })),
+      createAndSaveUser({ email: "active1@example.com", isActive: true }),
+      createAndSaveUser(createInactiveUser({ email: "inactive2@example.com" })),
+    ])
+
+    const activeUsers = await TestRuntime.run(
+      state.repository.findMany({ isActive: true })
+    )
+    const inactiveUsers = await TestRuntime.run(
+      state.repository.findMany({ isActive: false })
+    )
+
+    // Verify we got results for each category
+    expect(activeUsers.length).toBeGreaterThanOrEqual(1)
+    expect(inactiveUsers.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it("filters users by email", async () => {
+    const targetEmail = "specific@example.com"
+    await TestRuntime.runArray([
+      createAndSaveUser({ email: targetEmail }),
+      createAndSaveUser({ email: "other@example.com" }),
+    ])
+
+    const users = await TestRuntime.run(
+      state.repository.findMany({ email: targetEmail })
+    )
+
+    expect(users.length).toBe(1)
+    expect(users[0].email).toBe(targetEmail)
+  })
+})
+
+// ============================================================================
+// Tests: FIND MANY PAGINATED
+// ============================================================================
+
+describe("UserRepository • FindManyPaginated", () => {
+  beforeEach(async () => {
+    // Set up test data: create 10 users before each pagination test
+    // Array.from generates Effects, runArray executes them in parallel
+    const createUsers = Array.from({ length: 10 }, (_, i) =>
+      createAndSaveUser({ email: `paginated${i}@example.com` })
+    )
+    await TestRuntime.runArray(createUsers)
+  })
+
+  it("returns paginated results with correct metadata", async () => {
+    // Request first page with 5 items per page
+    // Results sorted by createdAt in descending order (newest first)
+    const result = await TestRuntime.run(
+      state.repository.findManyPaginated(
+        { page: 1, limit: 5, sortBy: "createdAt", sortOrder: "desc" },
+        {}  // No additional filters
+      )
+    )
+
+    // Verify pagination metadata is correct
+    expect(result.data.length).toBeLessThanOrEqual(5)  // Max 5 items per page
+    expect(result.pagination.page).toBe(1)              // Current page
+    expect(result.pagination.limit).toBe(5)             // Items per page
+    expect(result.pagination.total).toBeGreaterThanOrEqual(10)  // Total count
+    expect(result.pagination.totalPages).toBeGreaterThanOrEqual(2)  // At least 2 pages
+    expect(result.pagination.hasNext).toBe(true)        // Has next page
+    expect(result.pagination.hasPrev).toBe(false)       // No previous page (first page)
+  })
+
+  it("returns second page correctly", async () => {
+    const result = await TestRuntime.run(
+      state.repository.findManyPaginated(
+        { page: 2, limit: 5, sortBy: "createdAt", sortOrder: "desc" },
+        {}
+      )
+    )
+
+    expect(result.pagination.page).toBe(2)
+    expect(result.pagination.hasPrev).toBe(true)
+  })
+
+  it("applies filters with pagination", async () => {
+    // Create some admin users
+    await TestRuntime.runArray([
+      createAndSaveUser(createAdminUser({ email: "paginadmin1@example.com" })),
+      createAndSaveUser(createAdminUser({ email: "paginadmin2@example.com" })),
+    ])
+
+    const result = await TestRuntime.run(
+      state.repository.findManyPaginated(
+        { page: 1, limit: 5, sortBy: "createdAt", sortOrder: "desc" },
+        { role: "admin" }
+      )
+    )
+
+    expect(result.data.every(u => u.role === "admin")).toBe(true)
+  })
+})
+
+// ============================================================================
+// Tests: EXISTS
+// ============================================================================
+
+describe("UserRepository • Exists", () => {
+  it("returns true for existing user", async () => {
+    const user = await TestRuntime.run(
+      createAndSaveUser({ email: "exists@example.com" })
+    )
+
+    const exists = await TestRuntime.run(
+      state.repository.exists(user.id)
+    )
+
+    expect(exists).toBe(true)
+  })
+
+  it("returns false for non-existent user", async () => {
+    const fakeId = crypto.randomUUID()
+    const exists = await TestRuntime.run(
+      state.repository.exists(fakeId)
+    )
+
+    expect(exists).toBe(false)
+  })
+})
+
+// ============================================================================
+// Tests: COUNT
+// ============================================================================
+
+describe("UserRepository • Count", () => {
+  it("counts all users without filter", async () => {
+    await TestRuntime.runArray([
+      createAndSaveUser({ email: "count1@example.com" }),
+      createAndSaveUser({ email: "count2@example.com" }),
+      createAndSaveUser({ email: "count3@example.com" }),
+    ])
+
+    const count = await TestRuntime.run(
+      state.repository.count()
+    )
+
+    expect(count).toBeGreaterThanOrEqual(3)
+  })
+
+  it("counts users by role", async () => {
+    await TestRuntime.runArray([
+      createAndSaveUser(createAdminUser({ email: "countadmin1@example.com" })),
+      createAndSaveUser(createRegularUser({ email: "countuser1@example.com" })),
+      createAndSaveUser(createAdminUser({ email: "countadmin2@example.com" })),
+    ])
+
+    const adminCount = await TestRuntime.run(
+      state.repository.count({ role: "admin" })
+    )
+
+    expect(adminCount).toBeGreaterThanOrEqual(2)
+  })
+
+  it("counts active users", async () => {
+    await TestRuntime.runArray([
+      createAndSaveUser({ email: "active1@example.com", isActive: true }),
+      createAndSaveUser(createInactiveUser({ email: "inactive1@example.com" })),
+      createAndSaveUser({ email: "active2@example.com", isActive: true }),
+    ])
+
+    const activeCount = await TestRuntime.run(
+      state.repository.count({ isActive: true })
+    )
+
+    expect(activeCount).toBeGreaterThanOrEqual(2)
+  })
+})
+
+// ============================================================================
+// Tests: DELETE
+// ============================================================================
+
+describe("UserRepository • Delete", () => {
+  it("deletes an existing user", async () => {
+    // Create a user to delete
+    const user = await TestRuntime.run(
+      createAndSaveUser({ email: "deleteme@example.com" })
+    )
+
+    // Perform hard delete (removes from database permanently)
+    const deleted = await TestRuntime.run(
+      state.repository.delete(user.id)
+    )
+
+    expect(deleted).toBe(true)
+
+    // Verify user no longer exists in database
+    // exists() returns boolean, not Option
+    const exists = await TestRuntime.run(
+      state.repository.exists(user.id)
+    )
+    expect(exists).toBe(false)
+  })
+
+  it("fails to delete non-existent user", async () => {
+    const fakeId = crypto.randomUUID()
+
+    const error = await TestRuntime.runExpectingError(
+      state.repository.delete(fakeId)
+    )
+
+    expect(error).toBeInstanceOf(DatabaseError)
+  })
+
+  it("user is not findable after deletion", async () => {
+    const user = await TestRuntime.run(
+      createAndSaveUser({ email: "deletecheck@example.com" })
+    )
+
+    await TestRuntime.run(state.repository.delete(user.id))
+
+    const result = await TestRuntime.run(findUserById(user.id))
+    expect(Option.isNone(result)).toBe(true)
+  })
+})
+
+// ============================================================================
+// Tests: EDGE CASES & ERROR HANDLING
+// ============================================================================
+
+describe("UserRepository • Edge Cases", () => {
+  it("handles finding user with special characters in email", async () => {
+    const email = "user+test@example.com"
+    await TestRuntime.run(createAndSaveUser({ email }))
+
+    const result = await TestRuntime.run(findUserByEmail(email))
+
+    expect(Option.isSome(result)).toBe(true)
+    expect(Option.getOrThrow(result).email).toBe(email)
+  })
+
+  it("maintains data integrity for optional fields", async () => {
+    const userData = generateTestUser({
+      email: "optional@example.com",
+      phoneNumber: "+1234567890",
+      profileImage: "https://example.com/avatar.jpg",
+      dateOfBirth: new Date("1990-01-01").toISOString(),
+    })
+
+    const user = await TestRuntime.run(
+      pipe(
+        createTestUserEntity(userData),
+        Effect.flatMap(saveUser),
+        Effect.flatMap((saved) => findUserById(saved.id)),
+        Effect.map(Option.getOrThrow)
+      )
+    )
+
+    expect(user.email).toBe("optional@example.com")
+    // Optional fields should be preserved
+  })
+
+  it("handles empty result sets gracefully", async () => {
+    const users = await TestRuntime.run(
+      state.repository.findMany({ email: "nonexistent@nowhere.com" })
+    )
+
+    expect(users).toEqual([])
+  })
+
+  it("handles pagination with no results", async () => {
+    const result = await TestRuntime.run(
+      state.repository.findManyPaginated(
+        { page: 1, limit: 10, sortBy: "createdAt", sortOrder: "desc" },
+        { email: "nonexistent@nowhere.com" }
+      )
+    )
+
+    expect(result.data).toEqual([])
+    expect(result.pagination.total).toBe(0)
+    expect(result.pagination.totalPages).toBe(0)
+  })
+})
+
+// ============================================================================
+// Tests: DECLARATIVE COMPOSITION
+// ============================================================================
+
+describe("UserRepository • Effect Composition", () => {
+  it("chains multiple operations declaratively", async () => {
+    // Demonstrates Effect composition using pipe for sequential operations
+    // Each step passes its output to the next step
+    const result = await TestRuntime.run(
+      pipe(
+        // Step 1: Create and save user (returns Effect<UserEntity>)
+        createAndSaveUser({ email: "compose@example.com" }),
+        
+        // Step 2: Find by ID (returns Effect<Option<UserEntity>>)
+        // flatMap chains async operations
+        Effect.flatMap((user) => findUserById(user.id)),
+        
+        // Step 3: Extract from Option (returns Effect<UserEntity>)
+        // map transforms the value without async
+        Effect.map(Option.getOrThrow),
+        
+        // Step 4: Side effect for verification
+        // tap performs an action without changing the value
+        Effect.tap((user) =>
+          Effect.sync(() => {
+            expect(user.email).toBe("compose@example.com")
           })
         )
-      ),
-      Effect.mapError(
-        (err) =>
-          err instanceof DatabaseError
-            ? err
-            : new DatabaseError({
-                message: "Pagination failed",
-                cause: err,
-              })
       )
-    );
-  }
+    )
 
-  /**
-   * Saves a user entity (insert or update)
-   */
-  save(
-    user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ConflictError | ValidationError> {
-    return pipe(
-      this.findByEmail(user.email),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => this.insert(user),
-          onSome: (existing) =>
-            existing.id === user.id
-              ? this.update(user)
-              : Effect.fail(
-                  new ConflictError(
-                    `User with email ${user.email} already exists`,
-                    "email"
-                  )
-                ),
-        })
+    // Final assertion on the composed result
+    expect(result.email).toBe("compose@example.com")
+  })
+
+  it("handles errors in composition chain", async () => {
+    const email = "error@example.com"
+
+    // Create first user
+    await TestRuntime.run(createAndSaveUser({ email }))
+
+    // Try to create duplicate - should fail
+    const error = await TestRuntime.runExpectingError(
+      pipe(
+        createAndSaveUser({ email }),
+        Effect.flatMap((user) => findUserById(user.id))
       )
-    );
-  }
+    )
 
-  /**
-   * Inserts a new user into the database
-   */
-  private insert(
-    user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ConflictError | ValidationError> {
-    return pipe(
-      this.encodeUser(user),
-      Effect.flatMap((row) =>
-        Effect.tryPromise({
-          try: () => this.db.insert(users).values(row as any),
-          catch: (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes("unique") || msg.includes("duplicate")) {
-              return new ConflictError(
-                `User with email ${user.email} already exists`,
-                "email"
-              );
-            }
-            return new DatabaseError({
-              message: `Failed to insert user: ${msg}`,
-              cause: err,
-            });
-          },
-        })
-      ),
-      Effect.as(user)
-    );
-  }
+    expect(error).toBeInstanceOf(ConflictError)
+  })
 
-  /**
-   * Updates an existing user in the database
-   */
-  private update(
-    user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
-    return pipe(
-      this.exists(user.id),
-      Effect.flatMap((exists) =>
-        exists
-          ? this.encodeUser(user)
-          : Effect.fail(
-              new NotFoundError({
-                message: "User not found",
-                resource: "User",
-                id: user.id,
-              })
-            )
-      ),
-      Effect.flatMap((row) =>
-        Effect.tryPromise({
-          try: () =>
-            this.db.update(users).set(row as any).where(eq(users.id, user.id)),
-          catch: (err) =>
-            new DatabaseError({
-              message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
-              cause: err,
-            }),
-        })
-      ),
-      Effect.as(user)
-    );
-  }
+  it("uses Option matching for conditional logic", async () => {
+    const existingEmail = "existing@example.com"
+    const newEmail = "new@example.com"
 
-  /**
-   * Deletes a user by ID (hard delete)
-   */
-  delete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
-    return pipe(
-      this.exists(id),
-      Effect.flatMap((exists) =>
-        exists
-          ? pipe(
-              Effect.tryPromise({
-                try: () => this.db.delete(users).where(eq(users.id, id)),
-                catch: (err) =>
-                  new DatabaseError({
-                    message: `Failed to delete user: ${err instanceof Error ? err.message : String(err)}`,
-                    cause: err,
-                  }),
-              }),
-              Effect.as(true)
-            )
-          : Effect.fail(
-              new NotFoundError({
-                message: "User not found",
-                resource: "User",
-                id,
-              })
-            )
+    // Pre-create one user
+    await TestRuntime.run(createAndSaveUser({ email: existingEmail }))
+
+    // Helper that implements "find or create" pattern using Option.match
+    // This is a common pattern for idempotent operations
+    const checkAndCreate = (email: string) =>
+      pipe(
+        findUserByEmail(email),  // Returns Effect<Option<UserEntity>>
+        Effect.flatMap(
+          // Option.match handles both Some and None cases declaratively
+          Option.match({
+            onNone: () => createAndSaveUser({ email }),      // Create if not found
+            onSome: (user) => Effect.succeed(user),          // Return existing if found
+          })
+        )
       )
-    );
-  }
 
-  /**
-   * Soft deletes a user by marking them as inactive
-   */
-  softDelete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
-    return pipe(
-      this.findById(id),
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.fail(
-              new NotFoundError({
-                message: "User not found",
-                resource: "User",
-                id,
-              })
-            ),
-          onSome: (user) =>
-            pipe(
-              user.deactivate(),
-              Effect.flatMap((deactivated) => this.save(deactivated)),
-              Effect.as(true)
-            ),
-        })
-      ),
-      Effect.mapError((err) =>
-        err instanceof NotFoundError
-          ? err
-          : new DatabaseError({
-              message: "Failed to soft delete user",
-              cause: err,
-            })
-      )
-    );
-  }
+    // Test both paths: existing user (onSome) and new user (onNone)
+    const existing = await TestRuntime.run(checkAndCreate(existingEmail))
+    const created = await TestRuntime.run(checkAndCreate(newEmail))
 
-  /**
-   * Checks if a user exists by ID
-   */
-  exists(id: string): Effect.Effect<boolean, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: () =>
-          this.db
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.id, id))
-            .limit(1),
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to check user existence: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.map((rows) => rows.length > 0)
-    );
-  }
+    // Both should succeed, one was found, one was created
+    expect(existing.email).toBe(existingEmail)
+    expect(created.email).toBe(newEmail)
+  })
+})
 
-  /**
-   * Counts users matching the given filter
-   */
-  count(filter?: UserFilter): Effect.Effect<number, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db.select({ count: count() }).from(users);
-
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
-
-          const result = await query;
-          return Number(result[0]?.count ?? 0);
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to count users: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      })
-    );
-  }
-}

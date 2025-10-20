@@ -45,14 +45,16 @@ const TestRuntime = {
     ),
 }
 
+import type { UserId, DocumentId } from "@/app/domain/shared/uuid"
+
 /**
  * Test State (immutable, reset each test)
  */
 interface TestState {
   repository: AccessPolicyRepository
-  testUserId: string
-  otherUserId: string
-  testDocumentId: string
+  testUserId: UserId
+  otherUserId: UserId
+  testDocumentId: DocumentId
 }
 
 let state: TestState
@@ -64,9 +66,9 @@ beforeAll(async () => {
   const { db } = await setupTestDatabase()
   state = {
     repository: new AccessPolicyRepository(db),
-    testUserId: "",
-    otherUserId: "",
-    testDocumentId: "",
+    testUserId: "" as UserId,
+    otherUserId: "" as UserId,
+    testDocumentId: "" as DocumentId,
   }
 
   // Create users and document via Effect composition
@@ -76,13 +78,13 @@ beforeAll(async () => {
   )
 
   const { user1, user2 } = await TestRuntime.run(setupUsers)
-  state.testUserId = user1.id
-  state.otherUserId = user2.id
+  state.testUserId = user1.id as UserId
+  state.otherUserId = user2.id as UserId
 
   // Create document
   const setupDoc = createTestDocumentEntity({ ownerId: state.testUserId })
   const doc = await TestRuntime.run(setupDoc)
-  state.testDocumentId = doc.id
+  state.testDocumentId = doc.id as DocumentId
 })
 
 afterAll(async () => {
@@ -132,7 +134,7 @@ describe("AccessPolicyRepository • Save (CREATE)", () => {
           resourceId: state.testDocumentId as any,
           actions: ["read", "write"],
         }),
-        Effect.flatMap(findPolicyById)
+        Effect.flatMap((policy) => findPolicyById(policy.id))
       )
     )
 

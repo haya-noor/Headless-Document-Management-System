@@ -1,10 +1,10 @@
 import { Effect, Option, Schema as S } from "effect"
 import { AccessPolicy, AccessPolicySchema } from "./schema"
 import { AccessPolicyGuards } from "./guards"
-import { BaseEntity, IEntity } from "../shared/base.entity"
-import { BusinessRuleViolationError, ValidationError } from "../shared/errors"
+import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
 import { AccessPolicyValidationError } from "./errors"
-import { AccessPolicyId, UserId, DocumentId } from "../shared/uuid"
+import { AccessPolicyId, UserId, DocumentId } from "@/app/domain/shared/uuid"
 
 /**
  * IAccessPolicy — Aggregate contract

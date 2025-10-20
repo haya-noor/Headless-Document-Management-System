@@ -7,7 +7,7 @@
 
 import { IStorageService, StorageConfig } from '@/app/application/interfaces/storage.interface';
 import { LocalStorageService } from './local-storage';
-import { storageConfig as defaultStorageConfig } from '../config/storage.config';
+import { storageConfig as defaultStorageConfig } from '@/app/infrastructure/config/storage.config';
 
 /**
  * Storage service factory class

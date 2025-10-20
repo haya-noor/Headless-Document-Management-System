@@ -1,7 +1,7 @@
 import { Option, Schema as S } from "effect"
 import { AccessPolicyGuards } from "./guards"
-import { AccessPolicyId, UserId, DocumentId } from "../shared/uuid"
-import { DateTimeFromAny } from "../shared/date-time"
+import { AccessPolicyId, UserId, DocumentId } from "@/app/domain/shared/uuid"
+import { DateTimeFromAny } from "@/app/domain/shared/date-time"
 
 /**
  * Domain schema

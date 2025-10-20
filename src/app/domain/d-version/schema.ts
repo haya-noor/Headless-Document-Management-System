@@ -1,8 +1,8 @@
 import { Schema as S, Option } from "effect"
-import { DocumentId, DocumentVersionId, UserId } from "../shared/uuid"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
 import { DocumentVersionGuards } from "./guards"
-import { FileKey, FileSize } from "../shared/metadata"
-import { Sha256 } from "../shared/checksum"
+import { FileKey, FileSize } from "@/app/domain/shared/metadata"
+import { Sha256 } from "@/app/domain/shared/checksum"
 
 /** Declarative schema for DocumentVersion domain model */
 export const DocumentVersionSchema = S.Struct({

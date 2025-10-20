@@ -1,6 +1,6 @@
 import { Schema as S, Option } from "effect"
-import { DownloadTokenId, DocumentId, UserId } from "../shared/uuid"
-import { BaseEntitySchema, Optional } from "../shared/schema.utils"
+import { DownloadTokenId, DocumentId, UserId } from "@/app/domain/shared/uuid"
+import { BaseEntitySchema, Optional } from "@/app/domain/shared/schema.utils"
 import { DownloadTokenString } from "./value-object"
 import { ExpiryWindow } from "./value-object"
 

@@ -1,5 +1,5 @@
 import { Schema as S, Effect } from "effect"
-import { ValidationError } from "../shared/errors"
+import { ValidationError } from "@/app/domain/shared/errors"
 import { DocumentVersionSchema } from "./schema"
 
 /**

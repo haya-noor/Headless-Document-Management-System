@@ -8,9 +8,9 @@
 import { Effect as E } from "effect"
 import { faker } from "../setup"
 import * as fc from "fast-check"
-import { AccessPolicyEntity } from "../../src/app/domain/access-policy/entity"
-import { AccessPolicyValidationError } from "../../src/app/domain/access-policy/errors"
-import { type AccessPolicy, type AccessPolicySerialized } from "../../src/app/domain/access-policy/schema"
+import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
+import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
+import { type AccessPolicy, type AccessPolicySerialized } from "@/app/domain/access-policy/schema"
 import {
   AccessPolicyId,
   DocumentId,
@@ -18,7 +18,7 @@ import {
   makeAccessPolicyIdSync,
   makeUserIdSync,
   makeDocumentIdSync,
-} from "../../src/app/domain/shared/uuid"
+} from "@/app/domain/shared/uuid"
 
 /**
  * Reusable random generators for AccessPolicy test data

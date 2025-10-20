@@ -6,7 +6,7 @@
 
 import { faker } from "../setup"
 import { Effect, Option } from "effect"
-import { users, documents } from "../../src/app/infrastructure/database/models"
+import { users, documents } from "@/app/infrastructure/database/models"
 import { getDb } from "./database.setup"
 import { v4 as uuidv4 } from "uuid"
 

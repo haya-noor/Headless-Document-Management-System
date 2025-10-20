@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
-import { Effect as E, Option as O } from "effect";
+import { Effect, Option } from "effect";
 import { eq } from "drizzle-orm";
 
-import { DownloadTokenRepository } from "../../src/app/infrastructure/repositories/implementations/download-token-repository";
+import { DownloadTokenRepository } from "@/app/infrastructure/repositories/implementations/download-token-repository";
 import {
   setupTestDatabase,
   cleanupDatabase,
@@ -24,33 +24,30 @@ import {
   createUnusedToken,
   createUsedToken,
   createExpiredToken,
-} from "../factories/download-token.factory";
+} from "../factories/download-token.factory-test";
 import {
   makeDownloadTokenIdSync,
   makeDocumentIdSync,
   makeUserIdSync,
-} from "../../src/app/domain/shared/uuid";
+  type UserId,
+  type DocumentId,
+} from "@/app/domain/shared/uuid";
 import {
   NotFoundError,
   ConflictError,
   DatabaseError,
   ValidationError,
-} from "../../src/app/domain/shared/errors";
+} from "@/app/domain/shared/errors";
 
 // Effect runner helpers
-const runEffect = async <T, E>(fx: Effect.Effect<T, E, any>): Promise<T> => {
-  return await Effect.runPromise(fx);
-};
-
-const runEffectSync = <T, E>(fx: Effect.Effect<T, E, any>): T => {
-  return Effect.runSync(fx);
-};
+const runEffect = <T, E>(fx: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(fx);
+const runEffectSync = <T, E>(fx: Effect.Effect<T, E>): T => Effect.runSync(fx);
 
 describe("DownloadTokenRepository Integration Tests", () => {
   let testDb: TestDatabase;
   let tokenRepository: DownloadTokenRepository;
-  let testUserId: string;
-  let testDocumentId: string;
+  let testUserId: UserId;
+  let testDocumentId: DocumentId;
 
   beforeAll(async () => {
     testDb = await setupTestDatabase();
@@ -62,20 +59,20 @@ describe("DownloadTokenRepository Integration Tests", () => {
   });
 
   beforeEach(async () => {
-    await cleanupDatabase(testDb.db);
+    await cleanupDatabase();
 
     // Prerequisites: a user and a document
     const user = await createTestUser(testDb.db, {
       email: "token-creator@example.com",
     });
-    testUserId = user.id;
+    testUserId = user.id as UserId;
 
     const bootstrapVersionId = crypto.randomUUID();
     const document = await createTestDocument(testDb.db, testUserId, {
       title: "Document for Download Tokens",
       currentVersionId: bootstrapVersionId,
     });
-    testDocumentId = document.id;
+    testDocumentId = document.id as DocumentId;
   });
 
   // ============================================================================
@@ -98,7 +95,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
       expect(saved.token).toBe(tokenEntity.token);
       expect(saved.documentId).toBe(testDocumentId);
       expect(saved.issuedTo).toBe(testUserId);
-      expect(O.isNone(saved.usedAt)).toBe(true);
+      expect(Option.isNone(saved.usedAt)).toBe(true);
     });
 
     it("saves multiple tokens for the same document", async () => {
@@ -118,7 +115,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
       await runEffect(tokenRepository.save(token2));
 
       const tokens = await runEffect(
-        tokenRepository.findByDocumentId(makeDocumentIdSync(testDocumentId))
+        tokenRepository.findByDocumentId(testDocumentId)
       );
 
       expect(tokens).toHaveLength(2);
@@ -142,9 +139,9 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
       await runEffect(tokenRepository.save(tokenEntity1));
 
-      const result = await runEffect(
-        tokenRepository.save(tokenEntity2).pipe(E.either, E.runPromise)
-      ).catch((err) => err);
+      const result = await tokenRepository.save(tokenEntity2)
+        .pipe(Effect.either, Effect.runPromise)
+        .catch((err) => err);
 
       expect(result).toBeInstanceOf(ConflictError);
     });
@@ -166,8 +163,8 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
       const foundOpt = await runEffect(tokenRepository.findById(entity.id));
 
-      expect(O.isSome(foundOpt)).toBe(true);
-      const found = O.getOrThrow(foundOpt);
+      expect(Option.isSome(foundOpt)).toBe(true);
+      const found = Option.getOrThrow(foundOpt);
       expect(found.id).toBe(entity.id);
       expect(found.token).toBe(entity.token);
     });
@@ -178,7 +175,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
         tokenRepository.findById(nonExistentId)
       );
 
-      expect(O.isNone(foundOpt)).toBe(true);
+      expect(Option.isNone(foundOpt)).toBe(true);
     });
   });
 
@@ -200,8 +197,8 @@ describe("DownloadTokenRepository Integration Tests", () => {
         tokenRepository.findByToken(entity.token)
       );
 
-      expect(O.isSome(foundOpt)).toBe(true);
-      const found = O.getOrThrow(foundOpt);
+      expect(Option.isSome(foundOpt)).toBe(true);
+      const found = Option.getOrThrow(foundOpt);
       expect(found.token).toBe(entity.token);
       expect(found.id).toBe(entity.id);
     });
@@ -211,7 +208,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
         tokenRepository.findByToken("invalid-token-string")
       );
 
-      expect(O.isNone(foundOpt)).toBe(true);
+      expect(Option.isNone(foundOpt)).toBe(true);
     });
   });
 
@@ -237,7 +234,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
       await runEffect(tokenRepository.save(token2));
 
       const tokens = await runEffect(
-        tokenRepository.findByDocumentId(makeDocumentIdSync(testDocumentId))
+        tokenRepository.findByDocumentId(testDocumentId)
       );
 
       expect(tokens).toHaveLength(2);
@@ -247,7 +244,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
     it("returns empty array when no tokens exist for document", async () => {
       const tokens = await runEffect(
-        tokenRepository.findByDocumentId(makeDocumentIdSync(testDocumentId))
+        tokenRepository.findByDocumentId(testDocumentId)
       );
 
       expect(tokens).toHaveLength(0);
@@ -319,13 +316,13 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
       const tokens = await runEffect(
         tokenRepository.findUnusedByDocumentId(
-          makeDocumentIdSync(testDocumentId)
+          testDocumentId
         )
       );
 
       expect(tokens).toHaveLength(1);
       expect(tokens[0].id).toBe(unused.id);
-      expect(O.isNone(tokens[0].usedAt)).toBe(true);
+      expect(Option.isNone(tokens[0].usedAt)).toBe(true);
     });
   });
 
@@ -382,7 +379,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
       expect(usedTokens).toHaveLength(1);
       expect(usedTokens[0].id).toBe(used.id);
-      expect(O.isSome(usedTokens[0].usedAt)).toBe(true);
+      expect(Option.isSome(usedTokens[0].usedAt)).toBe(true);
     });
   });
 
@@ -439,12 +436,12 @@ describe("DownloadTokenRepository Integration Tests", () => {
       );
 
       expect(result.id).toBe(entity.id);
-      expect(O.isSome(result.usedAt)).toBe(true);
+      expect(Option.isSome(result.usedAt)).toBe(true);
 
       // Verify in database
       const fetched = await runEffect(tokenRepository.findById(entity.id));
-      const found = O.getOrThrow(fetched);
-      expect(O.isSome(found.usedAt)).toBe(true);
+      const found = Option.getOrThrow(fetched);
+      expect(Option.isSome(found.usedAt)).toBe(true);
     });
 
     it("fails to update non-existent token", async () => {
@@ -454,6 +451,11 @@ describe("DownloadTokenRepository Integration Tests", () => {
       });
       const entity = runEffectSync(createTestDownloadTokenEntity(tokenData));
 
-      const result = await runEffect(
-        tokenRepository.update(entity).pipe(E.either, E.runPromise)
-      ).catch
+      const result = await tokenRepository.update(entity)
+        .pipe(Effect.either, Effect.runPromise)
+        .catch((err) => err);
+
+      expect(result).toBeInstanceOf(NotFoundError);
+    });
+  });
+});

@@ -7,7 +7,7 @@
 import { describe, it, expect } from "bun:test"
 import { runEffect, faker } from "../setup"
 import { Option as O } from "effect"
-import { makeDocumentIdSync, makeUserIdSync } from "../../src/app/domain/shared/uuid"
+import { makeDocumentIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
 import {
   generateTestDocumentVersion,
   createFirstVersion,
@@ -16,9 +16,9 @@ import {
   createLargeFileVersion,
   createTestDocumentVersionEntity,
   documentVersionArbitrary,
-} from "../factories/d-version.factory"
-import { DocumentVersionEntity } from "../../src/app/domain/d-version/entity"
-import { DocumentVersionValidationError } from "../../src/app/domain/d-version/errors"
+} from "../factories/d-version.factory-test"
+import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
+import { DocumentVersionValidationError } from "@/app/domain/d-version/errors"
 import * as fc from "fast-check"
 
 describe("DocumentVersionEntity", () => {

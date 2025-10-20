@@ -1,4 +1,4 @@
-import { RepositoryError } from "../shared/errors"
+import { RepositoryError } from "@/app/domain/shared/errors"
 
 /** Token not found */
 export class DownloadTokenNotFoundError extends RepositoryError {

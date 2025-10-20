@@ -1,5 +1,5 @@
 import { Effect, Schema as S } from "effect"
-import { BusinessRuleViolationError, ValidationError } from "../shared/errors"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
 
 /**
  * DocumentGuards — schema & domain utilities for document-specific fields

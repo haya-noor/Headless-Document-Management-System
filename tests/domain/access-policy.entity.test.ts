@@ -9,9 +9,9 @@ import { runEffect } from "../setup"
 import {
   createAccessPolicyEntity,
   generateAccessPolicy,
-} from "../factories/access-policy.factory"
-import { AccessPolicyEntity } from "../../src/app/domain/access-policy/entity"
-import { AccessPolicyValidationError } from "../../src/app/domain/access-policy/errors"
+} from "../factories/access-policy.factory-test"
+import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
+import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
 
 describe("AccessPolicyEntity", () => {
   it("should create a valid AccessPolicyEntity", async () => {

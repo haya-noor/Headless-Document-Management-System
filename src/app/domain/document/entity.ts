@@ -1,10 +1,10 @@
 import { Effect, Option, Schema as S, Clock } from "effect"
-import { BaseEntity, IEntity } from "../shared/base.entity"
+import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
 import { DocumentSchema } from "./schema"
 import { DocumentGuards } from "./guards"
 import { DocumentValidationError } from "./errors"
-import { DocumentSchemaId, DocumentSchemaVersionId, UserId } from "../shared/uuid"
-import { ValidationError, BusinessRuleViolationError } from "../shared/errors"
+import { DocumentSchemaId, DocumentSchemaVersionId, UserId } from "@/app/domain/shared/uuid"
+import { ValidationError, BusinessRuleViolationError } from "@/app/domain/shared/errors"
 
 /**
  * IDocumentSchema — Aggregate contract

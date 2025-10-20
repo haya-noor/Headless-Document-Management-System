@@ -1,4 +1,4 @@
-import { ValidationError, RepositoryError } from "../shared/errors"
+import { ValidationError, RepositoryError } from "@/app/domain/shared/errors"
 import { ParseResult } from "effect"
 
 /**

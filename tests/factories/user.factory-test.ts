@@ -14,12 +14,12 @@ import { Effect as E } from "effect"
 import * as fc from "fast-check"
 import { faker } from "../setup"
 
-import { UserEntity, type SerializedUser } from "../../src/app/domain/user/entity"
-import { UserValidationError } from "../../src/app/domain/user/errors"
+import { UserEntity, type SerializedUser } from "@/app/domain/user/entity"
+import { UserValidationError } from "@/app/domain/user/errors"
 
 // If you brand IDs elsewhere, keep this import; otherwise you can remove it.
 // It should return a UUID string compatible with the encoded schema.
-import { makeUserIdSync } from "../../src/app/domain/shared/uuid"
+import { makeUserIdSync } from "@/app/domain/shared/uuid"
 
 // -----------------------------
 // helpers

@@ -8,8 +8,8 @@ import { promises as fs } from 'fs';  //fs = file system
 import { createHash } from 'crypto';
 import * as path from 'path';
 const { join, dirname, extname } = path;
-import { serverConfig } from '../config/server.config';
-import { storageConfig } from '../config/storage.config';
+import { serverConfig } from '@/app/infrastructure/config/server.config';
+import { storageConfig } from '@/app/infrastructure/config/storage.config';
 import { FileUpload, PreSignedUrlResponse } from '@/app/application/interfaces/file.interface';
 import { IStorageService } from '@/app/application/interfaces/storage.interface';
 // Logger removed - no longer needed for domain-focused project

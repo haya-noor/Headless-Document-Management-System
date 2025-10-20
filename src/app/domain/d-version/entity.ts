@@ -1,11 +1,11 @@
 import { Effect, Option, ParseResult, Schema as S } from "effect"
-import { BaseEntity, IEntity } from "../shared/base.entity"
+import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
 import { DocumentVersionSchema } from "./schema"
 import { DocumentVersionValidationError } from "./errors"
-import { DocumentId, DocumentVersionId, UserId } from "../shared/uuid"
-import { Sha256 } from "../shared/checksum"
-import { ValidationError } from "../shared/errors"
-import { FileKey, FileSize } from "../shared/metadata"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
+import { Sha256 } from "@/app/domain/shared/checksum"
+import { ValidationError } from "@/app/domain/shared/errors"
+import { FileKey, FileSize } from "@/app/domain/shared/metadata"
 
 /**
  * IDocumentVersion — Aggregate contract

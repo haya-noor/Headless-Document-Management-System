@@ -6,8 +6,8 @@
  */
 
 import { Schema as S, Effect } from "effect"
-import { ValidationError } from "../shared/errors"
-import { EmailAddress } from "../shared/email"
+import { ValidationError } from "@/app/domain/shared/errors"
+import { EmailAddress } from "@/app/domain/shared/email"
 
 export interface UserProfileData {
   readonly firstName: string

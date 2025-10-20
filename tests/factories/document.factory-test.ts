@@ -8,10 +8,10 @@
 import { Effect as E, Option as O } from "effect"
 import { faker } from "../setup"
 import * as fc from "fast-check"
-import { DocumentSchemaEntity } from "../../src/app/domain/document/entity"
-import { DocumentValidationError } from "../../src/app/domain/document/errors"
-import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "../../src/app/domain/shared/uuid"
-import { type Document } from "../../src/app/domain/document/schema"
+import { DocumentSchemaEntity } from "@/app/domain/document/entity"
+import { DocumentValidationError } from "@/app/domain/document/errors"
+import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
+import { type Document } from "@/app/domain/document/schema"
 
 /**
  * Generators for Document fields
