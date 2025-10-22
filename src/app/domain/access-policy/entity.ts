@@ -54,15 +54,7 @@ export class AccessPolicyEntity extends BaseEntity<AccessPolicyId, AccessPolicyV
   static create(input: unknown): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
     return S.decodeUnknown(AccessPolicySchema)(input).pipe(
       Effect.map((data) => new AccessPolicyEntity(data)),
-      Effect.mapError((error) => 
-        AccessPolicyValidationError.forField(
-          "AccessPolicy",
-          input,
-          error && typeof error === 'object' && 'message' in error
-            ? (error as ParseResult.ParseError).message ?? "Validation failed"
-            : String(error)
-        )
-      )
+      Effect.mapError(() => AccessPolicyValidationError.forField("accessPolicy", input, "Validation failed"))
     ) as Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never>
   }
 

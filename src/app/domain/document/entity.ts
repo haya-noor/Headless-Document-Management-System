@@ -47,15 +47,7 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentId, DocumentValidat
   static create(input: unknown): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
     return S.decodeUnknown(DocumentSchema)(input).pipe(
       Effect.map((data) => new DocumentSchemaEntity(data)),
-      Effect.mapError((error) => 
-        DocumentValidationError.forField(
-          "DocumentSchema",
-          input,
-          error && typeof error === 'object' && 'message' in error
-            ? (error as ParseResult.ParseError).message ?? "Validation failed"
-            : String(error)
-        )
-      )
+      Effect.mapError(() => DocumentValidationError.forField("document", input, "Validation failed"))
     ) as Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never>
   }
 

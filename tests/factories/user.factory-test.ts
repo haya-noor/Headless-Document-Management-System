@@ -94,7 +94,7 @@ export const generateTestUser = (
     role: userGenerators.role(),
     isActive: userGenerators.isActive(),
     createdAt: userGenerators.createdAt(),
-    updatedAt: withUpdated ? userGenerators.updatedAt() : undefined,
+    updatedAt: userGenerators.updatedAt(), // Always include updatedAt (mandatory)
     // optionals (present or omitted)
     dateOfBirth: withDOB ? userGenerators.dateOfBirth() : undefined,
     phoneNumber: withPhone ? userGenerators.phoneNumber() : undefined,

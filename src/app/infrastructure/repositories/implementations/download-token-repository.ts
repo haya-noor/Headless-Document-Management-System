@@ -41,12 +41,10 @@ export class DownloadTokenDrizzleRepository {
   private toDbSerialized(token: DownloadTokenEntity): E.Effect<Record<string, any>, DownloadTokenValidationError, never> {
     return pipe(
       token.serialized(),
-      E.mapError((err) => DownloadTokenValidationError.forField(
+      E.mapError(() => DownloadTokenValidationError.forField(
         "downloadToken",
         token.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
+        "Failed to serialize entity"
       ))
     ) as E.Effect<Record<string, any>, DownloadTokenValidationError, never>
   }
@@ -55,9 +53,19 @@ export class DownloadTokenDrizzleRepository {
    * Deserialize database row to entity using Effect Schema
    *
    * Converts database row → domain entity using DownloadTokenEntity.create
+   * Maps DB columns directly to domain fields (no transformations needed)
    */
   private fromDbRow(row: DownloadTokenModel): E.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
-    return DownloadTokenEntity.create(row as any)
+    return DownloadTokenEntity.create({
+      id: row.id,
+      token: row.token,
+      documentId: row.documentId,
+      issuedTo: row.issuedTo,
+      expiresAt: row.expiresAt,
+      usedAt: row.usedAt ?? undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    })
   }
 
   // ========== Query Helpers ==========
@@ -270,10 +278,10 @@ export class DownloadTokenDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.update(downloadTokens).set(dbData as any).where(eq(downloadTokens.id, token.id)),
-          catch: (error) => DownloadTokenValidationError.forField(
+          catch: () => DownloadTokenValidationError.forField(
             "downloadToken",
             { tokenId: token.id },
-            error instanceof Error ? error.message : String(error)
+            "Update failed"
           )
         })
       ),

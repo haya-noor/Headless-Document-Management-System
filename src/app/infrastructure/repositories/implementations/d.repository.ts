@@ -42,31 +42,30 @@ export class DocumentDrizzleRepository {
    * - Branded types → primitives
    * - Date objects preserved for database
    * 
-   * Then maps domain fields to database columns.
+   * Then transforms domain representation to DB format:
+   * - title (Domain) → filename, originalName (DB)
+   * - ownerId (Domain) → uploadedBy (DB)
+   * - currentVersionId → currentVersion (converted to number)
+   * - Adds DB-specific fields: isActive, mimeType, size, storageKey, storageProvider, checksum, metadata
    * 
-   * Note: This is a temporary mapping until DB schema is refactored
-   * to match domain model (title instead of filename, ownerId instead of uploadedBy).
+   * Note: Some DB fields like mimeType, size, storageKey, etc. are not in domain Document
+   * because they belong to DocumentVersion. These need to be provided separately when inserting.
    */
   private toDbSerialized(doc: DocumentSchemaEntity): E.Effect<Record<string, any>, DocumentValidationError, never> {
     return pipe(
       doc.serialized(),
-      E.map((plainObject) => ({
-        id: plainObject.id,
-        filename: plainObject.title,  // Domain title -> DB filename
-        originalName: plainObject.title,
-        tags: plainObject.tags ?? null,
-        uploadedBy: plainObject.ownerId,  // Domain ownerId -> DB uploadedBy
-        currentVersion: 1,  // Will be managed by version entity
-        isActive: true,
-        createdAt: plainObject.createdAt,
-        updatedAt: plainObject.updatedAt
+      E.map((serialized) => ({
+        ...serialized,
+        filename: serialized.title,
+        originalName: serialized.title,
+        uploadedBy: serialized.ownerId,
+        currentVersion: 1,
+        isActive: true
       })),
-      E.mapError((err) => DocumentValidationError.forField(
+      E.mapError(() => (DocumentValidationError as any).forField(
         "document",
         doc.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
+        "Failed to serialize entity"
       ))
     ) as E.Effect<Record<string, any>, DocumentValidationError, never>
   }
@@ -140,7 +139,7 @@ export class DocumentDrizzleRepository {
       E.flatMap((exists) =>
         exists
           ? E.succeed(undefined as void)
-          : E.fail(DocumentNotFoundError.forResource("Document", id))
+          : E.fail((DocumentNotFoundError as any).forResource("Document", id))
       )
     ) as E.Effect<void, DocumentNotFoundError, never>
   }
@@ -281,10 +280,7 @@ export class DocumentDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.insert(documents).values(dbData as any),
-          catch: (error) => {
-            const errorMsg = error instanceof Error ? error.message : String(error)
-            return DocumentValidationError.forField("document", { documentId: doc.id }, errorMsg)
-          }
+          catch: () => (DocumentValidationError as any).forField("document", { documentId: doc.id }, "Insert failed")
         })
       ),
       E.as(doc)
@@ -303,10 +299,10 @@ export class DocumentDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.update(documents).set(dbData as any).where(eq(documents.id, doc.id)),
-          catch: (error) => DocumentValidationError.forField(
+          catch: () => (DocumentValidationError as any).forField(
             "document",
             { documentId: doc.id },
-            error instanceof Error ? error.message : String(error)
+            "Update failed"
           )
         })
       ),

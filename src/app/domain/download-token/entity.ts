@@ -45,15 +45,7 @@ export class DownloadTokenEntity extends BaseEntity<DownloadTokenId, DownloadTok
   static create(input: unknown): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
     return S.decodeUnknown(DownloadTokenSchema)(input).pipe(
       Effect.map((data) => new DownloadTokenEntity(data)),
-      Effect.mapError((error) => 
-        DownloadTokenValidationError.forField(
-          "DownloadToken",
-          input,
-          error && typeof error === 'object' && 'message' in error
-            ? (error as ParseResult.ParseError).message ?? "Validation failed"
-            : String(error)
-        )
-      )
+      Effect.mapError(() => DownloadTokenValidationError.forField("downloadToken", input, "Validation failed"))
     ) as Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never>
   }
 

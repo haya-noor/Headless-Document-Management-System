@@ -31,15 +31,7 @@ export class UserEntity extends BaseEntity<UserId, UserValidationError> {
   static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError, never> {
     return S.decodeUnknown(UserSchema)(input).pipe(
       Effect.map((data) => new UserEntity(data)),
-      Effect.mapError((error) => 
-        UserValidationError.forField(
-          "user",
-          input,
-          error && typeof error === 'object' && 'message' in error
-            ? (error as ParseResult.ParseError).message ?? "Validation failed"
-            : String(error)
-        )
-      )
+      Effect.mapError(() => UserValidationError.forField("user", input, "Validation failed"))
     ) as Effect.Effect<UserEntity, UserValidationError, never>
   }
 

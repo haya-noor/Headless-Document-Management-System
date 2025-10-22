@@ -4,6 +4,7 @@ import { AccessPolicyId, UserId, DocumentId } from "@/app/domain/refined/uuid"
 import { DatabaseError, ConflictError } from "@/app/domain/shared/base.errors"
 import { AccessPolicyValidationError, AccessPolicyNotFoundError } from "./errors"
 import { BaseRepository } from "@/app/domain/shared/base.repository"
+import { PaginatedResponse, PaginationParams } from "../shared"
 
 /**
  * AccessPolicy-specific filter for repository queries

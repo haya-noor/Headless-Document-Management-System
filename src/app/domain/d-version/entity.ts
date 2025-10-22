@@ -58,15 +58,7 @@ export class DocumentVersionEntity {
   ): Effect.Effect<DocumentVersionEntity, DocumentVersionValidationError, never> {
     return S.decodeUnknown(DocumentVersionSchema)(input).pipe(
       Effect.map((data) => new DocumentVersionEntity(data)),
-      Effect.mapError((error) => 
-        DocumentVersionValidationError.forField(
-          "DocumentVersion",
-          input,
-          error && typeof error === 'object' && 'message' in error
-            ? (error as ParseResult.ParseError).message ?? "Validation failed"
-            : String(error)
-        )
-      )
+      Effect.mapError(() => DocumentVersionValidationError.forField("documentVersion", input, "Validation failed"))
     ) as Effect.Effect<DocumentVersionEntity, DocumentVersionValidationError, never>
   }
 

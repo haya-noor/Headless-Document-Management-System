@@ -41,16 +41,21 @@ export class AccessPolicyDrizzleRepository {
    * - Option<T> → T | undefined
    * - Branded types → primitives
    * - Date objects preserved for database
+   * 
+   * Then transforms domain representation to DB format:
+   * - isActive: boolean (Domain) → 'Y'/'N' (DB)
    */
   private toDbSerialized(policy: AccessPolicyEntity): E.Effect<Record<string, any>, AccessPolicyValidationError, never> {
     return pipe(
       policy.serialized(),
-      E.mapError((err) => AccessPolicyValidationError.forField(
+      E.map((serialized) => ({
+        ...serialized,
+        isActive: serialized.isActive ? 'Y' : 'N'
+      })),
+      E.mapError(() => AccessPolicyValidationError.forField(
         "accessPolicy",
         policy.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
+        "Failed to serialize entity"
       ))
     ) as E.Effect<Record<string, any>, AccessPolicyValidationError, never>
   }
@@ -59,9 +64,24 @@ export class AccessPolicyDrizzleRepository {
    * Deserialize database row to entity using Effect Schema
    *
    * Converts database row → domain entity using AccessPolicyEntity.create
+   * Transforms DB representation to domain model:
+   * - isActive: 'Y'/'N' (DB) → boolean (Domain)
    */
   private fromDbRow(row: AccessPolicyModel): E.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
-    return AccessPolicyEntity.create(row as any)
+    return AccessPolicyEntity.create({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      subjectType: row.subjectType,
+      subjectId: row.subjectId,
+      resourceType: row.resourceType,
+      resourceId: row.resourceId ?? undefined,
+      actions: row.actions,
+      isActive: row.isActive === 'Y',
+      priority: row.priority,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    })
   }
 
   // ========== Query Helpers ==========
@@ -249,10 +269,7 @@ export class AccessPolicyDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.insert(accessPolicies).values(dbData as any),
-          catch: (error) => {
-            const errorMsg = error instanceof Error ? error.message : String(error)
-            return AccessPolicyValidationError.forField("accessPolicy", { policyId: policy.id }, errorMsg)
-          }
+          catch: () => AccessPolicyValidationError.forField("accessPolicy", { policyId: policy.id }, "Insert failed")
         })
       ),
       E.as(policy)
@@ -271,10 +288,10 @@ export class AccessPolicyDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.update(accessPolicies).set(dbData as any).where(eq(accessPolicies.id, policy.id)),
-          catch: (error) => AccessPolicyValidationError.forField(
+          catch: () => AccessPolicyValidationError.forField(
             "accessPolicy",
             { policyId: policy.id },
-            error instanceof Error ? error.message : String(error)
+            "Update failed"
           )
         })
       ),

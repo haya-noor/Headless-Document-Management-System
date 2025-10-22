@@ -43,12 +43,10 @@ export class DocumentVersionDrizzleRepository {
   private toDbSerialized(version: DocumentVersionEntity): E.Effect<Record<string, any>, DocumentVersionValidationError, never> {
     return pipe(
       version.serialized(),
-      E.mapError((err) => DocumentVersionValidationError.forField(
+      E.mapError(() => DocumentVersionValidationError.forField(
         "documentVersion",
         version.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
+        "Failed to serialize entity"
       ))
     ) as E.Effect<Record<string, any>, DocumentVersionValidationError, never>
   }
@@ -57,9 +55,24 @@ export class DocumentVersionDrizzleRepository {
    * Deserialize database row to entity using Effect Schema
    *
    * Converts database row → domain entity using DocumentVersionEntity.create
+   * Maps DB columns directly to domain fields (no transformations needed)
    */
   private fromDbRow(row: DocumentVersionModel): E.Effect<DocumentVersionEntity, DocumentVersionValidationError, never> {
-    return DocumentVersionEntity.create(row as any)
+    return DocumentVersionEntity.create({
+      id: row.id,
+      documentId: row.documentId,
+      version: row.version,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      size: row.size,
+      storageKey: row.storageKey,
+      storageProvider: row.storageProvider,
+      checksum: row.checksum ?? undefined,
+      tags: row.tags ?? undefined,
+      metadata: row.metadata ?? undefined,
+      uploadedBy: row.uploadedBy,
+      createdAt: row.createdAt
+    })
   }
 
   // ========== Query Helpers ==========
