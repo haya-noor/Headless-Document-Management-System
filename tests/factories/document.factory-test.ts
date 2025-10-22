@@ -10,8 +10,13 @@ import { faker } from "../setup"
 import * as fc from "fast-check"
 import { DocumentSchemaEntity } from "@/app/domain/document/entity"
 import { DocumentValidationError } from "@/app/domain/document/errors"
-import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
+import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "@/app/domain/refined/uuid"
 import { type Document } from "@/app/domain/document/schema"
+
+/**
+ * Helpers
+ */
+const iso = (d: Date) => d.toISOString()
 
 /**
  * Generators for Document fields
@@ -23,8 +28,8 @@ const documentGenerators = {
   description: () => faker.lorem.sentences({ min: 1, max: 3 }),
   tags: () => faker.helpers.arrayElements(["finance", "hr", "legal", "engineering", "marketing", "sales"], 2),
   currentVersionId: () => makeDocumentVersionIdSync(faker.string.uuid()),
-  createdAt: () => faker.date.past({ years: 1 }),
-  updatedAt: () => faker.date.recent(),
+  createdAt: () => iso(faker.date.past({ years: 1 })),
+  updatedAt: () => iso(faker.date.recent()),
 }
 
 /**
@@ -33,8 +38,8 @@ const documentGenerators = {
 export const generateTestDocument = (overrides: Partial<Document> = {}): Document => {
   const withDescription = faker.datatype.boolean()
   const withTags = faker.datatype.boolean()
-  const withUpdatedAt = faker.datatype.boolean()
 
+  const createdAt = documentGenerators.createdAt()
   const base: Document = {
     id: documentGenerators.id(),
     ownerId: documentGenerators.ownerId(),
@@ -42,8 +47,8 @@ export const generateTestDocument = (overrides: Partial<Document> = {}): Documen
     description: withDescription ? documentGenerators.description() : null,
     tags: withTags ? documentGenerators.tags() : null,
     currentVersionId: documentGenerators.currentVersionId(),
-    createdAt: documentGenerators.createdAt(),
-    updatedAt: withUpdatedAt ? documentGenerators.updatedAt() : null,
+    createdAt,
+    updatedAt: createdAt, // updatedAt is mandatory now, defaults to createdAt
   }
 
   return { ...base, ...overrides }
@@ -66,11 +71,13 @@ export const createCompleteDocument = (overrides: Partial<Document> = {}): Docum
  * Scenario: Minimal document (only required fields)
  */
 export const createMinimalDocument = (overrides: Partial<Document> = {}): Document => {
+  const createdAt = documentGenerators.createdAt()
   return {
     ...generateTestDocument(),
     description: null,
     tags: null,
-    updatedAt: null,
+    createdAt,
+    updatedAt: createdAt, // updatedAt is mandatory, defaults to createdAt
     ...overrides,
   }
 }

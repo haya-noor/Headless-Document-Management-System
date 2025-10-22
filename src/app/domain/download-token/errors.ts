@@ -1,30 +1,46 @@
-import { RepositoryError } from "@/app/domain/shared/errors"
+import { NotFoundError, ValidationError, ConflictError } from "@/app/domain/shared/base.errors"
+import { ParseResult } from "effect"
 
 /** Token not found */
-export class DownloadTokenNotFoundError extends RepositoryError {
-  readonly _tag = "DownloadTokenNotFoundError"
-  constructor(
-    public readonly field: string,
-    public readonly value: unknown,
-    details?: string
-  ) {
-    super(`Download token not found for ${field}: ${value}${details ? ` - ${details}` : ""}`, "DOWNLOAD_TOKEN_NOT_FOUND")
+export class DownloadTokenNotFoundError extends NotFoundError {
+  readonly tag = "DownloadTokenNotFoundError" as const
+  
+  static forResource(resource: string, id: string) {
+    return new DownloadTokenNotFoundError({ 
+      resource, 
+      id, 
+      message: `Download token with id '${id}' not found` 
+    })
   }
 }
 
 /** Token validation failure */
-export class DownloadTokenValidationError extends RepositoryError {
-  readonly _tag = "DownloadTokenValidationError"
-  constructor(message: string, public readonly field?: string, public readonly value?: unknown) {
-    super(message, "DOWNLOAD_TOKEN_VALIDATION_ERROR")
+export class DownloadTokenValidationError extends ValidationError {
+  readonly tag = "DownloadTokenValidationError" as const
+
+  static forField(field: string, value: unknown, details?: string) {
+    return new DownloadTokenValidationError({
+      field,
+      value,
+      message: `Download token validation failed for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`
+    })
+  }
+
+  static fromParseError(input: unknown, error: ParseResult.ParseError, field = "DownloadToken") {
+    return DownloadTokenValidationError.forField(field, input, error.message)
   }
 }
 
 /** Token already used */
-export class DownloadTokenAlreadyUsedError extends RepositoryError {
-  readonly _tag = "DownloadTokenAlreadyUsedError"
-  constructor(public readonly field: string, public readonly value: unknown, details?: string) {
-    super(`Download token already used for ${field}: ${value}${details ? ` - ${details}` : ""}`, "DOWNLOAD_TOKEN_ALREADY_USED")
+export class DownloadTokenAlreadyUsedError extends ConflictError {
+  readonly tag = "DownloadTokenAlreadyUsedError" as const
+  
+  static forField(field: string, value: unknown) {
+    return new DownloadTokenAlreadyUsedError({
+      message: `Download token already used for ${field}: ${String(value)}`,
+      field,
+      details: { value }
+    })
   }
 }
 

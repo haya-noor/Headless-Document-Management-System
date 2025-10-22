@@ -22,7 +22,7 @@ import {
 
 import { Effect, Option } from "effect"
 
-import type { UserId, DocumentId } from "@/app/domain/shared/uuid"
+import type { UserId, DocumentId } from "@/app/domain/refined/uuid"
 import { createTestDocumentEntity } from "../factories/document.factory-test"
 
 // Regex pattern to validate UUID v4 format

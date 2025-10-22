@@ -20,7 +20,6 @@ npm test tests/infra/storage.test.ts
 npm test tests/document.e2e.test.ts
 
 # Run performance tests
-npm test tests/performance.test.ts
 
 # Run all domain tests
 npm test tests/domain/

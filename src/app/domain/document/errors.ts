@@ -1,26 +1,31 @@
-import { ValidationError, BusinessRuleViolationError, RepositoryError } from "@/app/domain/shared/errors"
+import { ValidationError, BusinessRuleViolationError, NotFoundError } from "@/app/domain/shared/base.errors"
 import { ParseResult, Schema as S } from "effect"
 
 /**
  * Document domain errors — all reuse shared base classes
  */
-export class DocumentNotFoundError extends RepositoryError {
+export class DocumentNotFoundError extends NotFoundError {
   readonly tag = "DocumentNotFoundError" as const
-
-  constructor(field: string, value: unknown, details?: string) {
-    const valueStr = safeStringify(value)
-    const message = `Document not found for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
-    super(message, "DOCUMENT_NOT_FOUND")
+  
+  static forResource(resource: string, id: string) {
+    return new DocumentNotFoundError({ 
+      resource, 
+      id, 
+      message: `Document with id '${id}' not found` 
+    })
   }
 }
 
 export class DocumentValidationError extends ValidationError {
   readonly tag = "DocumentValidationError" as const
 
-  constructor(field: string, value: unknown, details?: string) {
+  static forField(field: string, value: unknown, details?: string) {
     const valueStr = safeStringify(value)
-    const message = `Invalid document field ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
-    super(message, field)
+    return new DocumentValidationError({
+      field,
+      value,
+      message: `Invalid document field ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
+    })
   }
 
   /** Declarative Schema error formatter 
@@ -28,7 +33,7 @@ export class DocumentValidationError extends ValidationError {
   */
   static fromParseError(input: unknown, error: ParseResult.ParseError, field = "Document") {
     const formatted = safeStringify(error)
-    return new DocumentValidationError(field, input, formatted)
+    return DocumentValidationError.forField(field, input, formatted)
   }
 }
 

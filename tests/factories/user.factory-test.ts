@@ -20,7 +20,7 @@ import { UserValidationError } from "@/app/domain/user/errors"
 
 // If you brand IDs elsewhere, keep this import; otherwise you can remove it.
 // It should return a UUID string compatible with the encoded schema.
-import { makeUserIdSync } from "@/app/domain/shared/uuid"
+import { makeUserIdSync } from "@/app/domain/refined/uuid"
 
 // -----------------------------
 // helpers

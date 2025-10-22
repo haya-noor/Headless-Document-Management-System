@@ -1,6 +1,6 @@
 import { Schema as S, Effect } from "effect"
-import { ValidationError } from "@/app/domain/shared/errors"
-import { FileSize, AllowedMimeType, ValidMimeType, makeFileSizeSync } from "@/app/domain/shared/metadata"
+import { ValidationError } from "@/app/domain/shared/base.errors"
+import { FileSize, AllowedMimeType, ValidMimeType, makeFileSizeSync } from "@/app/domain/refined/metadata"
 
 /** Schema for file upload validation */
 export const FileUploadSchema = S.Struct({

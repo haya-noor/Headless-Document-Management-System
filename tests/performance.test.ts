@@ -22,8 +22,8 @@ import { DocumentDrizzleRepository } from "@/app/infrastructure/repositories/imp
 import { createTestDocumentVersionEntity } from "./factories/d-version.factory-test"
 import { createTestDocumentEntity } from "./factories/document.factory-test"
 import { Effect, Option } from "effect"
-import type { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
-import type { Sha256 } from "@/app/domain/shared/checksum"
+import type { DocumentId, DocumentVersionId, UserId } from "@/app/domain/refined/uuid"
+import type { Sha256 } from "@/app/domain/refined/checksum"
 
 const runEffect = <T, E>(effect: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(effect)
 

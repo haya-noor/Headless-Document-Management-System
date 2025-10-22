@@ -21,7 +21,7 @@ import {
   createRolePolicy,
 } from "../factories/access-policy.factory-test"
 import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
-import { DatabaseError, NotFoundError } from "@/app/domain/shared/errors"
+import { DatabaseError, NotFoundError } from "@/app/domain/shared/base.errors"
 
 /**
  * Test Runtime Helpers
@@ -45,7 +45,7 @@ const TestRuntime = {
     ),
 }
 
-import type { UserId, DocumentId } from "@/app/domain/shared/uuid"
+import type { UserId, DocumentId } from "@/app/domain/refined/uuid"
 
 /**
  * Test State (immutable, reset each test)

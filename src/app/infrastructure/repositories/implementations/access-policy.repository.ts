@@ -1,433 +1,306 @@
-/**
- * AccessPolicy Repository - Declarative Implementation with Schema Codec
- * 
- * Uses Effect Schema codec for bidirectional encode/decode validation.
- * All operations composed declaratively via Effect combinators.
- * No imperative control flow - Option.match for all conditionals.
- */
+import { Effect as E, Option as O, pipe } from "effect"
+import { eq, and, desc, asc, count } from "drizzle-orm"
 
-import { Effect, Option, pipe, Schema as S } from "effect";
-import { eq, and } from "drizzle-orm";
+import { databaseService } from "@/app/infrastructure/services/drizzle-service"
+import { accessPolicies } from "@/app/infrastructure/database/models"
+import type { InferSelectModel } from "drizzle-orm"
 
-import { databaseService } from "@/app/infrastructure/services/drizzle-service";
-import { accessPolicies } from "@/app/infrastructure/database/models";
-import type { InferSelectModel } from "drizzle-orm";
+type AccessPolicyModel = InferSelectModel<typeof accessPolicies>
 
-import { AccessPolicyEntity } from "@/app/domain/access-policy/entity";
-import { AccessPolicyCodec, AccessPolicyRow } from "@/app/domain/access-policy/schema";
+import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
 import {
+  AccessPolicyNotFoundError,
   AccessPolicyValidationError,
-} from "@/app/domain/access-policy/errors";
+} from "@/app/domain/access-policy/errors"
+import { AccessPolicyFilter } from "@/app/domain/access-policy/repository"
 import {
   DatabaseError,
-  NotFoundError,
-  ConflictError,
-  ValidationError,
-} from "@/app/domain/shared/errors";
-import { AccessPolicyId, DocumentId, UserId } from "@/app/domain/shared/uuid";
-
-type AccessPolicyModel = InferSelectModel<typeof accessPolicies>;
-
-/**
- * Pure error factory - declarative error construction
- * Single source of truth for error messages and formatting
- */
-const Errors = {
-  database: (operation: string, cause?: unknown) =>
-    new DatabaseError({
-      message: `${operation} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-      cause,
-    }),
-
-  notFound: (id: string, resource = "AccessPolicy") =>
-    new NotFoundError({
-      message: `${resource} not found`,
-      resource,
-      id,
-    }),
-
-  conflict: (message: string, field: string) =>
-    new ConflictError(message, field),
-
-  validation: (message: string, context: string) =>
-    new ValidationError(message, context),
-};
+} from "@/app/domain/shared/base.errors"
+import {
+  calculateOffset,
+  buildPaginatedResponse,
+  PaginationParams,
+  PaginatedResponse,
+} from "@/app/domain/shared/pagination"
 
 /**
- * AccessPolicy Repository Implementation
+ * Drizzle-based AccessPolicy Repository Implementation
+ *
+ * Uses Effect patterns for composable, type-safe database operations.
+ * Follows the reference architecture with clean helper methods.
  */
-export class AccessPolicyRepository {
+export class AccessPolicyDrizzleRepository {
   constructor(private readonly db = databaseService.getDatabase()) {}
 
-  // ---------------------------------------------------------------------------
-  // Private Helpers - Schema-based Encoding/Decoding
-  // ---------------------------------------------------------------------------
+  // ========== Serialization Helpers ==========
 
   /**
-   * Encodes AccessPolicyEntity to database row using Effect Schema Codec
-   * Uses the Codec's encode transformation directly
+   * Serialize entity to database format using Effect Schema
+   *
+   * Uses entity's serialized() method which automatically handles:
+   * - Option<T> → T | undefined
+   * - Branded types → primitives
+   * - Date objects preserved for database
    */
-  private encodePolicy(
-    policy: AccessPolicyEntity
-  ): Effect.Effect<AccessPolicyRow, ValidationError> {
-    // Extract domain data
-    const domainData = {
-      id: policy.id,
-      name: policy.name,
-      description: policy.description,
-      subjectType: policy.subjectType,
-      subjectId: policy.subjectId,
-      resourceType: policy.resourceType,
-      resourceId: Option.getOrUndefined(policy.resourceId),
-      actions: policy.actions,
-      isActive: policy.active,
-      priority: policy.priority,
-      createdAt: policy.createdAt,
-      updatedAt: Option.getOrUndefined(policy.updatedAt),
-    };
-
-    // Use Codec's encode to transform Domain -> DB Row
+  private toDbSerialized(policy: AccessPolicyEntity): E.Effect<Record<string, any>, AccessPolicyValidationError, never> {
     return pipe(
-      S.encode(AccessPolicyCodec)(domainData),
-      Effect.mapError((err) =>
-        Errors.validation(
-          `Failed to encode policy: ${err.message}`,
-          "AccessPolicy"
-        )
+      policy.serialized(),
+      E.mapError((err) => AccessPolicyValidationError.forField(
+        "accessPolicy",
+        policy.id,
+        err && typeof err === 'object' && 'message' in err
+          ? String(err.message)
+          : "Failed to serialize entity to database row"
+      ))
+    ) as E.Effect<Record<string, any>, AccessPolicyValidationError, never>
+  }
+
+  /**
+   * Deserialize database row to entity using Effect Schema
+   *
+   * Converts database row → domain entity using AccessPolicyEntity.create
+   */
+  private fromDbRow(row: AccessPolicyModel): E.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return AccessPolicyEntity.create(row as any)
+  }
+
+  // ========== Query Helpers ==========
+
+  /**
+   * Execute a database query with error handling
+   */
+  private executeQuery<T>(query: () => Promise<T>): E.Effect<T, DatabaseError> {
+    return E.tryPromise({
+      try: query,
+      catch: (error) => DatabaseError.forOperation(
+        "query",
+        error instanceof Error ? error : new Error(String(error))
       )
-    ) as any;
+    })
   }
 
   /**
-   * Decodes database row to AccessPolicyEntity using Effect Schema Codec
-   * Uses the Codec's decode transformation directly
+   * Fetch a single access policy record
    */
-  private decodePolicy(
-    row: AccessPolicyModel
-  ): Effect.Effect<AccessPolicyEntity, ValidationError> {
-    // Use Codec's decode to transform DB Row -> Domain
-    return pipe(
-      S.decodeUnknown(AccessPolicyCodec)(row),
-      Effect.mapError((err) =>
-        Errors.validation(
-          `Failed to decode policy: ${err.message}`,
-          "AccessPolicy"
-        )
-      ),
-      Effect.flatMap((decoded) => AccessPolicyEntity.create(decoded as any))
-    );
-  }
-
-  /**
-   * Fetch single row - composed declaratively
-   */
-  private fetchOne(
+  private fetchSingle(
     query: () => Promise<AccessPolicyModel[]>
-  ): Effect.Effect<Option.Option<AccessPolicyEntity>, DatabaseError | ValidationError> {
+  ): E.Effect<O.Option<AccessPolicyEntity>, DatabaseError | AccessPolicyValidationError, never> {
     return pipe(
-      Effect.tryPromise({
-        try: query,
-        catch: (err) => Errors.database("Query", err),
-      }),
-      Effect.map(Option.fromIterable),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (row) => pipe(this.decodePolicy(row), Effect.map(Option.some)),
-        })
-      )
-    );
-  }
-
-  /**
-   * Fetch multiple rows - composed declaratively
-   * Converts all errors to DatabaseError for consistent error handling
-   */
-  private fetchMany(
-    query: () => Promise<AccessPolicyModel[]>
-  ): Effect.Effect<AccessPolicyEntity[], DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: query,
-        catch: (err) => Errors.database("Query", err),
-      }),
-      Effect.flatMap((rows) =>
-        Effect.all(rows.map((row) => this.decodePolicy(row)))
-      ),
-      Effect.mapError((err) =>
-        err instanceof DatabaseError
-          ? err
-          : err instanceof ValidationError
-          ? Errors.database(`Decode error: ${err.message}`, err)
-          : Errors.database("Decode", err)
-      )
-    );
-  }
-
-  /**
-   * Write operation - detects conflicts declaratively
-   */
-  private executeWrite(
-    operation: () => Promise<any>
-  ): Effect.Effect<void, DatabaseError | ConflictError> {
-    return Effect.tryPromise({
-      try: operation,
-      catch: (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        return msg.includes("unique") || msg.includes("duplicate")
-          ? Errors.conflict(msg, "policy")
-          : Errors.database("Write", err);
-      },
-    }).pipe(Effect.as(void 0));
-  }
-
-  // ---------------------------------------------------------------------------
-  // Read Operations
-  // ---------------------------------------------------------------------------
-
-  findById(id: AccessPolicyId): Effect.Effect<Option.Option<AccessPolicyEntity>, DatabaseError> {
-    return this.fetchOne(() =>
-      this.db
-        .select()
-        .from(accessPolicies)
-        .where(eq(accessPolicies.id, id))
-        .limit(1)
-    ).pipe(
-      Effect.mapError((err) =>
-        err instanceof DatabaseError ? err : Errors.database(`Find ${id}`, err)
-      )
-    );
-  }
-
-  findByResourceId(
-    resourceId: DocumentId
-  ): Effect.Effect<AccessPolicyEntity[], DatabaseError> {
-    return this.fetchMany(() =>
-      this.db
-        .select()
-        .from(accessPolicies)
-        .where(eq(accessPolicies.resourceId, resourceId))
-    );
-  }
-
-  findBySubject(
-    subjectType: "user" | "role",
-    subjectId?: UserId,
-    roleName?: string
-  ): Effect.Effect<AccessPolicyEntity[], DatabaseError> {
-    return this.fetchMany(() => {
-      // Build conditions declaratively using spread operator
-      const baseCondition = eq(accessPolicies.subjectType, subjectType);
-      const additionalConditions = [
-        ...(subjectType === "user" && subjectId
-          ? [eq(accessPolicies.subjectId, subjectId)]
-          : []),
-        ...(subjectType === "role" && roleName
-          ? [eq(accessPolicies.name, roleName)]
-          : []),
-      ];
-
-      return this.db
-        .select()
-        .from(accessPolicies)
-        .where(
-          additionalConditions.length > 0
-            ? and(baseCondition, ...additionalConditions)
-            : baseCondition
-        );
-    });
-  }
-
-  findByUserAndResource(
-    userId: UserId,
-    resourceId: DocumentId
-  ): Effect.Effect<AccessPolicyEntity[], DatabaseError> {
-    return this.fetchMany(() =>
-      this.db
-        .select()
-        .from(accessPolicies)
-        .where(
-          and(
-            eq(accessPolicies.resourceId, resourceId),
-            eq(accessPolicies.subjectType, "user"),
-            eq(accessPolicies.subjectId, userId)
+      this.executeQuery(query),
+      E.map(O.fromIterable),
+      E.flatMap((option) =>
+        O.match(option, {
+          onNone: () => E.succeed(O.none()),
+          onSome: (row) => pipe(
+            this.fromDbRow(row),
+            E.map(O.some)
           )
-        )
-    );
-  }
-
-  exists(id: AccessPolicyId): Effect.Effect<boolean, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: () =>
-          this.db
-            .select({ id: accessPolicies.id })
-            .from(accessPolicies)
-            .where(eq(accessPolicies.id, id))
-            .limit(1),
-        catch: (err) => Errors.database("Check exists", err),
-      }),
-      Effect.map((rows) => rows.length > 0)
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Write Operations
-  // ---------------------------------------------------------------------------
-
-  save(
-    policy: AccessPolicyEntity
-  ): Effect.Effect<AccessPolicyEntity, DatabaseError | ConflictError | ValidationError> {
-    return pipe(
-      this.findById(policy.id),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => this.insert(policy),
-          onSome: () => this.update(policy) as Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError>,
         })
-      ),
-      // Convert NotFoundError to DatabaseError for consistent error handling
-      Effect.mapError((err) =>
-        err instanceof NotFoundError
-          ? Errors.database(`Policy ${policy.id} not found during update`, err)
-          : err
       )
-    );
+    ) as E.Effect<O.Option<AccessPolicyEntity>, DatabaseError | AccessPolicyValidationError, never>
   }
 
-  private insert(
-    policy: AccessPolicyEntity
-  ): Effect.Effect<AccessPolicyEntity, DatabaseError | ConflictError | ValidationError> {
-    return pipe(
-      this.encodePolicy(policy),
-      Effect.flatMap((row) =>
-        this.executeWrite(() => this.db.insert(accessPolicies).values(row as any))
-      ),
-      Effect.as(policy)
-    );
-  }
-
-  private update(
-    policy: AccessPolicyEntity
-  ): Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError | NotFoundError> {
-    return pipe(
-      this.encodePolicy(policy),
-      Effect.flatMap((row): Effect.Effect<AccessPolicyEntity, DatabaseError | ValidationError | NotFoundError> =>
-        pipe(
-          this.exists(policy.id),
-          Effect.flatMap((exists): Effect.Effect<AccessPolicyEntity, DatabaseError | NotFoundError> => {
-            if (!exists) {
-              return Effect.fail(Errors.notFound(policy.id)) as Effect.Effect<
-                AccessPolicyEntity,
-                NotFoundError
-              >;
-            }
-
-            return pipe(
-              Effect.tryPromise({
-                try: () =>
-                  this.db
-                    .update(accessPolicies)
-                    .set(row as any)
-                    .where(eq(accessPolicies.id, policy.id)),
-                catch: (err) => Errors.database(`Update ${policy.id}`, err),
-              }),
-              Effect.as(policy)
-            ) as Effect.Effect<AccessPolicyEntity, DatabaseError>;
-          })
-        )
-      )
-    );
-  }
-
-  delete(id: AccessPolicyId): Effect.Effect<boolean, DatabaseError | NotFoundError> {
+  /**
+   * Ensure policy exists, fail with AccessPolicyNotFoundError if not
+   */
+  private ensureExists(id: string): E.Effect<void, AccessPolicyNotFoundError, never> {
     return pipe(
       this.exists(id),
-      Effect.flatMap((exists) =>
+      E.flatMap((exists) =>
         exists
-          ? (pipe(
-              Effect.tryPromise({
-                try: () => this.db.delete(accessPolicies).where(eq(accessPolicies.id, id)),
-                catch: (err) => Errors.database(`Delete ${id}`, err),
-              }),
-              Effect.as(true)
-            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>)
-          : (Effect.fail(
-              Errors.notFound(id)
-            ) as Effect.Effect<boolean, DatabaseError | NotFoundError>)
+          ? E.succeed(undefined as void)
+          : E.fail(AccessPolicyNotFoundError.forResource("AccessPolicy", id))
       )
-    );
+    ) as E.Effect<void, AccessPolicyNotFoundError, never>
   }
 
-  deleteByResourceId(
-    resourceId: DocumentId
-  ): Effect.Effect<number, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: () =>
-          this.db
-            .select({ id: accessPolicies.id })
-            .from(accessPolicies)
-            .where(eq(accessPolicies.resourceId, resourceId)),
-        catch: (err) => Errors.database("Count by resource", err),
-      }),
-      Effect.flatMap((rows) => {
-        const count = rows.length;
-        if (count === 0) {
-          return Effect.succeed(0);
-        }
+  // ---------------------------------------------------------------------------
+  // Repository Interface
+  // ---------------------------------------------------------------------------
 
-        return pipe(
-          Effect.tryPromise({
-            try: () =>
-              this.db
-                .delete(accessPolicies)
-                .where(eq(accessPolicies.resourceId, resourceId)),
-            catch: (err) => Errors.database("Delete by resource", err),
-          }),
-          Effect.as(count)
-        );
-      })
-    );
+  /**
+   * Find access policy by ID
+   */
+  findById(
+    id: string
+  ): E.Effect<O.Option<AccessPolicyEntity>, DatabaseError | AccessPolicyValidationError> {
+    return this.fetchSingle(() =>
+      this.db.select().from(accessPolicies).where(eq(accessPolicies.id, id)).limit(1)
+    )
   }
 
-  deleteByUserId(userId: UserId): Effect.Effect<number, DatabaseError> {
+  /**
+   * Check if policy exists by ID
+   */
+  exists(id: string): E.Effect<boolean, DatabaseError> {
     return pipe(
-      Effect.tryPromise({
-        try: () =>
-          this.db
-            .select({ id: accessPolicies.id })
-            .from(accessPolicies)
-            .where(
-              and(
-                eq(accessPolicies.subjectType, "user"),
-                eq(accessPolicies.subjectId, userId)
-              )
+      this.executeQuery(() =>
+        this.db.select({ id: accessPolicies.id }).from(accessPolicies).where(eq(accessPolicies.id, id)).limit(1)
+      ),
+      E.map((result) => result.length > 0)
+    )
+  }
+
+  /**
+   * Count policies based on filter
+   */
+  count(filter?: AccessPolicyFilter): E.Effect<number, DatabaseError> {
+    const conditions = [
+      ...(filter?.subjectType ? [eq(accessPolicies.subjectType, filter.subjectType)] : []),
+      ...(filter?.subjectId ? [eq(accessPolicies.subjectId, filter.subjectId)] : []),
+      ...(filter?.resourceType ? [eq(accessPolicies.resourceType, filter.resourceType)] : []),
+      ...(filter?.resourceId ? [eq(accessPolicies.resourceId, filter.resourceId)] : []),
+      ...(filter?.isActive !== undefined ? [eq(accessPolicies.isActive, filter.isActive ? 'Y' : 'N')] : []),
+    ]
+
+    return pipe(
+      this.executeQuery(() =>
+        this.db
+          .select({ count: count() })
+          .from(accessPolicies)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+      ),
+      E.map((result) => Number(result[0]?.count ?? 0))
+    )
+  }
+
+  /**
+   * Find multiple policies
+   */
+  findMany(
+    filter?: AccessPolicyFilter
+  ): E.Effect<AccessPolicyEntity[], DatabaseError | AccessPolicyValidationError> {
+    const conditions = [
+      ...(filter?.subjectType ? [eq(accessPolicies.subjectType, filter.subjectType)] : []),
+      ...(filter?.subjectId ? [eq(accessPolicies.subjectId, filter.subjectId)] : []),
+      ...(filter?.resourceType ? [eq(accessPolicies.resourceType, filter.resourceType)] : []),
+      ...(filter?.resourceId ? [eq(accessPolicies.resourceId, filter.resourceId)] : []),
+      ...(filter?.isActive !== undefined ? [eq(accessPolicies.isActive, filter.isActive ? 'Y' : 'N')] : []),
+    ]
+
+    return pipe(
+      this.executeQuery(() =>
+        this.db
+          .select()
+          .from(accessPolicies)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+      ),
+      E.flatMap((rows) =>
+        E.all(rows.map((row) => this.fromDbRow(row)))
+      )
+    ) as E.Effect<AccessPolicyEntity[], DatabaseError | AccessPolicyValidationError, never>
+  }
+
+  /**
+   * Find policies with pagination
+   */
+  findManyPaginated(
+    { page, limit, sortBy = "createdAt", sortOrder = "desc" }: PaginationParams,
+    filter?: AccessPolicyFilter
+  ): E.Effect<PaginatedResponse<AccessPolicyEntity>, DatabaseError | AccessPolicyValidationError> {
+    const offset = calculateOffset(page, limit)
+    const orderBy = sortOrder === "asc" ? asc : desc
+
+    const sortColumns: Record<string, any> = {
+      name: accessPolicies.name,
+      priority: accessPolicies.priority,
+      createdAt: accessPolicies.createdAt,
+    }
+    const sortColumn = sortColumns[sortBy] ?? accessPolicies.createdAt
+
+    const conditions = [
+      ...(filter?.subjectType ? [eq(accessPolicies.subjectType, filter.subjectType)] : []),
+      ...(filter?.subjectId ? [eq(accessPolicies.subjectId, filter.subjectId)] : []),
+      ...(filter?.resourceType ? [eq(accessPolicies.resourceType, filter.resourceType)] : []),
+      ...(filter?.resourceId ? [eq(accessPolicies.resourceId, filter.resourceId)] : []),
+      ...(filter?.isActive !== undefined ? [eq(accessPolicies.isActive, filter.isActive ? 'Y' : 'N')] : []),
+    ]
+
+    return pipe(
+      this.executeQuery(() =>
+        this.db
+          .select()
+          .from(accessPolicies)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(orderBy(sortColumn))
+          .limit(limit)
+          .offset(offset)
+      ),
+      E.flatMap((rows) =>
+        E.all(rows.map((row) => this.fromDbRow(row)))
+      ),
+      E.flatMap((policiesList) =>
+        pipe(
+          this.count(filter),
+          E.map((total) => buildPaginatedResponse(policiesList, page, limit, total))
+        )
+      )
+    ) as E.Effect<PaginatedResponse<AccessPolicyEntity>, DatabaseError | AccessPolicyValidationError, never>
+  }
+
+  /**
+   * Insert a new policy
+   */
+  private insert(
+    policy: AccessPolicyEntity
+  ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return pipe(
+      this.toDbSerialized(policy),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.insert(accessPolicies).values(dbData as any),
+          catch: (error) => {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return AccessPolicyValidationError.forField("accessPolicy", { policyId: policy.id }, errorMsg)
+          }
+        })
+      ),
+      E.as(policy)
+    ) as E.Effect<AccessPolicyEntity, AccessPolicyValidationError, never>
+  }
+
+  /**
+   * Update an existing policy
+   */
+  private update(
+    policy: AccessPolicyEntity
+  ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError, never> {
+    return pipe(
+      this.ensureExists(policy.id),
+      E.flatMap(() => this.toDbSerialized(policy)),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.update(accessPolicies).set(dbData as any).where(eq(accessPolicies.id, policy.id)),
+          catch: (error) => AccessPolicyValidationError.forField(
+            "accessPolicy",
+            { policyId: policy.id },
+            error instanceof Error ? error.message : String(error)
+          )
+        })
+      ),
+      E.as(policy)
+    ) as E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError, never>
+  }
+
+  /**
+   * Delete policy by ID
+   */
+  delete(id: string): E.Effect<boolean, DatabaseError> {
+    return pipe(
+      this.exists(id),
+      E.flatMap((exists) =>
+        E.if(exists, {
+          onTrue: () =>
+            pipe(
+              E.tryPromise({
+                try: () => this.db.delete(accessPolicies).where(eq(accessPolicies.id, id)),
+                catch: (error) => DatabaseError.forOperation("delete", error)
+              }),
+              E.as(true)
             ),
-        catch: (err) => Errors.database("Count by user", err),
-      }),
-      Effect.flatMap((rows) => {
-        const count = rows.length;
-        if (count === 0) {
-          return Effect.succeed(0);
-        }
-
-        return pipe(
-          Effect.tryPromise({
-            try: () =>
-              this.db
-                .delete(accessPolicies)
-                .where(
-                  and(
-                    eq(accessPolicies.subjectType, "user"),
-                    eq(accessPolicies.subjectId, userId)
-                  )
-                ),
-            catch: (err) => Errors.database("Delete by user", err),
-          }),
-          Effect.as(count)
-        );
-      })
-    );
+          onFalse: () => E.succeed(false)
+        })
+      )
+    )
   }
 }

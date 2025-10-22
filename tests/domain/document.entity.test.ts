@@ -58,7 +58,7 @@ describe("DocumentSchemaEntity", () => {
 
   it("should serialize and recreate entity", async () => {
     const doc = await runEffect(createTestDocumentEntity())
-    const serialized = (doc as any).toSerialized()
+    const serialized = await runEffect(doc.serialized())
     const recreated = await runEffect(DocumentSchemaEntity.create(serialized))
     expect(recreated.id).toBe(doc.id)
     expect(recreated.title).toBe(doc.title)

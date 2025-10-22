@@ -8,9 +8,8 @@
 import { Effect as E } from "effect"
 import { faker } from "../setup"
 import * as fc from "fast-check"
-import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
+import { AccessPolicyEntity, type SerializedAccessPolicy } from "@/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
-import { type AccessPolicy, type AccessPolicySerialized } from "@/app/domain/access-policy/schema"
 import {
   AccessPolicyId,
   DocumentId,
@@ -18,7 +17,7 @@ import {
   makeAccessPolicyIdSync,
   makeUserIdSync,
   makeDocumentIdSync,
-} from "@/app/domain/shared/uuid"
+} from "@/app/domain/refined/uuid"
 
 /**
  * Reusable random generators for AccessPolicy test data
@@ -50,11 +49,11 @@ const accessPolicyGenerators = {
  * Generate a valid AccessPolicy (serialized form)
  */
 export const generateAccessPolicy = (
-  overrides: Partial<AccessPolicySerialized> = {}
-): AccessPolicySerialized => {
+  overrides: Partial<SerializedAccessPolicy> = {}
+): SerializedAccessPolicy => {
   const subjectType = overrides.subjectType ?? accessPolicyGenerators.subjectType()
 
-  const base: AccessPolicySerialized = {
+  const base: SerializedAccessPolicy = {
     id: accessPolicyGenerators.id(),
     name: faker.lorem.words({ min: 2, max: 5 }),
     description: faker.lorem.sentence(),
@@ -76,7 +75,7 @@ export const generateAccessPolicy = (
  * Create a valid AccessPolicyEntity (Effect-based)
  */
 export const createAccessPolicyEntity = (
-  overrides: Partial<AccessPolicySerialized> = {}
+  overrides: Partial<SerializedAccessPolicy> = {}
 ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError> =>
   AccessPolicyEntity.create(generateAccessPolicy(overrides)).pipe(
     E.mapError(
@@ -95,7 +94,7 @@ export const createAccessPolicyEntity = (
 export const createUserReadPolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicySerialized =>
+): SerializedAccessPolicy =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -106,7 +105,7 @@ export const createUserReadPolicy = (
 export const createUserWritePolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicySerialized =>
+): SerializedAccessPolicy =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -117,7 +116,7 @@ export const createUserWritePolicy = (
 export const createUserAdminPolicy = (
   userId: UserId,
   documentId: DocumentId
-): AccessPolicySerialized =>
+): SerializedAccessPolicy =>
   generateAccessPolicy({
     subjectType: "user",
     subjectId: userId,
@@ -128,7 +127,7 @@ export const createUserAdminPolicy = (
 export const createRolePolicy = (
   subjectId: UserId,
   documentId: DocumentId
-): AccessPolicySerialized =>
+): SerializedAccessPolicy =>
   generateAccessPolicy({
     subjectType: "role",
     subjectId,

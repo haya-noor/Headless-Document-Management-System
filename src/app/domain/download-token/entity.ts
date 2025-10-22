@@ -1,88 +1,74 @@
 import { Effect, Option, ParseResult, Schema as S, Clock } from "effect"
-import { DownloadTokenSchema, DownloadTokenType, SerializedDownloadToken } from "./schema"
-import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
+import { BaseEntity } from "@/app/domain/shared/base.entity"
+import { DownloadTokenSchema } from "./schema"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/base.errors"
 import { DownloadTokenAlreadyUsedError, DownloadTokenValidationError } from "./errors"
-import { DocumentId, UserId, DownloadTokenId } from "@/app/domain/shared/uuid"
+import { DocumentId, UserId, DownloadTokenId } from "@/app/domain/refined/uuid"
 import { isExpiredAt, msUntilExpiry } from "./value-object"
+import { serializeWith } from "@/app/domain/shared/schema.utils"
+
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+export type DownloadTokenType = S.Schema.Type<typeof DownloadTokenSchema>
+export type SerializedDownloadToken = S.Schema.Encoded<typeof DownloadTokenSchema>
 
 /**
- * Domain Aggregate: DownloadToken
+ * DownloadTokenEntity — Aggregate root for secure document access
+ * 
  * Represents a secure, time-limited link for accessing a document.
+ * Tokens can be used only once and have an expiration date.
  */
-export class DownloadTokenEntity {
+export class DownloadTokenEntity extends BaseEntity<DownloadTokenId, DownloadTokenValidationError> {
   readonly id!: DownloadTokenId
+  readonly createdAt!: Date
+  readonly updatedAt!: Date
   readonly token!: string
   readonly documentId!: DocumentId
   readonly issuedTo!: UserId
   readonly expiresAt!: Date
   readonly usedAt!: Option.Option<Date>
-  readonly createdAt!: Date
-  readonly updatedAt!: Option.Option<Date>
 
   private constructor(data: DownloadTokenType) {
-    Object.assign(this, {
-      ...data,
-      usedAt: data.usedAt ? Option.some(data.usedAt) : Option.none()
-    })
+    super()
+    this.id = data.id as DownloadTokenId
+    this.token = data.token
+    this.documentId = data.documentId as DocumentId
+    this.issuedTo = data.issuedTo as UserId
+    this.expiresAt = data.expiresAt
+    this.usedAt = Option.fromNullable(data.usedAt)
+    this.createdAt = data.createdAt
+    this.updatedAt = data.updatedAt
   }
 
-  static create(input: SerializedDownloadToken): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
+  static create(input: unknown): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
     return S.decodeUnknown(DownloadTokenSchema)(input).pipe(
-      Effect.map((parsed) => new DownloadTokenEntity(parsed)),
-      Effect.catchAll((err) => {
-        if (err._tag === "ParseError") {
-          return Effect.fail(new DownloadTokenValidationError(err.message || "Validation failed"))
-        }
-        if (err._tag === "RepositoryError") {
-          return Effect.fail(new DownloadTokenValidationError(err.message || "Validation failed"))
-        }
-        return Effect.fail(new DownloadTokenValidationError("Validation failed"))
-      })
-    )
+      Effect.map((data) => new DownloadTokenEntity(data)),
+      Effect.mapError((error) => 
+        DownloadTokenValidationError.forField(
+          "DownloadToken",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
+    ) as Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never>
   }
 
-  markAsUsed(): Effect.Effect<DownloadTokenEntity, DownloadTokenAlreadyUsedError | ValidationError | BusinessRuleViolationError, Clock.Clock> {
-    if (Option.isSome(this.usedAt)) return Effect.fail(new DownloadTokenAlreadyUsedError("token", this.id))
-    if (new Date() > this.expiresAt) return Effect.fail(new BusinessRuleViolationError("TOKEN_EXPIRED", "Cannot use expired token", { tokenId: this.id }))
 
-    const updated: SerializedDownloadToken = {
-      ...this,
-      id: this.id,
-      token: this.token,
-      documentId: this.documentId,
-      issuedTo: this.issuedTo,
-      expiresAt: this.expiresAt.toISOString(),
-      usedAt: new Date().toISOString(),
-      createdAt: this.createdAt.toISOString(),
-      updatedAt: this.updatedAt ? Option.getOrNull(this.updatedAt)?.toISOString() : undefined
-    }
-    return S.decodeUnknown(DownloadTokenSchema)(updated).pipe(
-      Effect.map((parsed) => new DownloadTokenEntity(parsed)),
-      Effect.catchAll((err) => {
-        if (err._tag === "ParseError") {
-          return Effect.fail(new ValidationError(err.message || "Validation failed"))
-        }
-        if (err._tag === "RepositoryError") {
-          return Effect.fail(new ValidationError(err.message || "Validation failed"))
-        }
-        return Effect.fail(new ValidationError("Validation failed"))
-      })
-    )
-  }
-
-  isUsed(): boolean {
-    return Option.isSome(this.usedAt)
-  }
-
-  isExpired(): Effect.Effect<boolean, never, Clock.Clock> {
-    return isExpiredAt(this.expiresAt)
-  }
-
-  millisecondsUntilExpiry(): Effect.Effect<number, never, Clock.Clock> {
-    return msUntilExpiry(this.expiresAt)
-  }
-
-  belongsToUser(userId: UserId): boolean {
-    return this.issuedTo === userId
+  /**
+   * Serialize entity using Effect Schema encoding
+   * 
+   * Automatically handles:
+   * - Option types → T | undefined
+   * - Branded types → primitives
+   * - Date objects → kept as Date for database operations
+   * 
+   * @returns Effect with serialized download token data
+   */
+  serialized(): Effect.Effect<SerializedDownloadToken, ParseResult.ParseError> {
+    return serializeWith(DownloadTokenSchema, this as unknown as DownloadTokenType)
   }
 }

@@ -1,53 +1,44 @@
 import { Effect, Option, ParseResult, Schema as S } from "effect"
-import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
 import { DocumentVersionSchema } from "./schema"
 import { DocumentVersionValidationError } from "./errors"
-import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
-import { Sha256 } from "@/app/domain/shared/checksum"
-import { ValidationError } from "@/app/domain/shared/errors"
-import { FileKey, FileSize } from "@/app/domain/shared/metadata"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/refined/uuid"
+import { Sha256 } from "@/app/domain/refined/checksum"
+import { FileKey, FileSize } from "@/app/domain/refined/metadata"
+import { serializeWith } from "@/app/domain/shared/schema.utils"
+
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+export type DocumentVersionType = S.Schema.Type<typeof DocumentVersionSchema>
+export type SerializedDocumentVersion = S.Schema.Encoded<typeof DocumentVersionSchema>
 
 /**
- * IDocumentVersion — Aggregate contract
+ * DocumentVersionEntity — Aggregate root for document version management
+ * 
+ * Represents an immutable version of a document with its content metadata.
+ * Each version tracks the file's storage location, size, checksum, and optional metadata.
+ * 
+ * Note: Versions are immutable and don't have updatedAt field.
  */
-export interface IDocumentVersion extends IEntity<DocumentVersionId> {
-  readonly documentId: DocumentId
-  readonly version: number
-  readonly filename: string
-  readonly mimeType: string
-  readonly size: FileSize
-  readonly storageKey: FileKey
-  readonly storageProvider: "local" 
-  readonly checksum: Option.Option<Sha256>
-  readonly tags: Option.Option<string[]>
-  readonly metadata: Option.Option<Record<string, unknown>>
-  readonly uploadedBy: UserId
-  readonly createdAt: Date
-}
+export class DocumentVersionEntity {
+  readonly id!: DocumentVersionId
+  readonly createdAt!: Date
+  readonly documentId!: DocumentId
+  readonly version!: number
+  readonly filename!: string
+  readonly mimeType!: string
+  readonly size!: FileSize
+  readonly storageKey!: FileKey
+  readonly storageProvider!: "local" 
+  readonly checksum!: Option.Option<Sha256>
+  readonly tags!: Option.Option<readonly string[]>
+  readonly metadata!: Option.Option<Record<string, unknown>>
+  readonly uploadedBy!: UserId
 
-/**
- * Domain entity for DocumentVersion — aggregate root
- */
-export class DocumentVersionEntity extends BaseEntity<DocumentVersionId> implements IDocumentVersion {
-  readonly id: DocumentVersionId
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
-  readonly documentId: DocumentId
-  readonly version: number
-  readonly filename: string
-  readonly mimeType: string
-  readonly size: FileSize
-  readonly storageKey: FileKey
-  readonly storageProvider: "local" 
-  readonly checksum: Option.Option<Sha256>
-  readonly tags: Option.Option<string[]>
-  readonly metadata: Option.Option<Record<string, unknown>>
-  readonly uploadedBy: UserId
-
-  private constructor(data: S.Schema.Type<typeof DocumentVersionSchema>) {
-    super()
-    this.id = data.id
-    this.documentId = data.documentId
+  private constructor(data: DocumentVersionType) {
+    this.id = data.id as DocumentVersionId
+    this.documentId = data.documentId as DocumentId
     this.version = data.version
     this.filename = data.filename
     this.mimeType = data.mimeType
@@ -55,11 +46,10 @@ export class DocumentVersionEntity extends BaseEntity<DocumentVersionId> impleme
     this.storageKey = data.storageKey as FileKey
     this.storageProvider = data.storageProvider as "local" 
     this.checksum = Option.fromNullable(data.checksum)
-    this.tags = Option.fromNullable(data.tags as string[])
+    this.tags = Option.fromNullable(data.tags)
     this.metadata = Option.fromNullable(data.metadata)
-    this.uploadedBy = data.uploadedBy
+    this.uploadedBy = data.uploadedBy as UserId
     this.createdAt = data.createdAt
-    this.updatedAt = Option.none()
   }
 
   /** Factory method for creating validated DocumentVersionEntity */
@@ -68,55 +58,31 @@ export class DocumentVersionEntity extends BaseEntity<DocumentVersionId> impleme
   ): Effect.Effect<DocumentVersionEntity, DocumentVersionValidationError, never> {
     return S.decodeUnknown(DocumentVersionSchema)(input).pipe(
       Effect.map((data) => new DocumentVersionEntity(data)),
-      Effect.mapError(
-        (error) => new DocumentVersionValidationError("DocumentVersion", input, (error as ParseResult.ParseError).message)
+      Effect.mapError((error) => 
+        DocumentVersionValidationError.forField(
+          "DocumentVersion",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
       )
-    )
+    ) as Effect.Effect<DocumentVersionEntity, DocumentVersionValidationError, never>
   }
 
-  /** Rule checks */
-  isLatestVersion(current: number): boolean {
-    return this.version === current
-  }
-
-  isNewerThan(other: number): boolean {
-    return this.version > other
-  }
-
-  isOlderThan(other: number): boolean {
-    return this.version < other
-  }
-
-  /** Convenience getters */
-  get checksumOrNull(): Sha256 | null {
-    return Option.getOrNull(this.checksum)
-  }
-
-  get tagsOrEmpty(): string[] {
-    return Option.getOrElse(this.tags, () => [])
-  }
-
-  get metadataOrEmpty(): Record<string, unknown> {
-    return Option.getOrElse(this.metadata, () => ({}))
-  }
-
-  get isImage(): boolean {
-    return this.mimeType.startsWith("image/")
-  }
-
-  get sizeInMB(): number {
-    return Math.round((this.size / 1024 / 1024) * 100) / 100
-  }
-
-  /** Required by BaseEntity */
-  isActive(): boolean {
-    return true // Document versions are always active
-  }
-
-  /** Domain invariant example */
-  ensureStorageProviderIsValid(): Effect.Effect<void, ValidationError, never> {
-    return this.storageProvider === "local" 
-      ? Effect.void 
-      : Effect.fail(new ValidationError("Invalid storage provider"))
+  /**
+   * Serialize entity using Effect Schema encoding
+   * 
+   * Automatically handles:
+   * - Option types → T | undefined
+   * - Branded types → primitives
+   * - Date objects → kept as Date for database operations
+   * 
+   * Note: No updatedAt since versions are immutable.
+   * 
+   * @returns Effect with serialized document version data
+   */
+  serialized(): Effect.Effect<SerializedDocumentVersion, ParseResult.ParseError> {
+    return serializeWith(DocumentVersionSchema, this as unknown as DocumentVersionType)
   }
 }

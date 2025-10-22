@@ -28,8 +28,8 @@ import {
   makeUserIdSync,
   type UserId,
   type DocumentId,
-} from "@/app/domain/shared/uuid";
-import { NotFoundError, ConflictError, DatabaseError, ValidationError } from "@/app/domain/shared/errors";
+} from "@/app/domain/refined/uuid";
+import { NotFoundError, ConflictError, DatabaseError, ValidationError } from "@/app/domain/shared/base.errors";
 
 /*
 runEffect: runs an Effect and returns a Promise for async/await testing

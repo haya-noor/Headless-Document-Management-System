@@ -10,10 +10,10 @@ import { faker } from "../setup"
 import * as fc from "fast-check"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionValidationError } from "@/app/domain/d-version/errors"
-import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
+import { DocumentId, DocumentVersionId, UserId, makeDocumentIdSync, makeDocumentVersionIdSync, makeUserIdSync } from "@/app/domain/refined/uuid"
 import { type DocumentVersion } from "@/app/domain/d-version/schema"
-import { makeSha256 } from "@/app/domain/shared/checksum"
-import { makeDateTimeFromAny } from "@/app/domain/shared/date-time"
+import { makeSha256 } from "@/app/domain/refined/checksum"
+import { makeDateTimeFromAny } from "@/app/domain/refined/date-time"
 
 /**
  * Generators for DocumentVersion fields

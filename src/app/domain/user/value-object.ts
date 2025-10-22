@@ -6,8 +6,8 @@
  */
 
 import { Schema as S, Effect } from "effect"
-import { ValidationError } from "@/app/domain/shared/errors"
-import { EmailAddress } from "@/app/domain/shared/email"
+import { ValidationError } from "@/app/domain/shared/base.errors"
+import { EmailAddress } from "@/app/domain/refined/email"
 
 export interface UserProfileData {
   readonly firstName: string
@@ -33,14 +33,15 @@ export class UserProfile {
   private constructor(private readonly data: UserProfileSchema) {}
 
   static create(input: unknown): Effect.Effect<UserProfile, ValidationError> {
-    return Effect.tryCatch(
-      () => new UserProfile(S.decodeUnknownSync(UserProfileSchema)(input)),
-      (error: unknown) =>
-        new ValidationError(
-          (error as Error).message || "User profile validation failed",
-          "UserProfile"
+    return Effect.try({
+      try: () => new UserProfile(S.decodeUnknownSync(UserProfileSchema)(input)),
+      catch: (error: unknown) =>
+        ValidationError.forField(
+          "UserProfile",
+          input,
+          (error as Error).message || "User profile validation failed"
         )
-    )
+    })
   }
 
   get firstName() { return this.data.firstName }

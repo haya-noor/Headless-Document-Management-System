@@ -2,6 +2,7 @@
 
 import { describe, it, expect } from "bun:test"
 import fc from "fast-check"
+import { Option } from "effect"
 
 import { runEffect, runEffectSyncWithError } from "../setup"
 
@@ -34,10 +35,10 @@ describe("UserEntity • creation", () => {
       })
     )
 
-    // Option-backed getters (present in your entity)
-    expect(user.dateOfBirthOrNull).toBeNull()
-    expect(user.phoneNumberOrNull).toBeNull()
-    expect(user.profileImageOrNull).toBeNull()
+    // Option-backed fields
+    expect(Option.isNone(user.dateOfBirth)).toBe(true)
+    expect(Option.isNone(user.phoneNumber)).toBe(true)
+    expect(Option.isNone(user.profileImage)).toBe(true)
   })
 })
 // Test that a UserEntity rejects invalid inputs via guards
@@ -80,7 +81,7 @@ be missing and the test would fail by luck. Hardcoding them makes the test predi
 
 */
 describe("UserEntity • getters & helpers", () => {
-  it("...OrNull getters reflect Option fields when present", async () => {
+  it("Option fields reflect values when present", async () => {
     const dob = new Date("2000-01-01T00:00:00.000Z").toISOString()
     const phone = "123456"
     const img = "https://example.com/p.png"
@@ -93,9 +94,9 @@ describe("UserEntity • getters & helpers", () => {
       })
     )
 
-    expect(user.dateOfBirthOrNull?.toISOString()).toBe("2000-01-01T00:00:00.000Z")
-    expect(user.phoneNumberOrNull).toBe(phone)
-    expect(user.profileImageOrNull).toBe(img)
+    expect(Option.getOrNull(Option.map(user.dateOfBirth, (d) => d.toISOString()))).toBe("2000-01-01T00:00:00.000Z")
+    expect(Option.getOrNull(user.phoneNumber)).toBe(phone)
+    expect(Option.getOrNull(user.profileImage)).toBe(img)
   })
 
   it("isActive() mirrors the entity state", async () => {

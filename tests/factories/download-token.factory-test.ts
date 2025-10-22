@@ -16,7 +16,7 @@ import * as fc from "fast-check"
 import { randomBytes } from "crypto"
 import { DownloadTokenEntity } from "@/app/domain/download-token/entity"
 import { DownloadTokenValidationError } from "@/app/domain/download-token/errors"
-import { makeDownloadTokenIdSync, makeDocumentIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
+import { makeDownloadTokenIdSync, makeDocumentIdSync, makeUserIdSync } from "@/app/domain/refined/uuid"
 import { type SerializedDownloadToken } from "@/app/domain/download-token/schema"
 
 /**

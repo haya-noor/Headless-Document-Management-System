@@ -1,188 +1,82 @@
-import { Effect, Option, Schema as S } from "effect"
-import { AccessPolicy, AccessPolicySchema } from "./schema"
+import { Effect, Option, Schema as S, ParseResult } from "effect"
+import { AccessPolicySchema } from "./schema"
 import { AccessPolicyGuards } from "./guards"
-import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
-import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
+import { BaseEntity } from "@/app/domain/shared/base.entity"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/base.errors"
 import { AccessPolicyValidationError } from "./errors"
-import { AccessPolicyId, UserId, DocumentId } from "@/app/domain/shared/uuid"
+import { AccessPolicyId, UserId, DocumentId } from "@/app/domain/refined/uuid"
+import { serializeWith } from "@/app/domain/shared/schema.utils"
 
-/**
- * IAccessPolicy — Aggregate contract
- */
-export interface IAccessPolicy extends IEntity<AccessPolicyId> {
-  readonly name: string
-  readonly description: string
-  readonly subjectType: "user" | "role"
-  readonly subjectId: UserId
-  readonly resourceType: "document" | "user"
-  readonly resourceId: Option.Option<DocumentId>
-  readonly actions: ("read" | "write" | "delete" | "manage")[]
-  readonly active: boolean
-  readonly priority: number
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
-}
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+export type AccessPolicyType = S.Schema.Type<typeof AccessPolicySchema>
+export type SerializedAccessPolicy = S.Schema.Encoded<typeof AccessPolicySchema>
 
 /**
  * AccessPolicyEntity — Aggregate root for policy management
+ * 
+ * Manages access control policies for documents and users.
+ * Controls who (subject) can do what (actions) on which resource.
  */
-export class AccessPolicyEntity extends BaseEntity<AccessPolicyId> implements IAccessPolicy {
-  readonly id: AccessPolicyId
-  readonly name: string
-  readonly description: string
-  readonly subjectType: "user" | "role"
-  readonly subjectId: UserId
-  readonly resourceType: "document" | "user"
-  readonly resourceId: Option.Option<DocumentId>
-  readonly actions: ("read" | "write" | "delete" | "manage")[]
-  readonly active: boolean
-  readonly priority: number
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
+export class AccessPolicyEntity extends BaseEntity<AccessPolicyId, AccessPolicyValidationError> {
+  readonly id!: AccessPolicyId
+  readonly createdAt!: Date
+  readonly updatedAt!: Date
+  readonly name!: string
+  readonly description!: string
+  readonly subjectType!: "user" | "role"
+  readonly subjectId!: UserId
+  readonly resourceType!: "document" | "user"
+  readonly resourceId!: Option.Option<DocumentId>
+  readonly actions!: ("read" | "write" | "delete" | "manage")[]
+  readonly isActive!: boolean
+  readonly priority!: number
 
-  private constructor(data: S.Schema.Type<typeof AccessPolicySchema>) {
+  private constructor(data: AccessPolicyType) {
     super()
-    this.id = data.id
+    this.id = data.id as AccessPolicyId
     this.name = data.name
     this.description = data.description
     this.subjectType = data.subjectType
-    this.subjectId = data.subjectId
+    this.subjectId = data.subjectId as UserId
     this.resourceType = data.resourceType
     this.resourceId = Option.fromNullable(data.resourceId)
     this.actions = [...data.actions]
-    this.active = data.isActive
+    this.isActive = data.isActive
     this.priority = data.priority
     this.createdAt = data.createdAt
-    this.updatedAt = Option.fromNullable(data.updatedAt)
+    this.updatedAt = data.updatedAt
   }
 
   /** Factory for validated entity creation */
   static create(input: unknown): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
     return S.decodeUnknown(AccessPolicySchema)(input).pipe(
       Effect.map((data) => new AccessPolicyEntity(data)),
-      Effect.mapError((err) => AccessPolicyValidationError.fromParseError(input, err))
-    )
+      Effect.mapError((error) => 
+        AccessPolicyValidationError.forField(
+          "AccessPolicy",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
+    ) as Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never>
   }
 
-  // ------------------------------------------------------------
-  // Derived Properties
-  // ------------------------------------------------------------
-
-  get resourceIdOrNull(): DocumentId | null {
-    return Option.getOrNull(this.resourceId)
-  }
-
-  get hasResourceId(): boolean {
-    return Option.isSome(this.resourceId)
-  }
-
-  get isModified(): boolean {
-    return Option.isSome(this.updatedAt)
-  }
-
-  get hasAllPermissions(): boolean {
-    return this.actions.length === 4
-  }
-
-  get isHighPriority(): boolean {
-    return this.priority <= 10
-  }
-
-  get isLowPriority(): boolean {
-    return this.priority >= 100
-  }
-
-  // ------------------------------------------------------------
-  // Domain Logic
-  // ------------------------------------------------------------
-
-  appliesToSubject(subjectType: "user" | "role", subjectId: UserId): boolean {
-    return this.subjectType === subjectType && this.subjectId === subjectId
-  }
-
-  appliesToResource(resourceType: "document" | "user", resourceId?: DocumentId): boolean {
-    if (this.resourceType !== resourceType) return false
-    if (this.hasResourceId && resourceId) {
-      return Option.getOrNull(this.resourceId) === resourceId
-    }
-    return !this.hasResourceId // applies globally
-  }
-
-  grantsAction(action: "read" | "write" | "delete" | "manage"): boolean {
-    return this.actions.includes(action)
-  }
-
-  hasHigherPriorityThan(other: AccessPolicyEntity): boolean {
-    return this.priority < other.priority // lower number = higher priority
-  }
-
-  /** Updates allowed actions */
-  updateActions(
-    newActions: ("read" | "write" | "delete" | "manage")[]
-  ): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
-    if (!AccessPolicyGuards.isValidActions(newActions)) {
-      return Effect.fail(new AccessPolicyValidationError("actions", newActions, "Invalid policy actions"))
-    }
-
-    const updated = {
-      ...this.toSerialized(),
-      actions: newActions,
-      updatedAt: new Date()
-    }
-
-    return AccessPolicyEntity.create(updated)
-  }
-
-  /** Updates policy priority */
-  updatePriority(newPriority: number): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
-    if (!AccessPolicyGuards.isValidPriority(newPriority)) {
-      return Effect.fail(new AccessPolicyValidationError("priority", newPriority, "Priority must be between 1 and 1000"))
-    }
-
-    const updated = {
-      ...this.toSerialized(),
-      priority: newPriority,
-      updatedAt: new Date()
-    }
-
-    return AccessPolicyEntity.create(updated)
-  }
-
-  /** Activates the policy */
-  activate(): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
-    if (this.active) return Effect.succeed(this)
-    const updated = { ...this.toSerialized(), isActive: true, updatedAt: new Date() }
-    return AccessPolicyEntity.create(updated)
-  }
-
-  /** Deactivates the policy */
-  deactivate(): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
-    if (!this.active) return Effect.succeed(this)
-    const updated = { ...this.toSerialized(), isActive: false, updatedAt: new Date() }
-    return AccessPolicyEntity.create(updated)
-  }
-
-  // ------------------------------------------------------------
-  // Serialization Helpers
-  // ------------------------------------------------------------
-
-  private toSerialized(): S.Schema.Type<typeof AccessPolicySchema> {
-    return {
-      ...this.serialized,
-      name: this.name,
-      description: this.description,
-      subjectType: this.subjectType,
-      subjectId: this.subjectId,
-      resourceType: this.resourceType,
-      resourceId: Option.getOrUndefined(this.resourceId),
-      actions: this.actions,
-      isActive: this.active,
-      priority: this.priority
-    }
-  }
-
-  /** Required by BaseEntity */
-  isActive(): boolean {
-    return this.active
+  /**
+   * Serialize entity using Effect Schema encoding
+   * 
+   * Automatically handles:
+   * - Option types → T | undefined
+   * - Branded types → primitives
+   * - Date objects → kept as Date for database operations
+   * 
+   * @returns Effect with serialized access policy data
+   */
+  serialized(): Effect.Effect<SerializedAccessPolicy, ParseResult.ParseError> {
+    return serializeWith(AccessPolicySchema, this as unknown as AccessPolicyType)
   }
 }

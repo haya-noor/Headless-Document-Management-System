@@ -1,5 +1,5 @@
 import { Effect, Schema as S } from "effect"
-import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/errors"
+import { BusinessRuleViolationError, ValidationError } from "@/app/domain/shared/base.errors"
 
 /**
  * DocumentGuards — schema & domain utilities for document-specific fields
@@ -39,7 +39,7 @@ export class DocumentGuards {
     return title.trim().length > 0 && title.length <= 255
   }
 
-  static isValidDescription(description: string | null | undefined): boolean {
+  static isValidDescription(description?: string | null): boolean {
     return description == null || description.length <= 1000
   }
 

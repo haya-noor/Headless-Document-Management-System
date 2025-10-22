@@ -1,194 +1,75 @@
-import { Effect, Option, Schema as S, Clock } from "effect"
-import { BaseEntity, IEntity } from "@/app/domain/shared/base.entity"
+import { Effect, Option, Schema as S, ParseResult } from "effect"
+import { BaseEntity } from "@/app/domain/shared/base.entity"
 import { DocumentSchema } from "./schema"
 import { DocumentGuards } from "./guards"
 import { DocumentValidationError } from "./errors"
-import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/shared/uuid"
-import { ValidationError, BusinessRuleViolationError } from "@/app/domain/shared/errors"
+import { DocumentId, DocumentVersionId, UserId } from "@/app/domain/refined/uuid"
+import { ValidationError, BusinessRuleViolationError } from "@/app/domain/shared/base.errors"
+import { serializeWith } from "@/app/domain/shared/schema.utils"
 
-/**
- * IDocumentSchema — Aggregate contract
- */
-export interface IDocumentSchema extends IEntity<DocumentId> {
-  readonly ownerId: UserId
-  readonly title: string
-  readonly description: Option.Option<string>
-  readonly tags: Option.Option<readonly string[]>
-  readonly currentVersionId: DocumentVersionId
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
-}
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+export type DocumentType = S.Schema.Type<typeof DocumentSchema>
+export type SerializedDocument = S.Schema.Encoded<typeof DocumentSchema>
 
 /**
  * DocumentSchemaEntity — Aggregate root for document domain
  *
  * Responsible for managing document metadata and its relationship
- * to its current DocumentSchemaVersion. The DocumentSchemaVersionEntity remains
+ * to its current DocumentVersion. The DocumentVersion remains
  * immutable, while DocumentSchemaEntity tracks the active version pointer.
  */
-export class DocumentSchemaEntity extends BaseEntity<DocumentId> implements IDocumentSchema {
-  readonly id: DocumentId
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
-  readonly ownerId: UserId
-  readonly title: string
-  readonly description: Option.Option<string>
-  readonly tags: Option.Option<readonly string[]>
-  readonly currentVersionId: DocumentVersionId
+export class DocumentSchemaEntity extends BaseEntity<DocumentId, DocumentValidationError> {
+  readonly id!: DocumentId
+  readonly createdAt!: Date
+  readonly updatedAt!: Date
+  readonly ownerId!: UserId
+  readonly title!: string
+  readonly description!: Option.Option<string>
+  readonly tags!: Option.Option<readonly string[]>
+  readonly currentVersionId!: DocumentVersionId
 
-  private constructor(data: any) {
+  private constructor(data: DocumentType) {
     super()
-    this.id = data.id
-    this.ownerId = data.ownerId
+    this.id = data.id as DocumentId
+    this.ownerId = data.ownerId as UserId
     this.title = data.title
     this.description = Option.fromNullable(data.description)
     this.tags = Option.fromNullable(data.tags)
-    this.currentVersionId = data.currentVersionId
+    this.currentVersionId = data.currentVersionId as DocumentVersionId
     this.createdAt = data.createdAt
-    this.updatedAt = Option.fromNullable(data.updatedAt)
+    this.updatedAt = data.updatedAt
   }
 
   /** Factory for validated entity creation */
   static create(input: unknown): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
     return S.decodeUnknown(DocumentSchema)(input).pipe(
       Effect.map((data) => new DocumentSchemaEntity(data)),
-      Effect.mapError((err) => new DocumentValidationError("DocumentSchema", input, (err as any).message))
-    )
-  }
-
-  // ------------------------------------------------------------
-  // Derived Properties
-  // ------------------------------------------------------------
-
-  get descriptionOrEmpty(): string {
-    return Option.getOrElse(this.description, () => "")
-  }
-
-  get tagsOrEmpty(): readonly string[] {
-    return Option.getOrElse(this.tags, () => [])
-  }
-
-  get hasTags(): boolean {
-    return this.tagsOrEmpty.length > 0
-  }
-
-  get hasDescription(): boolean {
-    return Option.isSome(this.description)
-  }
-
-  get isModified(): boolean {
-    return Option.isSome(this.updatedAt)
-  }
-
-  get tagCount(): number {
-    return this.tagsOrEmpty.length
-  }
-
-  // ------------------------------------------------------------
-  // Domain Operations
-  // ------------------------------------------------------------
-
-  /** Rename the document */
-  rename(newTitle: string): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
-    if (!DocumentGuards.isValidTitle(newTitle)) {
-      return Effect.fail(new DocumentValidationError("title", newTitle, "Title is invalid"))
-    }
-
-    const updated = {
-      ...this.toSerialized(),
-      title: newTitle,
-      updatedAt: new Date()
-    }
-
-    return DocumentSchemaEntity.create(updated)
-  }
-
-  /** Update or clear document description */
-  updateDescription(newDescription: string | null | undefined): Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never> {
-    const desc = newDescription ?? null
-    if (desc !== null && !DocumentGuards.isValidDescription(desc)) {
-      return Effect.fail(new DocumentValidationError("description", desc, "Invalid description"))
-    }
-
-    const updated = {
-      ...this.toSerialized(),
-      description: desc,
-      updatedAt: new Date()
-    }
-
-    return DocumentSchemaEntity.create(updated)
-  }
-
-  /** Add one or more new tags, ensuring uniqueness */
-  addTags(newTags: string[]): Effect.Effect<DocumentSchemaEntity, ValidationError | BusinessRuleViolationError, never> {
-    const current = this.tagsOrEmpty
-
-    return DocumentGuards.prepareTagsForAddition(current, newTags).pipe(
-      Effect.flatMap((merged) =>
-        DocumentSchemaEntity.create({
-          ...this.toSerialized(),
-          tags: merged,
-          updatedAt: new Date()
-        })
+      Effect.mapError((error) => 
+        DocumentValidationError.forField(
+          "DocumentSchema",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
       )
-    )
-  }
-
-  /** Remove tags while keeping validation consistent */
-  removeTags(tagsToRemove: string[]): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
-    const current = this.tagsOrEmpty
-    if (current.length === 0) return Effect.succeed(this)
-
-    return DocumentGuards.prepareTagsForRemoval(current, tagsToRemove).pipe(
-      Effect.flatMap((remaining) =>
-        DocumentSchemaEntity.create({
-          ...this.toSerialized(),
-          tags: remaining.length > 0 ? remaining : null,
-          updatedAt: new Date()
-        })
-      )
-    )
+    ) as Effect.Effect<DocumentSchemaEntity, DocumentValidationError, never>
   }
 
   /**
-   * Update the document to reference a new current version.
-   *
-   * This operation belongs here (not in DocumentSchemaVersionEntity),
-   * because the DocumentSchema aggregate root controls which version
-   * is currently active.
+   * Serialize entity using Effect Schema encoding
+   * 
+   * Automatically handles:
+   * - Option types → T | undefined
+   * - Branded types → primitives
+   * - Date objects → kept as Date for database operations
+   * 
+   * @returns Effect with serialized document data
    */
-  updateCurrentVersion(newVersionId: DocumentVersionId): Effect.Effect<DocumentSchemaEntity, ValidationError, never> {
-    const updated = {
-      ...this.toSerialized(),
-      currentVersionId: newVersionId,
-      updatedAt: new Date()
-    }
-    return DocumentSchemaEntity.create(updated)
-  }
-
-  /**
-   * Domain serialization helper
-   *
-   * Builds a plain object representation of this DocumentSchemaEntity
-   * compatible with the DocumentSchema.
-   *
-   * Uses BaseEntity.serialize() for id, createdAt, updatedAt.
-   */
-  private toSerialized(): S.Schema.Type<typeof DocumentSchema> {
-    return {
-      id: this.id,
-      createdAt: this.createdAt,
-      updatedAt: Option.getOrUndefined(this.updatedAt),
-      ownerId: this.ownerId,
-      title: this.title,
-      description: Option.getOrUndefined(this.description),
-      tags: Option.getOrUndefined(this.tags),
-      currentVersionId: this.currentVersionId
-    }
-  }
-
-  /** Required by BaseEntity */
-  isActive(): boolean {
-    return true
+  serialized(): Effect.Effect<SerializedDocument, ParseResult.ParseError> {
+    return serializeWith(DocumentSchema, this as unknown as DocumentType)
   }
 }

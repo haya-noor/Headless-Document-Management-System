@@ -1,6 +1,6 @@
 import { Schema as S } from "effect"
-import { ValidMimeType, FileKey, FileSize } from "@/app/domain/shared/metadata"
-import { Sha256 } from "@/app/domain/shared/checksum"
+import { ValidMimeType, FileKey, FileSize } from "@/app/domain/refined/metadata"
+import { Sha256 } from "@/app/domain/refined/checksum"
 
 /**
  * DocumentVersionGuards

@@ -1,26 +1,36 @@
-import { ValidationError, RepositoryError } from "@/app/domain/shared/errors"
+import { ValidationError, NotFoundError } from "@/app/domain/shared/base.errors"
 import { ParseResult } from "effect"
 
 /**
  * AccessPolicy domain error definitions
- * Reuses shared error base classes
+ * Reuses shared error base classes with static factory methods
  */
 
-export class AccessPolicyNotFoundError extends RepositoryError {
+export class AccessPolicyNotFoundError extends NotFoundError {
   readonly tag = "AccessPolicyNotFoundError" as const
-  constructor(field: string, value: unknown, details?: string) {
-    super(`Access policy not found for ${field}: ${String(value)}${details ? ` - ${details}` : ""}`, "ACCESS_POLICY_NOT_FOUND")
+  
+  static forResource(resource: string, id: string) {
+    return new AccessPolicyNotFoundError({ 
+      resource, 
+      id, 
+      message: `Access policy with id '${id}' not found` 
+    })
   }
 }
 
 export class AccessPolicyValidationError extends ValidationError {
   readonly tag = "AccessPolicyValidationError" as const
-  constructor(field: string, value: unknown, details?: string) {
-    super(`Invalid access policy field ${field}: ${String(value)}${details ? ` - ${details}` : ""}`, field)
+
+  static forField(field: string, value: unknown, details?: string) {
+    return new AccessPolicyValidationError({
+      field,
+      value,
+      message: `Invalid access policy field ${field}: ${String(value)}${details ? ` - ${details}` : ""}`
+    })
   }
 
   static fromParseError(input: unknown, error: ParseResult.ParseError, field = "AccessPolicy") {
-    return new AccessPolicyValidationError(field, input, error.message)
+    return AccessPolicyValidationError.forField(field, input, error.message)
   }
 }
 

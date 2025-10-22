@@ -1,263 +1,82 @@
 import { Effect, Option, Schema as S, ParseResult } from "effect"
 import { UserValidationError } from "./errors"
-import { UserId } from "@/app/domain/shared/uuid"
-
-import { BaseEntity, type IEntity } from "@/app/domain/shared/base.entity"
-import { EmailAddress } from "@/app/domain/shared/email"
-import { User } from "./schema" 
-
+import { UserId } from "@/app/domain/refined/uuid"
+import { BaseEntity } from "@/app/domain/shared/base.entity"
+import { UserSchema } from "./schema"
+import { serializeWith } from "@/app/domain/shared/schema.utils" 
 
 // -----------------------------------------------------------------------------
-// Reusable Schemas
+// Types
 // -----------------------------------------------------------------------------
 
-// Common timestamp fields shared by all entities
-export const BaseEntitySchema = S.Struct({
-  id: S.String, 
-  createdAt: S.Date,
-  updatedAt: S.optional(S.Date)
-})
+export type UserType = S.Schema.Type<typeof UserSchema>
+export type SerializedUser = S.Schema.Encoded<typeof UserSchema>
 
-// Common user profile fields
-export const UserProfileFields = S.Struct({
-  firstName: S.String,
-  lastName: S.String,
-  dateOfBirth: S.optional(S.Date),
-  phoneNumber: S.optional(S.String),
-  profileImage: S.optional(S.String)
-})
 
-// Core user fields (specific to User)
-export const UserCoreFields = S.Struct({
-  email: EmailAddress, 
-  role: S.Literal("admin", "user"),
-  isActive: S.Boolean
-})
+export class UserEntity extends BaseEntity<UserId, UserValidationError> {
+  readonly id!: UserId
+  readonly createdAt!: Date
+  readonly updatedAt!: Date
+  readonly email!: string
+  readonly firstName!: string
+  readonly lastName!: string
+  readonly role!: "admin" | "user"
+  readonly isActive!: boolean
+  readonly dateOfBirth!: Option.Option<Date>
+  readonly phoneNumber!: Option.Option<string>
+  readonly profileImage!: Option.Option<string>
+  readonly password!: string
 
-// Full user schema — combines reusable parts
-export const UserSchema = S.extend(S.extend(UserCoreFields, UserProfileFields), BaseEntitySchema)
 
-// -----------------------------------------------------------------------------
-// Derived Types
-// -----------------------------------------------------------------------------
+  static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError, never> {
+    return S.decodeUnknown(UserSchema)(input).pipe(
+      Effect.map((data) => new UserEntity(data)),
+      Effect.mapError((error) => 
+        UserValidationError.forField(
+          "user",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
+    ) as Effect.Effect<UserEntity, UserValidationError, never>
+  }
 
-export type UserType = S.Schema.Type<typeof User>
-export type SerializedUser = S.Schema.Encoded<typeof User>
-
-// -----------------------------------------------------------------------------
-// Domain Contract
-// -----------------------------------------------------------------------------
-
-export interface IUser extends IEntity<UserId> {
-  readonly email: string
-  readonly firstName: string
-  readonly lastName: string
-  readonly role: "admin" | "user"
-  readonly dateOfBirth: Option.Option<Date>
-  readonly phoneNumber: Option.Option<string>
-  readonly profileImage: Option.Option<string>
-}
-
-// -----------------------------------------------------------------------------
-// User Entity
-// -----------------------------------------------------------------------------
-
-export class UserEntity extends BaseEntity<UserId> implements IUser {
-  readonly id: UserId
-  readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
-  readonly email: string
-  readonly firstName: string
-  readonly lastName: string
-  readonly role: "admin" | "user"
-  readonly dateOfBirth: Option.Option<Date>
-  readonly phoneNumber: Option.Option<string>
-  readonly profileImage: Option.Option<string>
-  
-  // Password is stored privately for repository encode/decode but not exposed in public API
-  private readonly _password: string
+  /**
+   * Create entity from persistence layer (database row)
+   * 
+   * Accepts raw Option format { tag: "Some" | "None", value?: T }
+   * and ISO string dates from database
+   */
 
   private constructor(data: UserType) {
     super()
     this.id = data.id as UserId
     this.createdAt = data.createdAt
-    this.updatedAt = Option.fromNullable(data.updatedAt)
+    this.updatedAt = data.updatedAt
     this.email = data.email
-    this._password = data.password
+    this.password = data.password
     this.firstName = data.firstName
     this.lastName = data.lastName
     this.role = data.role
+    this.isActive = data.isActive
     this.dateOfBirth = Option.fromNullable(data.dateOfBirth)
     this.phoneNumber = Option.fromNullable(data.phoneNumber)
     this.profileImage = Option.fromNullable(data.profileImage)
   }
-  
-  // Getter for repository use (internal to infrastructure layer)
-  get password(): string {
-    return this._password
-  }
 
-  // ---------------------------------------------------------------------------
-  // Factory / Validation
-  // ---------------------------------------------------------------------------
-
-  static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError> {
-    return S.decodeUnknown(User)(input).pipe(
-      Effect.map((data) => new UserEntity(data)),
-      Effect.mapError((error) => UserEntity.toValidationError(error, input))
-    )
-  }
-
-  private static toValidationError(error: unknown, input: SerializedUser): UserValidationError {
-    if (error instanceof UserValidationError) return error
-    
-    // Handle ParseResult.ParseError
-    if (error && typeof error === 'object' && 'message' in error) {
-      const parseError = (error as ParseResult.ParseError).message ?? "Validation failed"
-      return new UserValidationError("user", input, parseError)
-    }
-    
-    // Handle other error types
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    return new UserValidationError("user", input, errorMessage)
-  }
-
-  // ---------------------------------------------------------------------------
-  // Domain Behavior
-  // ---------------------------------------------------------------------------
-
-  get fullName(): string {
-    return `${this.firstName} ${this.lastName}`
-  }
-
-  get hasDateOfBirth(): boolean {
-    return Option.isSome(this.dateOfBirth)
-  }
-
-  get hasPhoneNumber(): boolean {
-    return Option.isSome(this.phoneNumber)
-  }
-
-  get hasProfileImage(): boolean {
-    return Option.isSome(this.profileImage)
-  }
-
-  get isModified(): boolean {
-    return Option.isSome(this.updatedAt)
-  }
-
-  get dateOfBirthOrNull(): Date | null {
-    return Option.getOrNull(this.dateOfBirth)
-  }
-
-  get phoneNumberOrNull(): string | null {
-    return Option.getOrNull(this.phoneNumber)
-  }
-
-  get profileImageOrNull(): string | null {
-    return Option.getOrNull(this.profileImage)
-  }
-
-  isActiveUser(): boolean {
-    return this.isActive()
-  }
-
-  isAdmin(): boolean {
-    return this.role === "admin"
-  }
-
-  hasCompleteProfile(): boolean {
-    return this.hasDateOfBirth && this.hasPhoneNumber && this.hasProfileImage
-  }
-
-  hasMinimalProfile(): boolean {
-    return Boolean(this.firstName && this.lastName && this.email)
-  }
-
-  getProfileCompleteness(): number {
-    const totalFields = 6
-    const completedFields =
-      Number(!!this.firstName) +
-      Number(!!this.lastName) +
-      Number(!!this.email) +
-      Number(this.hasDateOfBirth) +
-      Number(this.hasPhoneNumber) +
-      Number(this.hasProfileImage)
-    return Math.round((completedFields / totalFields) * 100)
-  }
-
-  // ---------------------------------------------------------------------------
-  // Update Operations
-  // ---------------------------------------------------------------------------
-
-  updateEmail(newEmail: string): Effect.Effect<UserEntity, UserValidationError> {
-    return UserEntity.create({
-      ...this.toSerialized(),
-      email: newEmail,
-      updatedAt: new Date()
-    })
-  }
-
-  updateProfile(
-    firstName?: string,
-    lastName?: string,
-    dateOfBirth?: Date | null,
-    phoneNumber?: string | null,
-    profileImage?: string | null
-  ): Effect.Effect<UserEntity, UserValidationError> {
-    return UserEntity.create({
-      ...this.toSerialized(),
-      firstName: firstName ?? this.firstName,
-      lastName: lastName ?? this.lastName,
-      dateOfBirth: dateOfBirth ?? Option.getOrUndefined(this.dateOfBirth),
-      phoneNumber: phoneNumber ?? Option.getOrUndefined(this.phoneNumber),
-      profileImage: profileImage ?? Option.getOrUndefined(this.profileImage),
-      updatedAt: new Date()
-    })
-  }
-
-  activate(): Effect.Effect<UserEntity, UserValidationError> {
-    return UserEntity.create({
-      ...this.toSerialized(),
-      isActive: true,
-      updatedAt: new Date()
-    })
-  }
-
-  deactivate(): Effect.Effect<UserEntity, UserValidationError> {
-    return UserEntity.create({
-      ...this.toSerialized(),
-      isActive: false,
-      updatedAt: new Date()
-    })
-  }
-
-  // ---------------------------------------------------------------------------
-  // Serialization
-  // ---------------------------------------------------------------------------
-
-  toSerialized(): SerializedUser {
-    return {
-      id: this.id,
-      email: this.email,
-      password: this.password,  // Include password for repository operations
-      firstName: this.firstName,
-      lastName: this.lastName,
-      role: this.role,
-      isActive: this.isActive(),
-      dateOfBirth: Option.getOrUndefined(this.dateOfBirth),
-      phoneNumber: Option.getOrUndefined(this.phoneNumber),
-      profileImage: Option.getOrUndefined(this.profileImage),
-      createdAt: this.createdAt,  // Return Date object, not ISO string
-      updatedAt: Option.getOrUndefined(this.updatedAt)
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // DDD Base
-  // ---------------------------------------------------------------------------
-
-  isActive(): boolean {
-    return this.isActiveUser()
+  /**
+   * Serialize entity using Effect Schema encoding
+   * 
+   * Automatically handles:
+   * - Option types → T | undefined
+   * - Branded types → primitives (UserId → string)
+   * - Date objects → ISO strings (S.Date in schema)
+   * 
+   * @returns Effect with serialized user data
+   */
+  serialized(): Effect.Effect<SerializedUser, ParseResult.ParseError> {
+    return serializeWith(UserSchema, this as unknown as UserType)
   }
 }

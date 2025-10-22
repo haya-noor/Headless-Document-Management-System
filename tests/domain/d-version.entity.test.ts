@@ -7,7 +7,7 @@
 import { describe, it, expect } from "bun:test"
 import { runEffect, faker } from "../setup"
 import { Option as O } from "effect"
-import { makeDocumentIdSync, makeUserIdSync } from "@/app/domain/shared/uuid"
+import { makeDocumentIdSync, makeUserIdSync } from "@/app/domain/refined/uuid"
 import {
   generateTestDocumentVersion,
   createFirstVersion,

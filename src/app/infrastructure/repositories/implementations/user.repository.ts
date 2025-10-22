@@ -1,5 +1,5 @@
-import { Effect, Option, pipe, Schema as S } from "effect";
-import { eq, desc, asc, count } from "drizzle-orm";
+import { Effect as E, Option as O, pipe } from "effect";
+import { eq, desc, asc, count, and } from "drizzle-orm";
 
 import { databaseService } from "@/app/infrastructure/services/drizzle-service";
 import { users } from "@/app/infrastructure/database/models";
@@ -7,510 +7,326 @@ import type { InferSelectModel } from "drizzle-orm";
 
 type UserModel = InferSelectModel<typeof users>;
 
-import { UserEntity, type SerializedUser } from "@/app/domain/user/entity";
-import { User, UserRow, UserCodec } from "@/app/domain/user/schema";
-import { UserId } from "@/app/domain/shared/uuid";
-import { HashedPassword } from "@/app/domain/shared/password";
+import { UserEntity } from "@/app/domain/user/entity";
 import {
   UserNotFoundError,
   UserAlreadyExistsError,
   UserValidationError,
 } from "@/app/domain/user/errors";
+import { UserFilter } from "@/app/domain/user/repository";
 import {
   DatabaseError,
-  NotFoundError,
-  ConflictError,
-  ValidationError,
-  type Repository,
-} from "@/app/domain/shared/errors";
-import {
-  PaginatedResponse,
+} from "@/app/domain/shared/base.errors";
+import { 
+  calculateOffset,
+  buildPaginatedResponse,
   PaginationParams,
-} from "@/app/domain/shared/api.interface";
+  PaginatedResponse,
+} from "@/app/domain/shared/pagination";
 
 /**
- * User Repository Filter Interface
- */
-export interface UserFilter {
-  email?: string;
-  role?: "admin" | "user";
-  isActive?: boolean;
-  searchTerm?: string;
-}
-
-/**
- * User Repository Implementation using Drizzle ORM
+ * Drizzle-based User Repository Implementation
  * 
- * Implements the Repository<T, Filter> contract from domain layer.
- * Handles all database operations for User entities with proper error handling.
+ * Uses Effect patterns for composable, type-safe database operations.
+ * Follows the reference architecture with clean helper methods.
  */
-export class UserDrizzleRepository implements Repository<UserEntity, UserFilter> {
+export class UserDrizzleRepository {
   constructor(private readonly db = databaseService.getDatabase()) {}
 
+  // ========== Serialization Helpers ==========
+
   /**
-   * Encodes a UserEntity to a database row using Effect Schema Codec
-   * Uses the Codec's encode transformation directly
+   * Serialize entity to database format
+   * 
+   * Maps domain entity fields to database columns.
+   * Unwraps Option types to null for database storage.
    */
-  private encodeUser(user: UserEntity): Effect.Effect<UserRow, ValidationError> {
-    // Extract domain data
-    const domainData = {
+  private toDbSerialized(user: UserEntity): E.Effect<UserModel, UserValidationError, never> {
+    return E.sync(() => ({
       id: user.id,
       email: user.email,
       password: user.password,
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
-      dateOfBirth: Option.getOrUndefined(user.dateOfBirth),
-      phoneNumber: Option.getOrUndefined(user.phoneNumber),
-      profileImage: Option.getOrUndefined(user.profileImage),
-      isActive: user.isActive(),
+      isActive: user.isActive,
+      dateOfBirth: O.getOrNull(user.dateOfBirth),
+      phoneNumber: O.getOrNull(user.phoneNumber),
+      profileImage: O.getOrNull(user.profileImage),
       createdAt: user.createdAt,
-      updatedAt: Option.getOrUndefined(user.updatedAt)
-    };
+      updatedAt: user.updatedAt
+    }))
+  }
 
-    // Use Codec's encode to transform Domain -> DB Row (Context type suppressed with 'as any')
-    return pipe(
-      S.encode(UserCodec)(domainData as any),
-      Effect.mapError((err: any) =>
-        new ValidationError(`Failed to encode user: ${err.message}`, "User")
+  /**
+   * Deserialize database row to entity
+   * 
+   * Converts database row → domain entity using UserEntity.create
+   * Schema automatically converts null/undefined to Option.None and values to Option.Some
+   */
+  private fromDbRow(row: UserModel): E.Effect<UserEntity, UserValidationError, never> {
+    return UserEntity.create({
+      id: row.id,
+      email: row.email,
+      password: row.password,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      role: row.role as "admin" | "user",
+      isActive: row.isActive,
+      dateOfBirth: row.dateOfBirth ?? undefined,
+      phoneNumber: row.phoneNumber ?? undefined,
+      profileImage: row.profileImage ?? undefined,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt
+    })
+  }
+
+  // ========== Query Helpers ==========
+
+  /**
+   * Execute a database query with error handling
+   */
+  private executeQuery<T>(query: () => Promise<T>): E.Effect<T, DatabaseError> {
+    return E.tryPromise({
+      try: query,
+      catch: (error) => DatabaseError.forOperation(
+        "query",
+        error instanceof Error ? error : new Error(String(error))
       )
-    ) as any;
+    })
   }
 
   /**
-   * Decodes a database row into a UserEntity using Effect Schema Codec
-   * Uses the Codec's decode transformation directly
+   * Fetch a single user record
    */
-  private decodeUser(row: UserModel): Effect.Effect<UserEntity, ValidationError | UserValidationError> {
-    // Use Codec's decode to transform DB Row -> Domain, then create entity (Context type suppressed with 'as any')
-    return pipe(
-      S.decodeUnknown(UserCodec)(row),
-      Effect.mapError((err: any) =>
-        new ValidationError(`Failed to decode user: ${err.message}`, "User")
-      ),
-      Effect.flatMap((decoded) => UserEntity.create(decoded as any))
-    ) as any;
-  }
-
-  /**
-   * Helper to fetch a single user by a query function
-   */
-  private fetchOne(
+  private fetchSingle(
     query: () => Promise<UserModel[]>
-  ): Effect.Effect<Option.Option<UserEntity>, DatabaseError | ValidationError> {
+  ): E.Effect<O.Option<UserEntity>, DatabaseError | UserValidationError, never> {
     return pipe(
-      Effect.tryPromise({
-        try: query,
-        catch: (err) =>
-          new DatabaseError({
-            message: `Database query failed: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.map(Option.fromIterable),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (row) => pipe(this.decodeUser(row), Effect.map(Option.some)),
+      this.executeQuery(query),
+      E.map(O.fromIterable),
+      E.flatMap((option) =>
+        O.match(option, {
+          onNone: () => E.succeed(O.none()),
+          onSome: (row) => pipe(
+            this.fromDbRow(row),
+            E.map(O.some)
+          )
         })
       )
-    );
+    ) as E.Effect<O.Option<UserEntity>, DatabaseError | UserValidationError, never>
   }
 
-  // ---------------------------------------------------------------------------
-  // Repository Interface Implementation
-  // ---------------------------------------------------------------------------
-
   /**
-   * Finds a user by their ID
+   * Ensure user exists, fail with UserNotFoundError if not
    */
-  findById(id: string): Effect.Effect<Option.Option<UserEntity>, DatabaseError> {
+  private ensureExists(id: string): E.Effect<void, UserNotFoundError, never> {
     return pipe(
-      this.fetchOne(() =>
-        this.db.select().from(users).where(eq(users.id, id)).limit(1)
-      ),
-      Effect.mapError(
-        (err) =>
-          new DatabaseError({
-            message: `Failed to find user by ID: ${id}`,
-            cause: err,
-          })
+      this.exists(id),
+      E.flatMap((exists) =>
+        exists
+          ? E.succeed(undefined as void)
+          : E.fail(UserNotFoundError.forResource("User", id))
       )
-    );
+    ) as E.Effect<void, UserNotFoundError, never>
   }
 
+  // ========== Repository Methods ==========
+
   /**
-   * Finds a user by their email address
+   * Find user by ID
    */
-  findByEmail(
-    email: string
-  ): Effect.Effect<Option.Option<UserEntity>, DatabaseError> {
-    return pipe(
-      this.fetchOne(() =>
-        this.db.select().from(users).where(eq(users.email, email)).limit(1)
-      ),
-      Effect.mapError(
-        (err) =>
-          new DatabaseError({
-            message: `Failed to find user by email: ${email}`,
-            cause: err,
-          })
-      )
-    );
+  findById(id: string): E.Effect<O.Option<UserEntity>, DatabaseError | UserValidationError> {
+    return this.fetchSingle(() =>
+      this.db.select().from(users).where(eq(users.id, id)).limit(1)
+    )
   }
 
   /**
-   * Finds multiple users matching the given filter
+   * Find user by email
+   */
+  findByEmail(email: string): E.Effect<O.Option<UserEntity>, DatabaseError | UserValidationError> {
+    return this.fetchSingle(() =>
+      this.db.select().from(users).where(eq(users.email, email)).limit(1)
+    )
+  }
+
+  /**
+   * Find multiple users matching filter
    */
   findMany(
     filter?: UserFilter
-  ): Effect.Effect<UserEntity[], DatabaseError> {
+  ): E.Effect<UserEntity[], DatabaseError | UserValidationError> {
+    const conditions = [
+      ...(filter?.email ? [eq(users.email, filter.email)] : []),
+      ...(filter?.role ? [eq(users.role, filter.role)] : []),
+      ...(filter?.isActive !== undefined ? [eq(users.isActive, filter.isActive)] : []),
+    ];
+
     return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db.select().from(users);
-
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
-
-          return await query;
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to find users: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.flatMap((rows) =>
-        Effect.all(rows.map((row) => this.decodeUser(row)))
+      this.executeQuery(() =>
+        this.db
+          .select()
+          .from(users)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
       ),
-      Effect.mapError(
-        (err) =>
-          err instanceof DatabaseError
-            ? err
-            : new DatabaseError({
-                message: "Failed to decode users",
-                cause: err,
-              })
+      E.flatMap((rows) =>
+        E.all(rows.map((row) => this.fromDbRow(row)))
       )
-    );
+    ) as E.Effect<UserEntity[], DatabaseError | UserValidationError, never>
   }
 
   /**
-   * Finds users with pagination support
+   * Find users with pagination
    */
   findManyPaginated(
     { page, limit, sortBy = "createdAt", sortOrder = "desc" }: PaginationParams,
     filter?: UserFilter
-  ): Effect.Effect<PaginatedResponse<UserEntity>, DatabaseError> {
-    const offset = (page - 1) * limit;
+  ): E.Effect<PaginatedResponse<UserEntity>, DatabaseError | UserValidationError> {
+    const offset = calculateOffset(page, limit);
     const orderBy = sortOrder === "asc" ? asc : desc;
     
-    // Type-safe column selection for sorting
-    let sortColumn;
-    if (sortBy === 'email') sortColumn = users.email;
-    else if (sortBy === 'firstName') sortColumn = users.firstName;
-    else if (sortBy === 'lastName') sortColumn = users.lastName;
-    else if (sortBy === 'role') sortColumn = users.role;
-    else sortColumn = users.createdAt;
+    const sortColumns: Record<string, any> = {
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      role: users.role,
+      createdAt: users.createdAt,
+    };
+    const sortColumn = sortColumns[sortBy] ?? users.createdAt;
+
+    const conditions = [
+      ...(filter?.email ? [eq(users.email, filter.email)] : []),
+      ...(filter?.role ? [eq(users.role, filter.role)] : []),
+      ...(filter?.isActive !== undefined ? [eq(users.isActive, filter.isActive)] : []),
+    ];
 
     return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db
-            .select()
-            .from(users)
-            .orderBy(orderBy(sortColumn))
-            .limit(limit)
-            .offset(offset);
-
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
-
-          return await query;
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Pagination query failed: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.flatMap((rows) =>
-        Effect.all(rows.map((row) => this.decodeUser(row)))
+      this.executeQuery(() =>
+        this.db
+          .select()
+          .from(users)
+          .where(conditions.length > 0 ? and(...conditions) : undefined)
+          .orderBy(orderBy(sortColumn))
+          .limit(limit)
+          .offset(offset)
       ),
-      Effect.flatMap((usersList) =>
+      E.flatMap((rows) =>
+        E.all(rows.map((row) => this.fromDbRow(row)))
+      ),
+      E.flatMap((usersList) =>
         pipe(
-          Effect.tryPromise({
-            try: () => this.db.select({ count: count() }).from(users),
-            catch: (err) =>
-              new DatabaseError({
-                message: `Count query failed: ${err instanceof Error ? err.message : String(err)}`,
-                cause: err,
-              }),
-          }),
-          Effect.map(([result]) => {
-            const total = Number(result?.count ?? 0);
-            const totalPages = Math.ceil(total / limit);
-            return {
-              data: usersList,
-              pagination: {
-                page,
-                limit,
-                total,
-                totalPages,
-                hasNext: page < totalPages,
-                hasPrev: page > 1,
-              },
-            } satisfies PaginatedResponse<UserEntity>;
-          })
+          this.count(filter),
+          E.map((total) => buildPaginatedResponse(usersList, page, limit, total))
         )
-      ),
-      Effect.mapError(
-        (err) =>
-          err instanceof DatabaseError
-            ? err
-            : new DatabaseError({
-                message: "Pagination failed",
-                cause: err,
-              })
       )
-    );
+    ) as E.Effect<PaginatedResponse<UserEntity>, DatabaseError | UserValidationError, never>
   }
 
   /**
-   * Saves a user entity (insert or update)
+   * Check if user exists by ID
    */
-  save(
-    user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ConflictError | ValidationError> {
+  exists(id: string): E.Effect<boolean, DatabaseError> {
     return pipe(
-      this.findByEmail(user.email),
-      Effect.flatMap(
-        Option.match({
-          onNone: () => this.insert(user),
-          onSome: (existing) =>
-            existing.id === user.id
-              ? pipe(
-                  this.update(user),
-                  // Convert NotFoundError to DatabaseError for save interface consistency
-                  Effect.mapError((err) =>
-                    err instanceof NotFoundError
-                      ? new DatabaseError({
-                          message: err.message,
-                          cause: err,
-                        })
-                      : err
-                  )
-                )
-              : Effect.fail(
-                  new ConflictError(
-                    `User with email ${user.email} already exists`,
-                    "email"
-                  )
-                ),
-        })
-      )
-    );
+      E.tryPromise({
+        try: (): Promise<Pick<UserModel, "id">[]> =>
+          this.db.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1),
+        catch: (error) => DatabaseError.forOperation("exists check", error)
+      }),
+      E.map((result) => result.length > 0)
+    )
   }
 
   /**
-   * Inserts a new user into the database
+   * Count users matching filter
+   */
+  count(filter?: UserFilter): E.Effect<number, DatabaseError> {
+    const conditions = [
+      ...(filter?.email ? [eq(users.email, filter.email)] : []),
+      ...(filter?.role ? [eq(users.role, filter.role)] : []),
+      ...(filter?.isActive !== undefined ? [eq(users.isActive, filter.isActive)] : []),
+    ];
+
+    return pipe(
+      E.tryPromise({
+        try: () =>
+          this.db
+            .select({ count: count() })
+            .from(users)
+            .where(conditions.length > 0 ? and(...conditions) : undefined),
+        catch: (error) => DatabaseError.forOperation("count", error)
+      }),
+      E.map(([result]) => Number(result?.count ?? 0))
+    )
+  }
+
+  /**
+   * Insert a new user
    */
   private insert(
     user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ConflictError | ValidationError> {
+  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError, never> {
     return pipe(
-      this.encodeUser(user),
-      Effect.flatMap((row) =>
-        Effect.tryPromise({
-          try: () => this.db.insert(users).values(row as any),
-          catch: (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes("unique") || msg.includes("duplicate")) {
-              return new ConflictError(
-                `User with email ${user.email} already exists`,
-                "email"
-              );
+      this.toDbSerialized(user),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.insert(users).values(dbData as any),
+          catch: (error) => {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            if (errorMsg.includes('unique') || errorMsg.includes('duplicate')) {
+              return UserAlreadyExistsError.forField("email", user.email)
             }
-            return new DatabaseError({
-              message: `Failed to insert user: ${msg}`,
-              cause: err,
-            });
-          },
+            return UserValidationError.forField("user", { userId: user.id }, errorMsg)
+          }
         })
       ),
-      Effect.as(user)
-    );
+      E.as(user)
+    ) as E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError, never>
   }
-
+  
   /**
-   * Updates an existing user in the database
+   * Update an existing user
    */
   private update(
     user: UserEntity
-  ): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> {
+  ): E.Effect<UserEntity, UserValidationError | UserNotFoundError, never> {
     return pipe(
-      this.encodeUser(user),
-      Effect.flatMap((row): Effect.Effect<UserEntity, DatabaseError | ValidationError | NotFoundError> =>
-        pipe(
-          this.exists(user.id),
-          Effect.flatMap((exists): Effect.Effect<UserEntity, DatabaseError | NotFoundError> => {
-            if (!exists) {
-              return Effect.fail(
-                new NotFoundError({
-                  message: "User not found",
-                  resource: "User",
-                  id: user.id,
-                })
-              ) as Effect.Effect<UserEntity, NotFoundError>;
-            }
-            
-            return pipe(
-              Effect.tryPromise({
-                try: () =>
-                  this.db.update(users).set(row as any).where(eq(users.id, user.id)),
-                catch: (err) =>
-                  new DatabaseError({
-                    message: `Failed to update user: ${err instanceof Error ? err.message : String(err)}`,
-                    cause: err,
-                  }),
-              }),
-              Effect.as(user)
-            ) as Effect.Effect<UserEntity, DatabaseError>;
-          })
-        )
-      )
-    );
+      this.ensureExists(user.id),
+      E.flatMap(() => this.toDbSerialized(user)),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.update(users).set(dbData as any).where(eq(users.id, user.id)),
+          catch: (error) => UserValidationError.forField(
+            "user",
+            { userId: user.id },
+            error instanceof Error ? error.message : String(error)
+          )
+        })
+      ),
+      E.as(user)
+    ) as E.Effect<UserEntity, UserValidationError | UserNotFoundError, never>
   }
 
   /**
-   * Deletes a user by ID (hard delete)
+   * Delete user by ID
    */
-  delete(id: string): Effect.Effect<boolean, DatabaseError> {
+  delete(id: string): E.Effect<boolean, DatabaseError> {
     return pipe(
       this.exists(id),
-      Effect.flatMap((exists) =>
-        exists
-          ? pipe(
-              Effect.tryPromise({
+      E.flatMap((exists) =>
+        E.if(exists, {
+          onTrue: () =>
+            pipe(
+              E.tryPromise({
                 try: () => this.db.delete(users).where(eq(users.id, id)),
-                catch: (err) =>
-                  new DatabaseError({
-                    message: `Failed to delete user: ${err instanceof Error ? err.message : String(err)}`,
-                    cause: err,
-                  }),
+                catch: (error) => DatabaseError.forOperation("delete", error)
               }),
-              Effect.as(true)
-            )
-          : Effect.fail(
-              new DatabaseError({
-                message: "User not found",
-                cause: undefined,
-              })
-            )
+              E.as(true)
+            ),
+          onFalse: () => E.succeed(false)
+        })
       )
-    );
-  }
-
-  /**
-   * Soft deletes a user by marking them as inactive
-   */
-  // softDelete(id: string): Effect.Effect<boolean, DatabaseError | NotFoundError> {
-  //   return pipe(
-  //     this.findById(id),
-  //     Effect.flatMap(
-  //       Option.match({
-  //         onNone: () =>
-  //           Effect.fail(
-  //             new NotFoundError({
-  //               message: "User not found",
-  //               resource: "User",
-  //               id,
-  //             })
-  //           ),
-  //         onSome: (user) =>
-  //           pipe(
-  //             user.deactivate(),
-  //             Effect.flatMap((deactivated) => this.save(deactivated)),
-  //             Effect.as(true)
-  //           ),
-  //       })
-  //     ),
-  //     Effect.mapError((err) =>
-  //       err instanceof NotFoundError
-  //         ? err
-  //         : new DatabaseError({
-  //             message: "Failed to soft delete user",
-  //             cause: err,
-  //           })
-  //     )
-  //   );
-  // }
-
-  /**
-   * Checks if a user exists by ID
-   */
-  exists(id: string): Effect.Effect<boolean, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: () =>
-          this.db
-            .select({ id: users.id })
-            .from(users)
-            .where(eq(users.id, id))
-            .limit(1),
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to check user existence: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      }),
-      Effect.map((rows) => rows.length > 0)
-    );
-  }
-
-  /**
-   * Counts users matching the given filter
-   */
-  count(filter?: UserFilter): Effect.Effect<number, DatabaseError> {
-    return pipe(
-      Effect.tryPromise({
-        try: async () => {
-          let query = this.db.select({ count: count() }).from(users);
-
-          if (filter?.email) {
-            query = query.where(eq(users.email, filter.email)) as any;
-          }
-          if (filter?.role) {
-            query = query.where(eq(users.role, filter.role)) as any;
-          }
-          if (filter?.isActive !== undefined) {
-            query = query.where(eq(users.isActive, filter.isActive)) as any;
-          }
-
-          const result = await query;
-          return Number(result[0]?.count ?? 0);
-        },
-        catch: (err) =>
-          new DatabaseError({
-            message: `Failed to count users: ${err instanceof Error ? err.message : String(err)}`,
-            cause: err,
-          }),
-      })
-    );
+    )
   }
 }
+

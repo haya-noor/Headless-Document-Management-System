@@ -19,8 +19,9 @@ import {
   createInactiveUser,
 } from "../factories/user.factory-test"
 import { UserEntity } from "@/app/domain/user/entity"
-import { DatabaseError, ConflictError, ValidationError } from "@/app/domain/shared/errors"
-import type { UserId } from "@/app/domain/shared/uuid"
+import { DatabaseError, ValidationError } from "@/app/domain/shared/base.errors"
+import { UserAlreadyExistsError } from "@/app/domain/user/errors"
+import type { UserId } from "@/app/domain/refined/uuid"
 
 /**
  * Test Runtime Helpers
@@ -29,12 +30,12 @@ import type { UserId } from "@/app/domain/shared/uuid"
 const TestRuntime = {
   // Run an Effect and return its success value as a Promise
   // This converts Effect-based code to Promise-based for async/await testing
-  run: <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
+  run: <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> =>
     Effect.runPromise(effect),
 
   // Run an Effect expecting it to fail, and return the error
   // Effect.flip swaps success/error channels, so errors become successes
-  runExpectingError: <A, E>(effect: Effect.Effect<A, E>): Promise<E> =>
+  runExpectingError: <A, E>(effect: Effect.Effect<A, E, never>): Promise<E> =>
     pipe(
       effect,
       Effect.flip,  // Swap error and success channels
@@ -43,7 +44,7 @@ const TestRuntime = {
 
   // Run multiple Effects in parallel and collect results in an array
   // Effect.all runs all effects concurrently for better performance
-  runArray: <A, E>(effects: Effect.Effect<A, E>[]): Promise<A[]> =>
+  runArray: <A, E>(effects: Effect.Effect<A, E, never>[]): Promise<A[]> =>
     pipe(
       Effect.all(effects),  // Run all effects in parallel
       Effect.runPromise
@@ -185,9 +186,9 @@ describe("UserRepository • Save (CREATE)", () => {
       createAndSaveUser({ email })
     )
 
-    // Repository should enforce email uniqueness with ConflictError
-    expect(error).toBeInstanceOf(ConflictError)
-    expect((error as ConflictError).message).toContain(email)
+    // Repository should enforce email uniqueness with UserAlreadyExistsError
+    expect(error).toBeInstanceOf(UserAlreadyExistsError)
+    expect((error as UserAlreadyExistsError).message).toContain(email)
   })
 })
 
@@ -502,14 +503,14 @@ describe("UserRepository • Delete", () => {
     expect(exists).toBe(false)
   })
 
-  it("fails to delete non-existent user", async () => {
+  it("returns false when deleting non-existent user", async () => {
     const fakeId = crypto.randomUUID()
 
-    const error = await TestRuntime.runExpectingError(
+    const result = await TestRuntime.run(
       state.repository.delete(fakeId)
     )
 
-    expect(error).toBeInstanceOf(DatabaseError)
+    expect(result).toBe(false)
   })
 
   it("user is not findable after deletion", async () => {
@@ -631,7 +632,7 @@ describe("UserRepository • Effect Composition", () => {
       )
     )
 
-    expect(error).toBeInstanceOf(ConflictError)
+    expect(error).toBeInstanceOf(UserAlreadyExistsError)
   })
 
   it("uses Option matching for conditional logic", async () => {

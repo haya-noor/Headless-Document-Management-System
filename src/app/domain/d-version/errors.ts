@@ -1,32 +1,46 @@
-import { ValidationError, ConflictError, RepositoryError } from "@/app/domain/shared/errors"
+import { ValidationError, ConflictError, NotFoundError } from "@/app/domain/shared/base.errors"
 import { ParseResult } from "effect"
 
 /** DocumentVersion domain-specific error definitions */
 
-export class DocumentVersionNotFoundError extends RepositoryError {
+export class DocumentVersionNotFoundError extends NotFoundError {
   readonly tag = "DocumentVersionNotFoundError" as const
-  constructor(public readonly field: string, public readonly value: unknown, details?: string) {
-    const valueStr = value === null ? "null" : value === undefined ? "undefined" : typeof value === "string" ? value : JSON.stringify(value)
-    super(`Document version not found for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`, "DOCUMENT_VERSION_NOT_FOUND")
+  
+  static forResource(resource: string, id: string) {
+    return new DocumentVersionNotFoundError({ 
+      resource, 
+      id, 
+      message: `Document version with id '${id}' not found` 
+    })
   }
 }
 
 export class DocumentVersionValidationError extends ValidationError {
   readonly tag = "DocumentVersionValidationError" as const
-  constructor(public readonly field: string, public readonly value: unknown, details?: string) {
+
+  static forField(field: string, value: unknown, details?: string) {
     const valueStr = value === null ? "null" : value === undefined ? "undefined" : typeof value === "string" ? value : JSON.stringify(value)
-    super(`Document version validation failed for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`, field)
+    return new DocumentVersionValidationError({
+      field,
+      value,
+      message: `Document version validation failed for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`
+    })
   }
+
   static fromParseError(input: unknown, error: ParseResult.ParseError, field = "DocumentVersion") {
-    return new DocumentVersionValidationError(field, input, error.message)
+    return DocumentVersionValidationError.forField(field, input, error.message)
   }
 }
 
 export class DocumentVersionAlreadyExistsError extends ConflictError {
   readonly tag = "DocumentVersionAlreadyExistsError" as const
-  constructor(field: string, value: unknown, details?: string) {
-    const valueStr = value === null ? "null" : value === undefined ? "undefined" : typeof value === "string" ? value : JSON.stringify(value)
-    super(`Document version already exists for ${field}: ${valueStr}${details ? ` - ${details}` : ""}`, field)
+  
+  static forField(field: string, value: unknown) {
+    return new DocumentVersionAlreadyExistsError({
+      message: `Document version already exists for ${field}: ${String(value)}`,
+      field,
+      details: { value }
+    })
   }
 }
 

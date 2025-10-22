@@ -1,7 +1,7 @@
 import { Effect, Option, Clock } from "effect"
 import { DownloadTokenEntity } from "./entity"
 import { DownloadTokenAlreadyUsedError, DownloadTokenValidationError } from "./errors"
-import { BusinessRuleViolationError } from "@/app/domain/shared/errors"
+import { BusinessRuleViolationError } from "@/app/domain/shared/base.errors"
 
 /**
  * DownloadToken Guards

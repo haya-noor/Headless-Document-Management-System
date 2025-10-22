@@ -31,13 +31,13 @@ import {
   makeUserIdSync,
   type UserId,
   type DocumentId,
-} from "@/app/domain/shared/uuid";
+} from "@/app/domain/refined/uuid";
 import {
   NotFoundError,
   ConflictError,
   DatabaseError,
   ValidationError,
-} from "@/app/domain/shared/errors";
+} from "@/app/domain/shared/base.errors";
 
 // Effect runner helpers
 const runEffect = <T, E>(fx: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(fx);

@@ -1,79 +1,93 @@
-import { Option } from "effect"
+import { Effect, Option, Schema as S } from "effect"
 
 /**
  * Base interface for all domain entities.
  * 
- * WHY WE NEED THIS:
- * Provides a consistent contract for all domain entities.
+ * Defines core properties shared by all entities:
+ * - Unique identifier
+ * - Audit timestamps (creation and last update)
  * 
- * WHAT IT DOES:
- * - Defines core properties shared by all entities (id, timestamps)
- * - Ensures consistent typing across the domain layer
- * TId is the type of the id of the entity(user, document, access policy, etc.)
+ * @template TId - The branded type for the entity's unique identifier
  */
 export interface IEntity<TId> {
   readonly id: TId
   readonly createdAt: Date
-  readonly updatedAt: Option.Option<Date>
+  readonly updatedAt: Date
 }
+
+/**
+ * Serialized entity type for persistence layer
+ * 
+ * Represents the plain object format suitable for database storage.
+ * All Option types are converted to their underlying values or undefined.
+ */
+export type SerializedEntity = Record<string, unknown>
 
 /**
  * BaseEntity
  * 
- * Abstract class that defines shared behavior for all domain entities.
- * Subclasses must define how they determine their "active" state
- * and how they are deserialized from plain data.
+ * Abstract base class providing foundational entity functionality with Effect support.
+ * 
+ * Key responsibilities:
+ * - Define common entity properties (id, createdAt, updatedAt)
+ * - Enforce serialization contract via abstract methods
+ * - Provide type-safe entity reconstruction from persistence layer
+ * 
+ * Each concrete entity must implement:
+ * - `toDbRow()`: Convert entity → plain object (for DB writes)
+ * - Static `fromDbRow()`: Convert plain object → entity (for DB reads)
+ * 
+ * @template TId - The branded type for entity's unique identifier
+ * @template TError - Domain-specific validation error type
  */
-export abstract class BaseEntity<TId> implements IEntity<TId> {
-  // Subclasses must define these properties
+export abstract class BaseEntity<TId, TError = Error> implements IEntity<TId> {
   abstract readonly id: TId
   abstract readonly createdAt: Date
-  abstract readonly updatedAt: Option.Option<Date>
-
-  // Each entity defines its own active/inactive logic.
-  // Example:
-  // - User: isActive flag
-  // - Document: !isDeleted
-  // - AccessPolicy: isEnabled
-  abstract isActive(): boolean
+  abstract readonly updatedAt: Date
 
   /**
-   * Serializes the entity into a plain object for storage or transmission.
-   * Converts Option values into JSON-safe types (T or null).
+   * Helper to unwrap Option types for serialization
    * 
-   * Notes:
-   * - getOrNull() returns the underlying value or null if None
-   * - Used for repositories or API responses
+   * Converts Option<T> → T | undefined for plain object serialization.
+   * This is needed because entity instances store Options, but schemas 
+   * expect T | undefined.
    * 
-   * 
-   * We specify serialization in BaseEntity because it's generic and consistent 
-   * across all entities,
-   * but deserialization is entity-specific, so it can't be implemented in the base class.
+   * @param option - The Option to unwrap
+   * @returns The unwrapped value or undefined
    */
-  get serialized(): Record<string, unknown> {
-    return {
-      id: this.id,
-      createdAt: this.createdAt,
-      updatedAt: Option.getOrNull(this.updatedAt)
-    }
+  protected unwrapOption<T>(option: Option.Option<T>): T | undefined {
+    return Option.getOrUndefined(option)
   }
 
   /**
-   * Static factory to recreate an entity from serialized data.
+   * Helper to unwrap multiple Option fields at once
    * 
-   * WHY STATIC:
-   * - Called on the class (e.g., UserEntity.fromSerialized(row))
-   * - Not on an instance.
+   * Useful for batch unwrapping when serializing entities with many optional fields.
    * 
-   * WHY ABSTRACT (throws by default):
-   * - Each entity has unique deserialization logic:
-   *   field mappings, validation, Option conversions, etc.
-   * - BaseEntity defines the contract but not the implementation.
+   * @param fields - Object with Option values
+   * @returns Object with unwrapped values
+   * 
+   * @example
+   * ```typescript
+   * serialize(): Record<string, unknown> {
+   *   return {
+   *     id: this.id,
+   *     ...this.unwrapOptions({
+   *       dateOfBirth: this.dateOfBirth,
+   *       phoneNumber: this.phoneNumber,
+   *       profileImage: this.profileImage
+   *     })
+   *   }
+   * }
+   * ```
    */
-  static fromSerialized<T extends BaseEntity<any>>(
-    this: new (...args: any[]) => T,
-    data: Record<string, unknown>
-  ): T {
-    throw new Error("fromSerialized must be implemented by subclasses")
+  protected unwrapOptions<T extends Record<string, Option.Option<any>>>(
+    fields: T
+  ): { [K in keyof T]: T[K] extends Option.Option<infer U> ? U | undefined : never } {
+    const result: any = {}
+    for (const [key, value] of Object.entries(fields)) {
+      result[key] = Option.getOrUndefined(value)
+    }
+    return result
   }
 }
