@@ -59,6 +59,48 @@ export class DownloadTokenEntity extends BaseEntity<DownloadTokenId, DownloadTok
 
 
   /**
+   * Validate token usage for a specific user
+   * 
+   * Checks:
+   * - Token is not already used
+   * - Token is not expired
+   * - Token is issued to the correct user
+   * 
+   * @param userId - The user ID to validate against
+   * @returns Effect with the validated token entity
+   */
+  validateUsage(userId: UserId): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
+    // Check if token is already used
+    if (Option.isSome(this.usedAt)) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token has already been used"
+      ))
+    }
+    
+    // Check if token is expired
+    if (this.expiresAt < new Date()) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token has expired"
+      ))
+    }
+    
+    // Check if token is issued to the correct user
+    if (this.issuedTo !== userId) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token is not valid for this user"
+      ))
+    }
+    
+    return Effect.succeed(this)
+  }
+
+  /**
    * Serialize entity using Effect Schema encoding
    * 
    * Automatically handles:

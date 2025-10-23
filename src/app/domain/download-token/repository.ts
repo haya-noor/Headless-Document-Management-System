@@ -33,6 +33,13 @@ export abstract class DownloadTokenRepository extends BaseRepository<
   // ---------------------------------------------------------------------------
 
   /**
+   * Find a token by its ID
+   */
+  abstract fetchById(
+    id: DownloadTokenId
+  ): Effect.Effect<Option.Option<DownloadTokenEntity>, DatabaseError, never>
+
+  /**
    * Find a token by its token string (for verification)
    */
   abstract findByToken(

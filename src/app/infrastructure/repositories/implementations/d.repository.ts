@@ -48,27 +48,23 @@ export class DocumentDrizzleRepository {
    * to match domain model (title instead of filename, ownerId instead of uploadedBy).
    */
   private toDbSerialized(doc: DocumentSchemaEntity): E.Effect<Record<string, any>, DocumentValidationError, never> {
-    return pipe(
-      doc.serialized(),
-      E.map((plainObject) => ({
-        id: plainObject.id,
-        filename: plainObject.title,  // Domain title -> DB filename
-        originalName: plainObject.title,
-        tags: plainObject.tags ?? null,
-        uploadedBy: plainObject.ownerId,  // Domain ownerId -> DB uploadedBy
-        currentVersion: 1,  // Will be managed by version entity
-        isActive: true,
-        createdAt: plainObject.createdAt,
-        updatedAt: plainObject.updatedAt
-      })),
-      E.mapError((err) => DocumentValidationError.forField(
-        "document",
-        doc.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
-      ))
-    ) as E.Effect<Record<string, any>, DocumentValidationError, never>
+    return E.sync(() => ({
+      id: doc.id,
+      filename: doc.title,  // Domain title -> DB filename
+      originalName: doc.title,
+      mimeType: 'application/octet-stream',  // Default mime type
+      size: 0,  // Default size (to be managed by version entity)
+      storageKey: `documents/${doc.id}`,  // Default storage key
+      storageProvider: 'local',
+      checksum: null,
+      tags: O.getOrNull(doc.tags),
+      metadata: {},
+      uploadedBy: doc.ownerId,  // Domain ownerId -> DB uploadedBy
+      currentVersion: 1,  // Will be managed by version entity
+      isActive: true,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt
+    }))
   }
 
   /**
@@ -88,8 +84,8 @@ export class DocumentDrizzleRepository {
       description: null,
       tags: row.tags,
       currentVersionId: `${row.id}-v${row.currentVersion}`,  // Generate version ID
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt
     }
 
     return DocumentSchemaEntity.create(domainData)
@@ -311,6 +307,20 @@ export class DocumentDrizzleRepository {
         })
       ),
       E.as(doc)
+    ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | DocumentNotFoundError, never>
+  }
+
+  /**
+   * Save document (insert if new, update if exists)
+   */
+  save(
+    doc: DocumentSchemaEntity
+  ): E.Effect<DocumentSchemaEntity, DocumentValidationError | DocumentNotFoundError, never> {
+    return pipe(
+      this.exists(doc.id),
+      E.flatMap((exists) =>
+        exists ? this.update(doc) : this.insert(doc)
+      )
     ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | DocumentNotFoundError, never>
   }
 

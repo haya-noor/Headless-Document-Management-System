@@ -131,7 +131,7 @@ export const createTestDocumentVersionEntity = (
   DocumentVersionEntity.create(generateTestDocumentVersion(overrides)).pipe(
     E.mapError(
       (err) =>
-        new DocumentVersionValidationError(
+        DocumentVersionValidationError.forField(
           "DocumentVersion",
           overrides,
           (err as Error).message || "Failed to create DocumentVersionEntity"

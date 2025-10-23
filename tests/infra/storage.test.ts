@@ -168,7 +168,7 @@ describe("LocalStorageService • Upload", () => {
     expect(result.key).toBe(key)
     expect(result.checksum).toBeDefined()
     expect(result.checksum).toMatch(/^[a-f0-9]{64}$/)  // SHA-256 hex format
-    expect(result.url).toContain(key)
+    expect(decodeURIComponent(result.url)).toContain(key)
     
     // Track for cleanup
     state.testFiles.push(path.join(state.storageService['storagePath'], key))

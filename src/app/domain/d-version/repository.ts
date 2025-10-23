@@ -71,5 +71,12 @@ export abstract class DocumentVersionRepository extends BaseRepository<
   abstract getNextVersionNumber(
     documentId: DocumentId
   ): Effect.Effect<number, DatabaseError, never>
+
+  /**
+   * Find version by checksum
+   */
+  abstract fetchByChecksum(
+    checksum: string
+  ): Effect.Effect<Option.Option<DocumentVersionEntity>, DatabaseError, never>
 }
 

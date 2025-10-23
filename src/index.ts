@@ -1,3 +1,5 @@
+import "reflect-metadata";
+
 /**
  * Headless Document Management System
  * Domain-Driven Design Training Project

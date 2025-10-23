@@ -50,6 +50,7 @@ export class UserDrizzleRepository {
       lastName: user.lastName,
       role: user.role,
       isActive: user.isActive,
+      workspaceId: O.getOrNull(user.workspaceId),
       dateOfBirth: O.getOrNull(user.dateOfBirth),
       phoneNumber: O.getOrNull(user.phoneNumber),
       profileImage: O.getOrNull(user.profileImage),
@@ -73,6 +74,7 @@ export class UserDrizzleRepository {
       lastName: row.lastName,
       role: row.role as "admin" | "user",
       isActive: row.isActive,
+      workspaceId: row.workspaceId ?? undefined,
       dateOfBirth: row.dateOfBirth ?? undefined,
       phoneNumber: row.phoneNumber ?? undefined,
       profileImage: row.profileImage ?? undefined,
@@ -305,6 +307,20 @@ export class UserDrizzleRepository {
       ),
       E.as(user)
     ) as E.Effect<UserEntity, UserValidationError | UserNotFoundError, never>
+  }
+
+  /**
+   * Save user (insert if new, update if exists)
+   */
+  save(
+    user: UserEntity
+  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError, never> {
+    return pipe(
+      this.exists(user.id),
+      E.flatMap((exists) =>
+        exists ? this.update(user) : this.insert(user)
+      )
+    ) as E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError, never>
   }
 
   /**

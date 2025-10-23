@@ -46,11 +46,11 @@ const downloadTokenGenerators = {
   // Expiry date (default 5 minutes from now)
   expiresAt: (minutesFromNow = 5) => {
     const now = new Date()
-    return new Date(now.getTime() + minutesFromNow * 60 * 1000).toISOString()
+    return new Date(now.getTime() + minutesFromNow * 60 * 1000)
   },
 
-  // The time this token was used (for “used” scenario)
-  usedAt: () => faker.date.recent().toISOString(),
+  // The time this token was used (for "used" scenario)
+  usedAt: () => faker.date.recent(),
 
   // The creation timestamp
   createdAt: () => faker.date.recent().toISOString(),
@@ -67,6 +67,7 @@ export const generateTestDownloadToken = (
 ): SerializedDownloadToken => {
   // ~30% chance that the token will be marked as "used"
   const shouldBeUsed = faker.datatype.boolean({ probability: 0.3 })
+  const createdAt = downloadTokenGenerators.createdAt()
 
   return {
     id: downloadTokenGenerators.id(),
@@ -75,7 +76,8 @@ export const generateTestDownloadToken = (
     issuedTo: downloadTokenGenerators.issuedTo(),
     expiresAt: downloadTokenGenerators.expiresAt(10), // expires in 10 minutes
     usedAt: shouldBeUsed ? downloadTokenGenerators.usedAt() : undefined, // usedAt as string or undefined
-    createdAt: downloadTokenGenerators.createdAt(), // creation date
+    createdAt: createdAt, // creation date
+    updatedAt: createdAt, // same as createdAt initially
     ...overrides, // allow caller to override any field
   }
 }
@@ -165,7 +167,9 @@ export const createTestDownloadTokenEntity = (
   DownloadTokenEntity.create(generateTestDownloadToken(overrides)).pipe(
     E.mapError(
       (err) =>
-        new DownloadTokenValidationError(
+        DownloadTokenValidationError.forField(
+          "DownloadToken",
+          overrides,
           (err as Error).message || "Failed to create DownloadTokenEntity"
         )
     )

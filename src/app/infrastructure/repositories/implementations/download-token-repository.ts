@@ -39,16 +39,16 @@ export class DownloadTokenDrizzleRepository {
    * - Date objects preserved for database
    */
   private toDbSerialized(token: DownloadTokenEntity): E.Effect<Record<string, any>, DownloadTokenValidationError, never> {
-    return pipe(
-      token.serialized(),
-      E.mapError((err) => DownloadTokenValidationError.forField(
-        "downloadToken",
-        token.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
-      ))
-    ) as E.Effect<Record<string, any>, DownloadTokenValidationError, never>
+    return E.sync(() => ({
+      id: token.id,
+      token: token.token,
+      documentId: token.documentId,
+      issuedTo: token.issuedTo,
+      expiresAt: token.expiresAt,
+      usedAt: O.getOrNull(token.usedAt),
+      createdAt: token.createdAt,
+      updatedAt: token.updatedAt
+    }))
   }
 
   /**
@@ -57,7 +57,16 @@ export class DownloadTokenDrizzleRepository {
    * Converts database row → domain entity using DownloadTokenEntity.create
    */
   private fromDbRow(row: DownloadTokenModel): E.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
-    return DownloadTokenEntity.create(row as any)
+    return DownloadTokenEntity.create({
+      id: row.id,
+      token: row.token,
+      documentId: row.documentId,
+      issuedTo: row.issuedTo,
+      expiresAt: row.expiresAt,
+      usedAt: row.usedAt ?? undefined,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt
+    })
   }
 
   // ========== Query Helpers ==========
@@ -127,6 +136,15 @@ export class DownloadTokenDrizzleRepository {
         .where(eq(downloadTokens.id, id))
         .limit(1)
     )
+  }
+
+  /**
+   * Fetch token by ID (alias for findById)
+   */
+  fetchById(
+    id: DownloadTokenId
+  ): E.Effect<O.Option<DownloadTokenEntity>, DatabaseError | DownloadTokenValidationError> {
+    return this.findById(id)
   }
 
   /**
@@ -336,5 +354,41 @@ export class DownloadTokenDrizzleRepository {
         return result.rowCount ?? 0
       })
     )
+  }
+
+  /**
+   * Insert a new download token
+   */
+  private insert(
+    token: DownloadTokenEntity
+  ): E.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
+    return pipe(
+      this.toDbSerialized(token),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.insert(downloadTokens).values(dbData as any),
+          catch: (error) => DownloadTokenValidationError.forField(
+            "downloadToken",
+            { tokenId: token.id },
+            error instanceof Error ? error.message : String(error)
+          )
+        })
+      ),
+      E.as(token)
+    ) as E.Effect<DownloadTokenEntity, DownloadTokenValidationError, never>
+  }
+
+  /**
+   * Save download token (insert if new, update if exists)
+   */
+  save(
+    token: DownloadTokenEntity
+  ): E.Effect<DownloadTokenEntity, DownloadTokenValidationError | DownloadTokenNotFoundError, never> {
+    return pipe(
+      this.exists(token.id),
+      E.flatMap((exists) =>
+        exists ? this.update(token) : this.insert(token)
+      )
+    ) as E.Effect<DownloadTokenEntity, DownloadTokenValidationError | DownloadTokenNotFoundError, never>
   }
 }

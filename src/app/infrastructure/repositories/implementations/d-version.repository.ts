@@ -41,16 +41,21 @@ export class DocumentVersionDrizzleRepository {
    * - Date objects preserved for database
    */
   private toDbSerialized(version: DocumentVersionEntity): E.Effect<Record<string, any>, DocumentVersionValidationError, never> {
-    return pipe(
-      version.serialized(),
-      E.mapError((err) => DocumentVersionValidationError.forField(
-        "documentVersion",
-        version.id,
-        err && typeof err === 'object' && 'message' in err
-          ? String(err.message)
-          : "Failed to serialize entity to database row"
-      ))
-    ) as E.Effect<Record<string, any>, DocumentVersionValidationError, never>
+    return E.sync(() => ({
+      id: version.id,
+      documentId: version.documentId,
+      version: version.version,
+      filename: version.filename,
+      mimeType: version.mimeType,
+      size: version.size,
+      storageKey: version.storageKey,
+      storageProvider: version.storageProvider,
+      checksum: O.getOrNull(version.checksum),
+      tags: O.getOrNull(version.tags),
+      metadata: O.getOrNull(version.metadata),
+      uploadedBy: version.uploadedBy,
+      createdAt: version.createdAt
+    }))
   }
 
   /**
@@ -59,7 +64,21 @@ export class DocumentVersionDrizzleRepository {
    * Converts database row → domain entity using DocumentVersionEntity.create
    */
   private fromDbRow(row: DocumentVersionModel): E.Effect<DocumentVersionEntity, DocumentVersionValidationError, never> {
-    return DocumentVersionEntity.create(row as any)
+    return DocumentVersionEntity.create({
+      id: row.id,
+      documentId: row.documentId,
+      version: row.version,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      size: row.size,
+      storageKey: row.storageKey,
+      storageProvider: row.storageProvider,
+      checksum: row.checksum ?? undefined,
+      tags: row.tags ?? undefined,
+      metadata: row.metadata ?? undefined,
+      uploadedBy: row.uploadedBy,
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt
+    })
   }
 
   // ========== Query Helpers ==========
@@ -255,6 +274,19 @@ export class DocumentVersionDrizzleRepository {
   }
 
   /**
+   * Fetch single version by checksum (returns Option)
+   */
+  fetchByChecksum(checksum: string): E.Effect<O.Option<DocumentVersionEntity>, DatabaseError | DocumentVersionValidationError> {
+    return this.fetchSingle(() =>
+      this.db
+        .select()
+        .from(documentVersions)
+        .where(eq(documentVersions.checksum, checksum))
+        .limit(1)
+    )
+  }
+
+  /**
    * Delete version by ID
    */
   delete(id: DocumentVersionId): E.Effect<boolean, DatabaseError> {
@@ -342,5 +374,72 @@ export class DocumentVersionDrizzleRepository {
         }
       })
     )
+  }
+
+  /**
+   * Insert a new document version
+   */
+  private insert(
+    version: DocumentVersionEntity
+  ): E.Effect<DocumentVersionEntity, DocumentVersionValidationError | DocumentVersionAlreadyExistsError, never> {
+    return pipe(
+      this.toDbSerialized(version),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.insert(documentVersions).values(dbData as any),
+          catch: (error) => {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            if (errorMsg.includes('unique') || errorMsg.includes('duplicate')) {
+              return DocumentVersionAlreadyExistsError.forField(
+                `documentId: ${version.documentId}, version: ${version.version}`,
+                { documentId: version.documentId, version: version.version }
+              )
+            }
+            return DocumentVersionValidationError.forField(
+              "documentVersion",
+              { versionId: version.id },
+              errorMsg
+            )
+          }
+        })
+      ),
+      E.as(version)
+    ) as E.Effect<DocumentVersionEntity, DocumentVersionValidationError | DocumentVersionAlreadyExistsError, never>
+  }
+
+  /**
+   * Update an existing document version
+   */
+  private update(
+    version: DocumentVersionEntity
+  ): E.Effect<DocumentVersionEntity, DocumentVersionValidationError, never> {
+    return pipe(
+      this.toDbSerialized(version),
+      E.flatMap((dbData) =>
+        E.tryPromise({
+          try: () => this.db.update(documentVersions).set(dbData as any).where(eq(documentVersions.id, version.id)),
+          catch: (error) => DocumentVersionValidationError.forField(
+            "documentVersion",
+            { versionId: version.id },
+            error instanceof Error ? error.message : String(error)
+          )
+        })
+      ),
+      E.as(version)
+    ) as E.Effect<DocumentVersionEntity, DocumentVersionValidationError, never>
+  }
+
+  /**
+   * Save document version (insert if new, update if exists)
+   */
+  save(
+    version: DocumentVersionEntity
+  ): E.Effect<DocumentVersionEntity, DocumentVersionValidationError | DocumentVersionAlreadyExistsError, never> {
+    return pipe(
+      this.exists(version.id),
+      E.flatMap((exists) =>
+        exists ? this.update(version) : this.insert(version)
+      )
+    ) as E.Effect<DocumentVersionEntity, DocumentVersionValidationError | DocumentVersionAlreadyExistsError, never>
   }
 }

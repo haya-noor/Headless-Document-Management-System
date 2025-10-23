@@ -40,6 +40,8 @@
     "mime-types": "^2.1.35",
     "pg": "^8.16.3",
     "postgres": "^3.4.3",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
   },

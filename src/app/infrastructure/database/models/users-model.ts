@@ -12,6 +12,7 @@ export const users = pgTable('users', {
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
   role: varchar('role', { length: 20 }).notNull().default('user'),
+  workspaceId: varchar('workspace_id', { length: 36 }),
   dateOfBirth: timestamp('date_of_birth'),
   phoneNumber: varchar('phone_number', { length: 20 }),
   profileImage: text('profile_image'),

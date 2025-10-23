@@ -34,6 +34,12 @@ export interface IStorageService {
     filename?: string
   ): Promise<PreSignedUrlResponse>;
 
+  createPresignedUrl(
+    key: string,
+    mimeType: string,
+    expiresIn?: number
+  ): Promise<PreSignedUrlResponse>;
+
   deleteFile(key: string): Promise<boolean>;
 
   fileExists(key: string): Promise<boolean>;

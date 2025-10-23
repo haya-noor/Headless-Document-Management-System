@@ -20,7 +20,7 @@ import { UserValidationError } from "@/app/domain/user/errors"
 
 // If you brand IDs elsewhere, keep this import; otherwise you can remove it.
 // It should return a UUID string compatible with the encoded schema.
-import { makeUserIdSync } from "@/app/domain/refined/uuid"
+import { makeUserIdSync, makeWorkspaceIdSync } from "@/app/domain/refined/uuid"
 
 // -----------------------------
 // helpers
@@ -61,6 +61,7 @@ const userGenerators = {
   },
   role: () => faker.helpers.arrayElement(["admin", "user"]) as "admin" | "user",
   isActive: () => faker.datatype.boolean(),
+  workspaceId: () => clamp(makeWorkspaceIdSync(faker.string.uuid()), 36),
   dateOfBirth: () =>
     iso(faker.date.birthdate({ min: 1970, max: 2005, mode: "year" })),
   phoneNumber: () => clamp(digits(20), 20),
@@ -84,6 +85,7 @@ export const generateTestUser = (
   const withPhone = faker.datatype.boolean()
   const withImage = faker.datatype.boolean()
   const withUpdated = faker.datatype.boolean()
+  const withWorkspace = faker.datatype.boolean()
 
   const base: SerializedUser = {
     id: userGenerators.id(),
@@ -94,9 +96,10 @@ export const generateTestUser = (
     role: userGenerators.role(),
     isActive: userGenerators.isActive(),
     createdAt: userGenerators.createdAt(),
-    updatedAt: withUpdated ? userGenerators.updatedAt() : undefined,
+    updatedAt: withUpdated ? userGenerators.updatedAt() : userGenerators.createdAt(),
     // optionals (present or omitted)
-    dateOfBirth: withDOB ? userGenerators.dateOfBirth() : undefined,
+    workspaceId: withWorkspace ? userGenerators.workspaceId() : undefined,
+    dateOfBirth: withDOB ? new Date(userGenerators.dateOfBirth()) : undefined,
     phoneNumber: withPhone ? userGenerators.phoneNumber() : undefined,
     profileImage: withImage ? userGenerators.profileImage() : undefined,
   }
@@ -138,7 +141,7 @@ export const createTestUserEntity = (
     E.mapError((err) => {
       const message =
         (err as Error)?.message ?? "Failed to create UserEntity"
-      return new UserValidationError("User", overrides, message)
+      return UserValidationError.forField("User", overrides, message)
     })
   )
 
@@ -178,6 +181,11 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
 
     isActive: fc.boolean(),
 
+    workspaceId: fc.oneof(
+      fc.constant(undefined),
+      fc.uuid()
+    ),
+
     dateOfBirth: fc.oneof(
       fc.constant(undefined),
       fc.date({ max: new Date() }).map((d) => d.toISOString())
@@ -199,12 +207,9 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
 
     createdAt: fc.date({ max: new Date() }).map((d) => d.toISOString()),
 
-    updatedAt: fc.oneof(
-      fc.constant(undefined),
-      fc.date({ max: new Date() }).map((d) => d.toISOString())
-    ),
+    updatedAt: fc.date({ max: new Date() }).map((d) => d.toISOString()),
   },
-  { requiredKeys: ["id", "email", "firstName", "lastName", "password", "role", "isActive", "createdAt"] }
+  { requiredKeys: ["id", "email", "firstName", "lastName", "password", "role", "isActive", "createdAt", "updatedAt"] }
 )
 
 export const UserFactory = {

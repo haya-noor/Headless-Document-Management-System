@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import { Effect, Option } from "effect";
 import { eq } from "drizzle-orm";
 
-import { DownloadTokenRepository } from "@/app/infrastructure/repositories/implementations/download-token-repository";
+import { DownloadTokenDrizzleRepository } from "@/app/infrastructure/repositories/implementations/download-token-repository";
 import {
   setupTestDatabase,
   cleanupDatabase,
@@ -51,7 +51,7 @@ describe("DownloadTokenRepository Integration Tests", () => {
 
   beforeAll(async () => {
     testDb = await setupTestDatabase();
-    tokenRepository = new DownloadTokenRepository(testDb.db);
+    tokenRepository = new DownloadTokenDrizzleRepository(testDb.db);
   });
 
   afterAll(async () => {

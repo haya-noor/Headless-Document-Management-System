@@ -40,18 +40,18 @@ export const generateTestDocument = (overrides: Partial<Document> = {}): Documen
   const withTags = faker.datatype.boolean()
 
   const createdAt = documentGenerators.createdAt()
-  const base: Document = {
+  const base = {
     id: documentGenerators.id(),
     ownerId: documentGenerators.ownerId(),
     title: documentGenerators.title(),
-    description: withDescription ? documentGenerators.description() : null,
-    tags: withTags ? documentGenerators.tags() : null,
+    description: withDescription ? documentGenerators.description() : undefined,
+    tags: withTags ? documentGenerators.tags() : undefined,
     currentVersionId: documentGenerators.currentVersionId(),
     createdAt,
     updatedAt: createdAt, // updatedAt is mandatory now, defaults to createdAt
   }
 
-  return { ...base, ...overrides }
+  return { ...base, ...overrides } as Document
 }
 
 /**
@@ -74,8 +74,8 @@ export const createMinimalDocument = (overrides: Partial<Document> = {}): Docume
   const createdAt = documentGenerators.createdAt()
   return {
     ...generateTestDocument(),
-    description: null,
-    tags: null,
+    description: undefined,
+    tags: undefined,
     createdAt,
     updatedAt: createdAt, // updatedAt is mandatory, defaults to createdAt
     ...overrides,
@@ -102,7 +102,7 @@ export const createTestDocumentEntity = (
   DocumentSchemaEntity.create(generateTestDocument(overrides)).pipe(
     E.mapError(
       (err) =>
-        new DocumentValidationError(
+        DocumentValidationError.forField(
           "Document",
           overrides,
           (err as Error).message || "Failed to create DocumentSchemaEntity"
