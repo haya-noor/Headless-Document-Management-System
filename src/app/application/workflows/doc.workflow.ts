@@ -67,11 +67,10 @@ export class DocumentWorkflow {
         S.decodeUnknown(DocumentId)(dto.id).pipe( E.flatMap((validId) =>
              // 3. Fetch document by ID
              this.documentRepository.findById(validId).pipe(E.flatMap((option) =>
-                 O.isNone(option)? E.fail(new DocumentNotFoundError({
-                         resource: "Document",
-                         id: String(dto.id),
-                         message: `Document with id '${dto.id}' not found`
-                       })
+                O.isNone(option)? E.fail(DocumentNotFoundError.forResource(
+                        "Document", 
+                        String(dto.id)
+                      )
                      ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError | DocumentNotFoundError, never>
                    : pipe(
                        option.value.serialized(),
@@ -110,9 +109,7 @@ export class DocumentWorkflow {
       E.flatMap((dto) =>
          this.documentRepository.findById(dto.documentId).pipe(
            E.flatMap((option) => O.isNone(option)? E.fail(
-                   new DocumentNotFoundError({resource: "Document", id: String(dto.documentId),
-                     message: `Document with id '${dto.documentId}' not found`
-                   })
+                   DocumentNotFoundError.forResource("Document", String(dto.documentId))
                  ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError | DocumentNotFoundError, never>
                : pipe(option.value.serialized(),E.flatMap((serialized: SerializedDocument) =>
                      DocumentSchemaEntity.create({
