@@ -314,13 +314,16 @@ export class UserDrizzleRepository {
    */
   save(
     user: UserEntity
-  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError, never> {
+  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError | DatabaseError, never> {
     return pipe(
       this.exists(user.id),
       E.flatMap((exists) =>
-        exists ? this.update(user) : this.insert(user)
+        E.if(exists, {
+          onTrue: () => this.update(user),
+          onFalse: () => this.insert(user)
+        })
       )
-    ) as E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError, never>
+    )
   }
 
   /**
