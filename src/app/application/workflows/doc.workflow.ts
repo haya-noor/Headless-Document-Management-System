@@ -55,10 +55,10 @@ export class DocumentWorkflow {
 
   updateDocument(
     input: UpdateDocumentDTOEncoded
-  ): E.Effect<
+  ):E.Effect<
     DocumentSchemaEntity,
     DocumentValidationError | DocumentNotFoundError | ParseResult.ParseError | ConflictError | DatabaseError
-  > {
+  >  {
     return pipe(
       // 1. Decode DTO
       S.decodeUnknown(UpdateDocumentDTOSchema)(input),
@@ -105,6 +105,7 @@ export class DocumentWorkflow {
     DocumentSchemaEntity,
     DocumentNotFoundError | DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError
   > {
+    // excessive nesting here (could be make better by using effect.match, use effect composition and control flow)
     return pipe(
       S.decodeUnknown(PublishDocumentDTOSchema)(input),
       E.flatMap((dto) =>
