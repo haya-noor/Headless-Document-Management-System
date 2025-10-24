@@ -12,19 +12,21 @@ import { Optional } from "@/app/domain/shared/validation.utils"
  * 
  * Controls access permissions: who (subject) can perform what (actions) on which resource.
  */
+export const AccessPolicyFields = S.Struct({
+  name: AccessPolicyGuards.ValidName,
+  description: AccessPolicyGuards.ValidDescription,
+  subjectType: S.Literal("user", "role"),
+  subjectId: UserId,
+  resourceType: S.Literal("document", "user"),
+  resourceId: Optional(DocumentId),
+  actions: AccessPolicyGuards.ValidActions,
+  isActive: S.Boolean,
+  priority: AccessPolicyGuards.ValidPriority
+});
+
 export const AccessPolicySchema = S.extend(
   BaseEntitySchema(AccessPolicyId),
-  S.Struct({
-    name: AccessPolicyGuards.ValidName,
-    description: AccessPolicyGuards.ValidDescription,
-    subjectType: S.Literal("user", "role"),
-    subjectId: UserId,
-    resourceType: S.Literal("document", "user"),
-    resourceId: Optional(DocumentId),
-    actions: AccessPolicyGuards.ValidActions,
-    isActive: S.Boolean,
-    priority: AccessPolicyGuards.ValidPriority
-  })
+  AccessPolicyFields
 )
 
 /**

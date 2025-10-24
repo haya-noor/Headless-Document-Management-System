@@ -10,8 +10,8 @@ export const UpdateDocumentDTOSchema = DocumentFields
   .pick("title", "description", "tags")
   // s.partialWithmeaning makes all picked fields optional
   .pipe(S.partialWith({ exact: true }))
-  // s.extend is used to extend the schema with the id field (adds id field as required with
-  // the optional fields from DocumentFields)
+  // s.extend is used to extend the schema with the id field (adds id field
+  //  as required with the optional fields from DocumentFields)
   .pipe(S.extend(S.Struct({ id: StringToUUID })));
 
 export type UpdateDocumentDTO = S.Schema.Type<typeof UpdateDocumentDTOSchema>;

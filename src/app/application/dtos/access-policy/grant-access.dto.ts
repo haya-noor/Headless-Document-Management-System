@@ -1,13 +1,13 @@
 import { Schema as S } from "effect"
 import { DocumentId, UserId } from "@/app/domain/refined/uuid"
-import { AccessPolicyGuards } from "@/app/domain/access-policy/guards"
+import { AccessPolicyFields } from "@/app/domain/access-policy/schema"
 
-export const GrantAccessDTOSchema = S.Struct({
-  documentId: DocumentId,
-  grantedTo: UserId,
-  grantedBy: UserId,
-  actions: AccessPolicyGuards.ValidActions,
-  priority: AccessPolicyGuards.ValidPriority
-})
+export const GrantAccessDTOSchema = AccessPolicyFields
+  .pick("actions", "priority")
+  .pipe(S.extend(S.Struct({
+    documentId: DocumentId,
+    grantedTo: UserId,
+    grantedBy: UserId
+  })))
 export type GrantAccessDTO = S.Schema.Type<typeof GrantAccessDTOSchema>
 export type GrantAccessDTOEncoded = S.Schema.Encoded<typeof GrantAccessDTOSchema>
