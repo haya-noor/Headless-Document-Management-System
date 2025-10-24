@@ -8,17 +8,3 @@ export const CreateDocumentDTOSchema = DocumentFields
   .pipe(S.extend(S.Struct({})))
 export type CreateDocumentDTO = S.Schema.Type<typeof CreateDocumentDTOSchema>
 export type CreateDocumentDTOEncoded = S.Schema.Encoded<typeof CreateDocumentDTOSchema>
-
-// entity 
-type document = {
-  ownerId: Uuid
-  title: string
-  description: O.Option<string> 
-  tags: string[]
-}
-type documentSerialized = {
-  ownerId: string
-  title: string
-  description: string | null | undefined
-  tags: string[]
-}
