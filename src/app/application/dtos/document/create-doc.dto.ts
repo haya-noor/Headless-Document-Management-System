@@ -1,12 +1,24 @@
-import { Schema as S } from "effect"
-import { DocumentGuards } from "@/app/domain/document/guards"
-import { StringToUUID } from "@/app/domain/refined/uuid"
+import { Schema as S, Effect , Option as O} from "effect"
+import { DocumentFields } from "@/app/domain/document/schema"
+import { StringToUUID, Uuid } from "@/app/domain/refined/uuid"
 
-export const CreateDocumentDTOSchema = S.Struct({
-  ownerId: StringToUUID,
-  title: DocumentGuards.ValidTitle,
-  description: S.optional(DocumentGuards.ValidDescription),
-  tags: S.optional(DocumentGuards.ValidTagList)
-})
+// pick and omit 
+export const CreateDocumentDTOSchema = DocumentFields
+  .pick("ownerId", "title", "description", "tags")
+  .pipe(S.extend(S.Struct({})))
 export type CreateDocumentDTO = S.Schema.Type<typeof CreateDocumentDTOSchema>
 export type CreateDocumentDTOEncoded = S.Schema.Encoded<typeof CreateDocumentDTOSchema>
+
+// entity 
+type document = {
+  ownerId: Uuid
+  title: string
+  description: O.Option<string> 
+  tags: string[]
+}
+type documentSerialized = {
+  ownerId: string
+  title: string
+  description: string | null | undefined
+  tags: string[]
+}

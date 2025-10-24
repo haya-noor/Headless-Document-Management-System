@@ -13,15 +13,17 @@ import { Optional } from "@/app/domain/shared/validation.utils"
  * Represents a secure, time-limited token for downloading documents.
  * Tokens can be used only once and expire after a specified time.
  */
+export const DownloadTokenFields = S.Struct({
+  token: DownloadTokenString,
+  documentId: DocumentId,
+  issuedTo: UserId,
+  expiresAt: S.DateFromSelf,
+  usedAt: Optional(S.DateFromSelf)
+});
+
 export const DownloadTokenSchema = S.extend(
   BaseEntitySchema(DownloadTokenId),
-  S.Struct({
-    token: DownloadTokenString,
-    documentId: DocumentId,
-    issuedTo: UserId,
-    expiresAt: S.DateFromSelf,
-    usedAt: Optional(S.DateFromSelf)
-  })
+  DownloadTokenFields
 )
 
 /**
