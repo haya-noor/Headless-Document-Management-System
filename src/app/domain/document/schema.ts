@@ -14,16 +14,33 @@ import { Optional } from "@/app/domain/shared/validation.utils"
  * and references the current DocumentVersion. The actual file content
  * and version-specific data are managed by DocumentVersionEntity.
  */
+
+
+// export const DocumentSchema = S.extend(
+//   BaseEntitySchema(DocumentId),
+//   S.Struct({
+//     ownerId: UserId,
+//     title: DocumentGuards.ValidTitle,
+//     description: Optional(DocumentGuards.ValidDescription),
+//     tags: Optional(DocumentGuards.ValidTagList),
+//     currentVersionId: DocumentVersionId
+//   })
+// )
+
+export const DocumentFields = S.Struct({
+  ownerId: UserId,
+  title: DocumentGuards.ValidTitle,
+  description: Optional(DocumentGuards.ValidDescription),
+  tags: Optional(DocumentGuards.ValidTagList),
+  currentVersionId: DocumentVersionId
+});
+
 export const DocumentSchema = S.extend(
   BaseEntitySchema(DocumentId),
-  S.Struct({
-    ownerId: UserId,
-    title: DocumentGuards.ValidTitle,
-    description: Optional(DocumentGuards.ValidDescription),
-    tags: Optional(DocumentGuards.ValidTagList),
-    currentVersionId: DocumentVersionId
-  })
-)
+  DocumentFields
+);
+
+
 
 /**
  * Runtime type with proper Option<T> handling for optional fields
@@ -35,6 +52,11 @@ export type DocumentType = S.Schema.Type<typeof DocumentSchema>
  * Optional fields are represented as T | undefined in serialized form
  */
 export type SerializedDocument = S.Schema.Encoded<typeof DocumentSchema>
+
+/**
+ * Alias for SerializedDocument (for convenience in tests and factories)
+ */
+export type Document = SerializedDocument
 
 /**
  * Smart constructor with validation

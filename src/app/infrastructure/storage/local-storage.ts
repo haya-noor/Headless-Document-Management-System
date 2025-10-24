@@ -23,7 +23,7 @@ export class LocalStorageService implements IStorageService {
 
   constructor() {
     // Create storage directory using config
-    this.storagePath = join(process.cwd(), storageConfig.local.storagePath, 'documents');
+    this.storagePath = join(process.cwd(), storageConfig.local!.storagePath, 'documents');
     this.ensureStorageDirectory();
   }
 
@@ -110,6 +110,36 @@ export class LocalStorageService implements IStorageService {
     } catch (error) {
       
       throw new Error(`Failed to generate download URL: ${error}`);
+    }
+  }
+
+  /**
+   * Create presigned URL for file upload
+   * For local storage, this returns an upload endpoint URL
+   * @param {string} key - Storage key
+   * @param {string} mimeType - MIME type of the file
+   * @param {number} expiresIn - URL expiration time in seconds
+   * @returns {Promise<PreSignedUrlResponse>} Presigned URL response
+   */
+  async createPresignedUrl(
+    key: string,
+    mimeType: string,
+    expiresIn: number = 3600 // 1 hour default
+  ): Promise<PreSignedUrlResponse> {
+    try {
+      // For local storage, we'll create an upload endpoint
+      // In future S3 implementation, this will generate pre-signed URLs
+      const baseUrl = `http://localhost:${serverConfig.port}`;
+      const uploadPath = `/api/v1/files/upload/${encodeURIComponent(key)}`;
+      const url = `${baseUrl}${uploadPath}?mimeType=${encodeURIComponent(mimeType)}`;
+
+      return {
+        url,
+        expiresAt: new Date(Date.now() + (expiresIn * 1000))
+      };
+    } catch (error) {
+      
+      throw new Error(`Failed to create presigned URL: ${error}`);
     }
   }
 

@@ -545,7 +545,7 @@ describe("UserRepository • Edge Cases", () => {
       email: "optional@example.com",
       phoneNumber: "+1234567890",
       profileImage: "https://example.com/avatar.jpg",
-      dateOfBirth: new Date("1990-01-01").toISOString(),
+      dateOfBirth: new Date("1990-01-01"),
     })
 
     const user = await TestRuntime.run(

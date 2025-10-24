@@ -1,6 +1,6 @@
 import { Effect, Option, Schema as S, ParseResult } from "effect"
 import { UserValidationError } from "./errors"
-import { UserId } from "@/app/domain/refined/uuid"
+import { UserId, WorkspaceId } from "@/app/domain/refined/uuid"
 import { BaseEntity } from "@/app/domain/shared/base.entity"
 import { UserSchema } from "./schema"
 import { serializeWith } from "@/app/domain/shared/schema.utils" 
@@ -22,6 +22,7 @@ export class UserEntity extends BaseEntity<UserId, UserValidationError> {
   readonly lastName!: string
   readonly role!: "admin" | "user"
   readonly isActive!: boolean
+  readonly workspaceId!: Option.Option<WorkspaceId>
   readonly dateOfBirth!: Option.Option<Date>
   readonly phoneNumber!: Option.Option<string>
   readonly profileImage!: Option.Option<string>
@@ -31,7 +32,15 @@ export class UserEntity extends BaseEntity<UserId, UserValidationError> {
   static create(input: SerializedUser): Effect.Effect<UserEntity, UserValidationError, never> {
     return S.decodeUnknown(UserSchema)(input).pipe(
       Effect.map((data) => new UserEntity(data)),
-      Effect.mapError(() => UserValidationError.forField("user", input, "Validation failed"))
+      Effect.mapError((error) => 
+        UserValidationError.forField(
+          "user",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
     ) as Effect.Effect<UserEntity, UserValidationError, never>
   }
 
@@ -53,6 +62,7 @@ export class UserEntity extends BaseEntity<UserId, UserValidationError> {
     this.lastName = data.lastName
     this.role = data.role
     this.isActive = data.isActive
+    this.workspaceId = Option.fromNullable(data.workspaceId)
     this.dateOfBirth = Option.fromNullable(data.dateOfBirth)
     this.phoneNumber = Option.fromNullable(data.phoneNumber)
     this.profileImage = Option.fromNullable(data.profileImage)
@@ -70,5 +80,66 @@ export class UserEntity extends BaseEntity<UserId, UserValidationError> {
    */
   serialized(): Effect.Effect<SerializedUser, ParseResult.ParseError> {
     return serializeWith(UserSchema, this as unknown as UserType)
+  }
+
+  // -----------------------------------------------------------------------------
+  // Domain Methods
+  // -----------------------------------------------------------------------------
+
+  get hasWorkspaceAssignment(): boolean {
+    return Option.isSome(this.workspaceId)
+  }
+
+  belongsToWorkspace(workspaceId: WorkspaceId): boolean {
+    return Option.match(this.workspaceId, {
+      onNone: () => false,
+      onSome: (id) => id === workspaceId
+    })
+  }
+
+  /**
+   * Assign user to a workspace
+   */
+  assignToWorkspace(
+    workspaceId: WorkspaceId
+  ): Effect.Effect<UserEntity, UserValidationError, never> {
+    return this.serialized().pipe(
+      Effect.flatMap((serialized) => 
+        UserEntity.create({
+          ...serialized,
+          workspaceId: workspaceId as WorkspaceId,
+          updatedAt: new Date()
+        })
+      ),
+      Effect.mapError(() =>
+        UserValidationError.forField(
+          "workspaceId",
+          workspaceId,
+          "Failed to assign user to workspace"
+        )
+      )
+    ) as Effect.Effect<UserEntity, UserValidationError, never>
+  }
+
+  /**
+   * Remove user from workspace
+   */
+  removeFromWorkspace(): Effect.Effect<UserEntity, UserValidationError, never> {
+    return this.serialized().pipe(
+      Effect.flatMap((serialized) =>
+        UserEntity.create({
+          ...serialized,
+          workspaceId: undefined,
+          updatedAt: new Date()
+        })
+      ),
+      Effect.mapError(() =>
+        UserValidationError.forField(
+          "workspaceId",
+          null,
+          "Failed to remove user from workspace"
+        )
+      )
+    ) as Effect.Effect<UserEntity, UserValidationError, never>
   }
 }

@@ -44,6 +44,23 @@ export type WorkspaceId = S.Schema.Type<typeof WorkspaceId>
 export const AccessPolicyId = makeIdSchema("AccessPolicyId")
 export type AccessPolicyId = S.Schema.Type<typeof AccessPolicyId>
 
+// --------------------
+// String to UUID Transformers (for DTOs)
+// --------------------
+/**
+ * Transforms string input to branded UserId
+ * Use in DTOs to accept string and validate/brand as UserId
+ */
+export const StringToUserId = UserId
+export const StringToDocumentId = DocumentId
+export const StringToDocumentVersionId = DocumentVersionId
+export const StringToDownloadTokenId = DownloadTokenId
+export const StringToWorkspaceId = WorkspaceId
+export const StringToAccessPolicyId = AccessPolicyId
+
+// Generic alias for any UUID
+export const StringToUUID = Uuid
+
 /**
  * Safe ID constructors
  * 

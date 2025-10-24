@@ -41,31 +41,28 @@ export class AccessPolicyDrizzleRepository {
    * - Option<T> → T | undefined
    * - Branded types → primitives
    * - Date objects preserved for database
-   * 
-   * Then transforms domain representation to DB format:
-   * - isActive: boolean (Domain) → 'Y'/'N' (DB)
    */
   private toDbSerialized(policy: AccessPolicyEntity): E.Effect<Record<string, any>, AccessPolicyValidationError, never> {
-    return pipe(
-      policy.serialized(),
-      E.map((serialized) => ({
-        ...serialized,
-        isActive: serialized.isActive ? 'Y' : 'N'
-      })),
-      E.mapError(() => AccessPolicyValidationError.forField(
-        "accessPolicy",
-        policy.id,
-        "Failed to serialize entity"
-      ))
-    ) as E.Effect<Record<string, any>, AccessPolicyValidationError, never>
+    return E.sync(() => ({
+      id: policy.id,
+      name: policy.name,
+      description: policy.description,
+      subjectType: policy.subjectType,
+      subjectId: policy.subjectId,
+      resourceType: policy.resourceType,
+      resourceId: O.getOrNull(policy.resourceId),
+      actions: policy.actions,
+      isActive: policy.isActive ? 'Y' : 'N',
+      priority: policy.priority,
+      createdAt: policy.createdAt,
+      updatedAt: policy.updatedAt
+    }))
   }
 
   /**
    * Deserialize database row to entity using Effect Schema
    *
    * Converts database row → domain entity using AccessPolicyEntity.create
-   * Transforms DB representation to domain model:
-   * - isActive: 'Y'/'N' (DB) → boolean (Domain)
    */
   private fromDbRow(row: AccessPolicyModel): E.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
     return AccessPolicyEntity.create({
@@ -79,8 +76,8 @@ export class AccessPolicyDrizzleRepository {
       actions: row.actions,
       isActive: row.isActive === 'Y',
       priority: row.priority,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt
+      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt
     })
   }
 
@@ -269,7 +266,10 @@ export class AccessPolicyDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.insert(accessPolicies).values(dbData as any),
-          catch: () => AccessPolicyValidationError.forField("accessPolicy", { policyId: policy.id }, "Insert failed")
+          catch: (error) => {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return AccessPolicyValidationError.forField("accessPolicy", { policyId: policy.id }, errorMsg)
+          }
         })
       ),
       E.as(policy)
@@ -288,14 +288,28 @@ export class AccessPolicyDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.update(accessPolicies).set(dbData as any).where(eq(accessPolicies.id, policy.id)),
-          catch: () => AccessPolicyValidationError.forField(
+          catch: (error) => AccessPolicyValidationError.forField(
             "accessPolicy",
             { policyId: policy.id },
-            "Update failed"
+            error instanceof Error ? error.message : String(error)
           )
         })
       ),
       E.as(policy)
+    ) as E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError, never>
+  }
+
+  /**
+   * Save policy (insert if new, update if exists)
+   */
+  save(
+    policy: AccessPolicyEntity
+  ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError, never> {
+    return pipe(
+      this.exists(policy.id),
+      E.flatMap((exists) =>
+        exists ? this.update(policy) : this.insert(policy)
+      )
     ) as E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError, never>
   }
 
@@ -320,4 +334,58 @@ export class AccessPolicyDrizzleRepository {
       )
     )
   }
+
+// add new policy
+add(
+  policy: AccessPolicyEntity
+): E.Effect<AccessPolicyEntity, AccessPolicyValidationError | AccessPolicyNotFoundError> {
+  return this.save(policy)
+}
+
+remove(
+  documentId: string,
+  revokedFrom: string
+): E.Effect<boolean, DatabaseError> {
+  return pipe(
+    E.tryPromise({
+      try: () =>
+        this.db
+          .delete(accessPolicies)
+          .where(
+            and(
+              eq(accessPolicies.resourceId, documentId),
+              eq(accessPolicies.subjectId, revokedFrom)
+            )
+          ),
+      catch: (error) =>
+        DatabaseError.forOperation("removeAccessPolicy", error)
+    }),
+    E.as(true)
+  )
+}
+
+hasPermission(
+  documentId: string,
+  userId: string,
+  action: string
+): E.Effect<boolean, DatabaseError> {
+  return pipe(
+    this.executeQuery(() =>
+      this.db
+        .select({ actions: accessPolicies.actions })
+        .from(accessPolicies)
+        .where(
+          and(
+            eq(accessPolicies.resourceId, documentId),
+            eq(accessPolicies.subjectId, userId),
+            eq(accessPolicies.isActive, "Y")
+          )
+        )
+    ),
+    E.map((results) =>
+      results.some((row) => row.actions.includes(action))
+    )
+  )
+}
+
 }

@@ -43,10 +43,9 @@ import {
 const runEffect = <T, E>(fx: Effect.Effect<T, E>): Promise<T> => Effect.runPromise(fx);
 const runEffectSync = <T, E>(fx: Effect.Effect<T, E>): T => Effect.runSync(fx);
 
-// Note: Most tests skipped - save() method not yet implemented in repository
-describe.skip("DownloadTokenRepository Integration Tests", () => {
+describe("DownloadTokenRepository Integration Tests", () => {
   let testDb: TestDatabase;
-  let tokenRepository: DownloadTokenDrizzleRepository;
+  let tokenRepository: DownloadTokenRepository;
   let testUserId: UserId;
   let testDocumentId: DocumentId;
 

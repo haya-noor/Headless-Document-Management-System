@@ -1,6 +1,6 @@
 import { Schema as S } from "effect";
 import { UserGuards } from "@/app/domain/user/guards";
-import { UserId } from "@/app/domain/refined/uuid";
+import { UserId, WorkspaceId } from "@/app/domain/refined/uuid";
 import { EmailAddress } from "@/app/domain/refined/email";
 import { HashedPassword } from "@/app/domain/refined/password";
 import { BaseEntitySchema } from "@/app/domain/shared/schema.utils";
@@ -24,6 +24,7 @@ export const UserSchema = S.extend(
     password: HashedPassword,
     role: S.Literal('admin', 'user'),
     isActive: S.Boolean,
+    workspaceId: Optional(WorkspaceId),
     dateOfBirth: Optional(S.DateFromSelf),
     phoneNumber: Optional(S.String.pipe(UserGuards.ValidPhoneNumber)),
     profileImage: Optional(S.String.pipe(UserGuards.ValidProfileImage))

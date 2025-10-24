@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Either } from "effect";
 import { eq, sql } from "drizzle-orm";
 
 import { DocumentVersionDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d-version.repository";
@@ -135,7 +135,10 @@ describe("DocumentVersionRepository Integration Tests", () => {
         .pipe(Effect.either, Effect.runPromise)
         .catch((err) => err);
 
-      expect(result).toBeInstanceOf(ConflictError);
+      expect(Either.isLeft(result)).toBe(true);
+      if (Either.isLeft(result)) {
+        expect(result.left).toBeInstanceOf(ConflictError);
+      }
     });
   });
 

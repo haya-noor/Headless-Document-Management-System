@@ -86,9 +86,10 @@ export const BaseEntityRowSchema = <A, I, R>(idSchema: S.Schema<A, I, R>) =>
  * }
  * ```
  */
-export const serializeWith = <A, I, R>(
-  schema: S.Schema<A, I, R>,
+export const serializeWith = <A, I>(
+  schema: S.Schema<A, I, never>,
   entity: A
-): Effect.Effect<I, ParseResult.ParseError> => {
+): Effect.Effect<S.Schema.Encoded<S.Schema<A, I, never>>, ParseResult.ParseError> => {
   return S.encode(schema)(entity)
 }
+

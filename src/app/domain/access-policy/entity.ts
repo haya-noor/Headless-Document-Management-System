@@ -54,7 +54,15 @@ export class AccessPolicyEntity extends BaseEntity<AccessPolicyId, AccessPolicyV
   static create(input: unknown): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
     return S.decodeUnknown(AccessPolicySchema)(input).pipe(
       Effect.map((data) => new AccessPolicyEntity(data)),
-      Effect.mapError(() => AccessPolicyValidationError.forField("accessPolicy", input, "Validation failed"))
+      Effect.mapError((error) => 
+        AccessPolicyValidationError.forField(
+          "AccessPolicy",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
     ) as Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never>
   }
 
@@ -70,5 +78,154 @@ export class AccessPolicyEntity extends BaseEntity<AccessPolicyId, AccessPolicyV
    */
   serialized(): Effect.Effect<SerializedAccessPolicy, ParseResult.ParseError> {
     return serializeWith(AccessPolicySchema, this as unknown as AccessPolicyType)
+  }
+
+  // ========== Domain Methods ==========
+
+  /**
+   * Check if this policy grants a specific action
+   */
+  grantsAction(action: "read" | "write" | "delete" | "manage"): boolean {
+    return this.actions.includes(action)
+  }
+
+  /**
+   * Check if this policy has higher priority than another
+   * Lower numbers = higher priority
+   */
+  hasHigherPriorityThan(other: AccessPolicyEntity): boolean {
+    return this.priority < other.priority
+  }
+
+  /**
+   * Check if this policy applies to a specific subject
+   */
+  appliesToSubject(subjectType: "user" | "role", subjectId: string): boolean {
+    return this.subjectType === subjectType && this.subjectId === subjectId
+  }
+
+  /**
+   * Check if this policy applies to a specific resource
+   */
+  appliesToResource(resourceType: "document" | "user", resourceId: string): boolean {
+    return this.resourceType === resourceType && Option.getOrNull(this.resourceId) === resourceId
+  }
+
+  /**
+   * Update the priority of this policy
+   * Returns a new entity with updated priority
+   */
+  updatePriority(newPriority: number): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return AccessPolicyEntity.create({
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      subjectType: this.subjectType,
+      subjectId: this.subjectId,
+      resourceType: this.resourceType,
+      resourceId: Option.getOrNull(this.resourceId),
+      actions: this.actions,
+      isActive: this.isActive,
+      priority: newPriority,
+      createdAt: this.createdAt instanceof Date ? this.createdAt.toISOString() : this.createdAt,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  /**
+   * Update the actions of this policy
+   * Returns a new entity with updated actions
+   */
+  updateActions(newActions: ("read" | "write" | "delete" | "manage")[]): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return AccessPolicyEntity.create({
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      subjectType: this.subjectType,
+      subjectId: this.subjectId,
+      resourceType: this.resourceType,
+      resourceId: Option.getOrNull(this.resourceId),
+      actions: newActions,
+      isActive: this.isActive,
+      priority: this.priority,
+      createdAt: this.createdAt instanceof Date ? this.createdAt.toISOString() : this.createdAt,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  /**
+   * Activate this policy
+   * Returns a new entity with isActive = true
+   */
+  activate(): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return AccessPolicyEntity.create({
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      subjectType: this.subjectType,
+      subjectId: this.subjectId,
+      resourceType: this.resourceType,
+      resourceId: Option.getOrNull(this.resourceId),
+      actions: this.actions,
+      isActive: true,
+      priority: this.priority,
+      createdAt: this.createdAt instanceof Date ? this.createdAt.toISOString() : this.createdAt,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  /**
+   * Deactivate this policy
+   * Returns a new entity with isActive = false
+   */
+  deactivate(): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError, never> {
+    return AccessPolicyEntity.create({
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      subjectType: this.subjectType,
+      subjectId: this.subjectId,
+      resourceType: this.resourceType,
+      resourceId: Option.getOrNull(this.resourceId),
+      actions: this.actions,
+      isActive: false,
+      priority: this.priority,
+      createdAt: this.createdAt instanceof Date ? this.createdAt.toISOString() : this.createdAt,
+      updatedAt: new Date().toISOString()
+    })
+  }
+
+  // ========== Computed Properties ==========
+
+  /**
+   * Check if this policy is active
+   */
+  get active(): boolean {
+    return this.isActive
+  }
+
+  /**
+   * Check if this policy has all permissions
+   */
+  get hasAllPermissions(): boolean {
+    return this.actions.length === 4 && 
+           this.actions.includes("read") && 
+           this.actions.includes("write") && 
+           this.actions.includes("delete") && 
+           this.actions.includes("manage")
+  }
+
+  /**
+   * Check if this policy is high priority (priority <= 50)
+   */
+  get isHighPriority(): boolean {
+    return this.priority <= 50
+  }
+
+  /**
+   * Check if this policy has been modified (updatedAt > createdAt)
+   */
+  get isModified(): boolean {
+    return this.updatedAt > this.createdAt
   }
 }

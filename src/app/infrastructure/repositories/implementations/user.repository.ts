@@ -36,22 +36,27 @@ export class UserDrizzleRepository {
   // ========== Serialization Helpers ==========
 
   /**
-   * Serialize entity to database format using Effect Schema
+   * Serialize entity to database format
    * 
-   * Uses entity's serialized() method which automatically handles:
-   * - Option<T> → T | undefined
-   * - Branded types → primitives
-   * - Date objects preserved for database
+   * Maps domain entity fields to database columns.
+   * Unwraps Option types to null for database storage.
    */
-  private toDbSerialized(user: UserEntity): E.Effect<Record<string, any>, UserValidationError, never> {
-    return pipe(
-      user.serialized(),
-      E.mapError(() => UserValidationError.forField(
-        "user",
-        user.id,
-        "Failed to serialize entity"
-      ))
-    ) as E.Effect<Record<string, any>, UserValidationError, never>
+  private toDbSerialized(user: UserEntity): E.Effect<UserModel, UserValidationError, never> {
+    return E.sync(() => ({
+      id: user.id,
+      email: user.email,
+      password: user.password,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      isActive: user.isActive,
+      workspaceId: O.getOrNull(user.workspaceId),
+      dateOfBirth: O.getOrNull(user.dateOfBirth),
+      phoneNumber: O.getOrNull(user.phoneNumber),
+      profileImage: O.getOrNull(user.profileImage),
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    }))
   }
 
   /**
@@ -69,6 +74,7 @@ export class UserDrizzleRepository {
       lastName: row.lastName,
       role: row.role as "admin" | "user",
       isActive: row.isActive,
+      workspaceId: row.workspaceId ?? undefined,
       dateOfBirth: row.dateOfBirth ?? undefined,
       phoneNumber: row.phoneNumber ?? undefined,
       profileImage: row.profileImage ?? undefined,
@@ -257,18 +263,6 @@ export class UserDrizzleRepository {
   }
 
   /**
-   * Save user (insert only)
-   * 
-   * Creates a new user in the database.
-   * For updates, use specific update methods (updateActiveStatus, updateRole, etc.)
-   */
-  save(
-    user: UserEntity
-  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError, never> {
-    return this.insert(user)
-  }
-
-  /**
    * Insert a new user
    */
   private insert(
@@ -280,11 +274,11 @@ export class UserDrizzleRepository {
         E.tryPromise({
           try: () => this.db.insert(users).values(dbData as any),
           catch: (error) => {
-            const errorMsg = String(error)
+            const errorMsg = error instanceof Error ? error.message : String(error)
             if (errorMsg.includes('unique') || errorMsg.includes('duplicate')) {
               return UserAlreadyExistsError.forField("email", user.email)
             }
-            return UserValidationError.forField("user", { userId: user.id }, "Insert failed")
+            return UserValidationError.forField("user", { userId: user.id }, errorMsg)
           }
         })
       ),
@@ -304,15 +298,32 @@ export class UserDrizzleRepository {
       E.flatMap((dbData) =>
         E.tryPromise({
           try: () => this.db.update(users).set(dbData as any).where(eq(users.id, user.id)),
-          catch: () => UserValidationError.forField(
+          catch: (error) => UserValidationError.forField(
             "user",
             { userId: user.id },
-            "Update failed"
+            error instanceof Error ? error.message : String(error)
           )
         })
       ),
       E.as(user)
     ) as E.Effect<UserEntity, UserValidationError | UserNotFoundError, never>
+  }
+
+  /**
+   * Save user (insert if new, update if exists)
+   */
+  save(
+    user: UserEntity
+  ): E.Effect<UserEntity, UserAlreadyExistsError | UserValidationError | UserNotFoundError | DatabaseError, never> {
+    return pipe(
+      this.exists(user.id),
+      E.flatMap((exists) =>
+        E.if(exists, {
+          onTrue: () => this.update(user),
+          onFalse: () => this.insert(user)
+        })
+      )
+    )
   }
 
   /**

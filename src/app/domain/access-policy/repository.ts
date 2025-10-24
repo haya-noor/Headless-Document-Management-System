@@ -37,6 +37,19 @@ export abstract class AccessPolicyRepository extends BaseRepository<
   /**
    * Find all policies for a specific user (subject)
    */
+
+  abstract add(
+    entity: AccessPolicyEntity
+  ): Effect.Effect<AccessPolicyEntity, AccessPolicyValidationError | ConflictError, never>;
+
+  abstract remove(
+    documentId: DocumentId, revokedFrom: UserId
+  ): Effect.Effect<boolean, AccessPolicyValidationError | ConflictError, never>;
+
+  abstract hasPermission(
+    documentId: DocumentId, userId: UserId, action: string
+  ): Effect.Effect<boolean, AccessPolicyValidationError>;
+
   abstract findBySubjectId(
     subjectId: UserId
   ): Effect.Effect<AccessPolicyEntity[], DatabaseError, never>

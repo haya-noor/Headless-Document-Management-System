@@ -45,10 +45,60 @@ export class DownloadTokenEntity extends BaseEntity<DownloadTokenId, DownloadTok
   static create(input: unknown): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
     return S.decodeUnknown(DownloadTokenSchema)(input).pipe(
       Effect.map((data) => new DownloadTokenEntity(data)),
-      Effect.mapError(() => DownloadTokenValidationError.forField("downloadToken", input, "Validation failed"))
+      Effect.mapError((error) => 
+        DownloadTokenValidationError.forField(
+          "DownloadToken",
+          input,
+          error && typeof error === 'object' && 'message' in error
+            ? (error as ParseResult.ParseError).message ?? "Validation failed"
+            : String(error)
+        )
+      )
     ) as Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never>
   }
 
+
+  /**
+   * Validate token usage for a specific user
+   * 
+   * Checks:
+   * - Token is not already used
+   * - Token is not expired
+   * - Token is issued to the correct user
+   * 
+   * @param userId - The user ID to validate against
+   * @returns Effect with the validated token entity
+   */
+  validateUsage(userId: UserId): Effect.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
+    // Check if token is already used
+    if (Option.isSome(this.usedAt)) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token has already been used"
+      ))
+    }
+    
+    // Check if token is expired
+    if (this.expiresAt < new Date()) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token has expired"
+      ))
+    }
+    
+    // Check if token is issued to the correct user
+    if (this.issuedTo !== userId) {
+      return Effect.fail(DownloadTokenValidationError.forField(
+        "DownloadToken",
+        { tokenId: this.id, userId },
+        "Token is not valid for this user"
+      ))
+    }
+    
+    return Effect.succeed(this)
+  }
 
   /**
    * Serialize entity using Effect Schema encoding
