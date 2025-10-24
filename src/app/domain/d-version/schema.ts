@@ -14,7 +14,7 @@ import { Optional } from "@/app/domain/shared/validation.utils"
  * 
  * Each version represents an immutable snapshot of a document's content at a point in time.
  */
-export const DocumentVersionSchema = S.Struct({
+export const DocumentVersionFields = S.Struct({
   id: DocumentVersionId,
   documentId: DocumentId,
   version: DocumentVersionGuards.ValidVersion,
@@ -28,7 +28,9 @@ export const DocumentVersionSchema = S.Struct({
   metadata: Optional(S.Record({ key: S.String, value: S.Unknown })),
   uploadedBy: UserId,
   createdAt: S.Date
-})
+});
+
+export const DocumentVersionSchema = DocumentVersionFields
 
 /**
  * Runtime type with proper Option<T> handling for optional fields
