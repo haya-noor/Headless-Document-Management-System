@@ -1,15 +1,11 @@
 import { Schema as S } from "effect"
 import { DocumentId, UserId } from "@/app/domain/refined/uuid"
-import { Sha256 } from "@/app/domain/refined/checksum"
+import { DocumentVersionFields } from "@/app/domain/d-version/schema"
 
-
-export const ConfirmUploadDTOSchema = S.Struct({
-  documentId: DocumentId,
-  userId: UserId,
-  checksum: Sha256,
-  storageKey: S.String,
-  mimeType: S.String,
-  size: S.Number
-})
+export const ConfirmUploadDTOSchema = DocumentVersionFields
+  .pick("documentId", "checksum", "storageKey", "mimeType", "size")
+  .pipe(S.extend(S.Struct({
+    userId: UserId
+  })))
 export type ConfirmUploadDTO = S.Schema.Type<typeof ConfirmUploadDTOSchema>
 export type ConfirmUploadDTOEncoded = S.Schema.Encoded<typeof ConfirmUploadDTOSchema>
