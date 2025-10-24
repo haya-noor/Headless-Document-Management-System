@@ -51,7 +51,7 @@ export class UploadWorkflow {
       S.decodeUnknown(ConfirmUploadDTOSchema)(input),
       // check if file data already exists in storage
       E.flatMap((dto) =>
-        this.versionRepo.fetchByChecksum(dto.checksum).pipe(
+        this.versionRepo.fetchByChecksum(dto.checksum as string).pipe(
           // if exists, return an error(prevents duplicate uploads)
           E.flatMap(O.match({
             onSome: () => E.fail(DocumentVersionAlreadyExistsError.forField("checksum", dto.checksum)),
