@@ -7,7 +7,6 @@
 // Base entity and serialization
 export {
   BaseEntity,
-  IEntity,
   type SerializedEntity,
 } from "./base.entity"
 
@@ -34,31 +33,31 @@ export {
 } from "./base.errors"
 
 // Pagination
-export {
-  PaginationParams,
-  PaginatedResponse,
-  PaginationOptions,
-  calculateOffset,
-  calculateTotalPages,
-  hasNextPage,
-  hasPreviousPage,
-  createPaginationMeta,
-  buildPaginatedResponse,
-  withPaginationCount,
-  validatePaginationParams,
-  DEFAULT_PAGINATION,
-  withDefaults,
-  Paginator,
-  type Cursor,
-  type CursorPaginated,
-  encodeCursor,
-  decodeCursor,
-} from "./pagination"
+// export {
+//   PaginationParams,
+//   PaginatedResponse,
+//   PaginationOptions,
+//   calculateOffset,
+//   calculateTotalPages,
+//   hasNextPage,
+//   hasPreviousPage,
+//   createPaginationMeta,
+//   buildPaginatedResponse,
+//   withPaginationCount,
+//   validatePaginationParams,
+//   DEFAULT_PAGINATION,
+//   withDefaults,
+//   Paginator,
+//   type Cursor,
+//   type CursorPaginated,
+//   encodeCursor,
+//   decodeCursor,
+// } from "./pagination"
 
 // API interfaces
-export {
-  ApiResponse,
-} from "./api.interface"
+// export {
+//   ApiResponse,
+// } from "./api.interface"
 
 // Base repository
 export {

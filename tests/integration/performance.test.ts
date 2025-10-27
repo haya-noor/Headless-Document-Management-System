@@ -15,12 +15,12 @@ import {
   cleanupDatabase,
   createTestUser,
   type TestDatabase,
-} from "./setup/database.setup"
+} from "../setup/database.setup"
 
 import { DocumentVersionDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d-version.repository"
 import { DocumentDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d.repository"
-import { createTestDocumentVersionEntity } from "./factories/d-version.factory-test"
-import { createTestDocumentEntity } from "./factories/document.factory-test"
+import { createTestDocumentVersionEntity } from "../factories/domain-factory/d-version.factory-test"
+import { createTestDocumentEntity } from "../factories/domain-factory/document.factory-test"
 import { Effect, Option } from "effect"
 import type { DocumentId, DocumentVersionId, UserId } from "@/app/domain/refined/uuid"
 import type { Sha256 } from "@/app/domain/refined/checksum"
@@ -67,7 +67,7 @@ describe("Performance: Index Usage Verification", () => {
           ownerId: owner.id,
           title: "Performance Test Doc",
           currentVersionId: vId,
-          createdAt: new Date(),
+          createdAt: new Date().toISOString(),
         })
       )
       const doc = await runEffect(documentRepo.save(docEntity))
@@ -116,7 +116,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Checksum Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -145,7 +145,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Active Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -174,7 +174,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Timeline Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -262,7 +262,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Perf Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -291,7 +291,7 @@ describe("Performance: Index Usage Verification", () => {
           ownerId: owner.id,
           title: "Version Ordering",
           currentVersionId: vId,
-          createdAt: new Date(),
+          createdAt: new Date().toISOString(),
         })
       )
       const doc = await runEffect(documentRepo.save(docEntity))
@@ -338,7 +338,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Doc ${d}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         const doc = await runEffect(documentRepo.save(docEntity))
@@ -386,7 +386,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Timeline Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         const doc = await runEffect(documentRepo.save(docEntity))
@@ -433,7 +433,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Document ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -463,7 +463,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))
@@ -492,7 +492,7 @@ describe("Performance: Index Usage Verification", () => {
             ownerId: owner.id,
             title: `S3 Doc ${i}`,
             currentVersionId: vId,
-            createdAt: new Date(),
+            createdAt: new Date().toISOString(),
           })
         )
         await runEffect(documentRepo.save(docEntity))

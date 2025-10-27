@@ -11,7 +11,7 @@
  */
 
 import { Effect as E, Option as O } from "effect"
-import { faker } from "../setup"
+import { faker } from "../../setup"
 import * as fc from "fast-check"
 import { randomBytes } from "crypto"
 import { DownloadTokenEntity } from "@/app/domain/download-token/entity"

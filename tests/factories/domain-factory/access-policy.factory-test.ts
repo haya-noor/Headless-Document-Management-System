@@ -6,7 +6,7 @@
  */
 
 import { Effect as E } from "effect"
-import { faker } from "../setup"
+import { faker } from "../../setup"
 import * as fc from "fast-check"
 import { AccessPolicyEntity, type SerializedAccessPolicy } from "@/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
@@ -80,14 +80,13 @@ export const createAccessPolicyEntity = (
   AccessPolicyEntity.create(generateAccessPolicy(overrides)).pipe(
     E.mapError(
       (err) =>
-        new AccessPolicyValidationError(
-          "AccessPolicy",
-          overrides,
-          (err as Error).message || "Failed to create AccessPolicyEntity"
-        )
+        new AccessPolicyValidationError({
+          field: "AccessPolicy",
+          value: overrides,
+          message: (err as Error).message || "Failed to create AccessPolicyEntity"
+        })
+      )
     )
-  )
-
 /**
  * Predefined Scenarios
  */

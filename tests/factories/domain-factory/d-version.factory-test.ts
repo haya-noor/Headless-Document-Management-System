@@ -6,7 +6,7 @@
  */
 
 import { Effect as E, Option as O } from "effect"
-import { faker } from "../setup"
+import { faker } from "../../setup"
 import * as fc from "fast-check"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionValidationError } from "@/app/domain/d-version/errors"

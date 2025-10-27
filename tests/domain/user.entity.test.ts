@@ -11,7 +11,7 @@ import {
   generateTestUser,
   createTestUserEntity,
   userArbitrary,
-} from "../factories/user.factory-test"
+} from "../factories/domain-factory/user.factory-test"
 
 import { UserEntity } from "@/app/domain/user/entity"
 import { UserValidationError } from "@/app/domain/user/errors"
@@ -88,7 +88,8 @@ describe("UserEntity • getters & helpers", () => {
 
     const user = await runEffect(
       createTestUserEntity({
-        dateOfBirth: dob,
+        //dateOfBirth: dob,
+        dateOfBirth: new Date(dob),
         phoneNumber: phone,
         profileImage: img,
       })
@@ -102,8 +103,11 @@ describe("UserEntity • getters & helpers", () => {
   it("isActive() mirrors the entity state", async () => {
     const active = await runEffect(createTestUserEntity({ isActive: true }))
     const inactive = await runEffect(createTestUserEntity({ isActive: false }))
-    expect(active.isActive()).toBe(true)
-    expect(inactive.isActive()).toBe(false)
+   // expect(active.isActive()).toBe(true)
+   // expect(inactive.isActive()).toBe(false)
+    expect(active.isActive).toBe(true)
+    expect(inactive.isActive).toBe(false)
+
   })
 })
 

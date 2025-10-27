@@ -13,7 +13,7 @@
 import { Effect as E } from "effect"
 import * as fc from "fast-check"
 import crypto from "crypto"
-import { faker } from "../setup"
+import { faker } from "../../setup"
 
 import { UserEntity, type SerializedUser } from "@/app/domain/user/entity"
 import { UserValidationError } from "@/app/domain/user/errors"
@@ -162,55 +162,51 @@ export const userArbitrary: fc.Arbitrary<SerializedUser> = fc.record(
 
     email: fc.emailAddress(),
 
-    firstName: fc
-      .string({ minLength: 1, maxLength: 100 })
-      .map((s) => clamp(s, 100)),
-
-    lastName: fc
-      .string({ minLength: 1, maxLength: 100 })
-      .map((s) => clamp(s, 100)),
+    firstName: fc.string({ minLength: 1, maxLength: 100 }),
+    lastName: fc.string({ minLength: 1, maxLength: 100 }),
 
     password: fc.string({ minLength: 50, maxLength: 200 }).map(() => {
-      // Generate valid hashed password format for property-based testing
       const salt = Buffer.from(crypto.randomBytes(16)).toString('base64')
       const hash = Buffer.from(crypto.randomBytes(64)).toString('base64')
       return `scrypt:N=16384,r=8,p=1:${salt}:${hash}`
     }),
 
     role: fc.constantFrom("admin", "user"),
-
     isActive: fc.boolean(),
 
-    workspaceId: fc.oneof(
-      fc.constant(undefined),
-      fc.uuid()
-    ),
+    workspaceId: fc.oneof(fc.constant(undefined), fc.uuid()),
 
-    dateOfBirth: fc.oneof(
-      fc.constant(undefined),
-      fc.date({ max: new Date() }).map((d) => d.toISOString())
-    ),
+    // stays as Date because domain expects Date | undefined
+    dateOfBirth: fc.oneof(fc.constant(undefined), fc.date({ max: new Date() })),
 
-    // Keep phone within <= 20 when defined (use printable chars or digits as you prefer)
-    phoneNumber: fc.oneof(
-      fc.constant(undefined),
-      fc.string({ minLength: 1, maxLength: 20 })
-    ),
+    // string or undefined (no change)
+    phoneNumber: fc.oneof(fc.constant(undefined), fc.string({ minLength: 1, maxLength: 20 })),
 
-    // Keep profile image <= 500 when defined
     profileImage: fc.oneof(
       fc.constant(undefined),
-      fc
-        .string({ minLength: 1, maxLength: 500 })
-        .map((s) => clamp(s, 500))
+      fc.string({ minLength: 1, maxLength: 500 })
     ),
 
+    // ISO strings (string, not Date)
     createdAt: fc.date({ max: new Date() }).map((d) => d.toISOString()),
-
-    updatedAt: fc.date({ max: new Date() }).map((d) => d.toISOString()),
+    updatedAt: fc.date({ max: new Date() }).map((d) => d.toISOString())
   },
-  { requiredKeys: ["id", "email", "firstName", "lastName", "password", "role", "isActive", "createdAt", "updatedAt"] }
-)
+  {
+    requiredKeys: [
+      "id",
+      "email",
+      "firstName",
+      "lastName",
+      "password",
+      "role",
+      "isActive",
+      "createdAt",
+      "updatedAt"
+    ]
+  }
+);
+
+
 
 export const UserFactory = {
   one: generateTestUser,

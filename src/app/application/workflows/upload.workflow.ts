@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { Effect as E, Option as O, pipe, Schema as S } from "effect"
+import crypto from "crypto"
 import { InitiateUploadDTOSchema, InitiateUploadDTOEncoded } from "@/app/application/dtos/upload/initiate-upload.dto"
 import { ConfirmUploadDTOSchema, ConfirmUploadDTOEncoded } from "@/app/application/dtos/upload/confirm-upload.dto"
 import { DocumentVersionRepository } from "@/app/domain/d-version/repository"
@@ -58,12 +59,17 @@ export class UploadWorkflow {
             // if not exists, create a new version entity and save it to the repository
             onNone: () =>
               DocumentVersionEntity.create({
+                id: crypto.randomUUID(),
                 documentId: dto.documentId,
+                version: 1, // Start with version 1
+                filename: dto.storageKey.split('/').pop() || 'unknown',
                 checksum: dto.checksum,
                 storageKey: dto.storageKey,
+                storageProvider: "local",
                 mimeType: dto.mimeType,
                 size: dto.size,
-                createdAt: new Date()
+                uploadedBy: dto.userId,
+                createdAt: new Date().toISOString()
               }).pipe(E.flatMap((v) => this.versionRepo.save(v)))
           }))
         )
