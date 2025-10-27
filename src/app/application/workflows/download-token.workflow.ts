@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { Effect as E, pipe, Schema as S, Option as O } from "effect"
+import crypto from "crypto"
 import { TOKENS } from "@/app/infrastructure/di/container"
 import { DownloadTokenRepository } from "@/app/domain/download-token/repository"
 import { CreateDownloadTokenDTOSchema, CreateDownloadTokenDTOEncoded } from "@/app/application/dtos/download-token/create-token.dto"
@@ -21,11 +22,21 @@ export class DownloadTokenWorkflow {
   createToken(input: CreateDownloadTokenDTOEncoded) {
     return pipe(
       S.decodeUnknown(CreateDownloadTokenDTOSchema)(input),
-      E.flatMap((dto) =>
-        DownloadTokenEntity.create(dto).pipe(
+      E.flatMap((dto) => {
+        const now = new Date().toISOString();
+        const tokenData = {
+          id: crypto.randomUUID(),
+          token: crypto.randomBytes(32).toString('hex'),
+          documentId: dto.documentId,
+          issuedTo: dto.issuedTo,
+          expiresAt: dto.expiresAt instanceof Date ? dto.expiresAt : new Date(dto.expiresAt),
+          createdAt: now,
+          updatedAt: now
+        };
+        return DownloadTokenEntity.create(tokenData).pipe(
           E.flatMap((token) => this.tokenRepo.save(token))
-        )
-      )
+        );
+      })
     )
   }
 

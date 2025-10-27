@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { DateTime, Effect as E, Effect, Option as O, pipe, Schema as S, ParseResult } from "effect"
+import crypto from "crypto"
 
 import { DocumentSchema, SerializedDocument } from "@/app/domain/document/schema"
 import { DocumentRepository } from "@/app/domain/document/repository"
@@ -30,11 +31,15 @@ export class DocumentWorkflow {
     // toISOString is used to convert the date to a string, becasue all domain treat 
     // dates as strings e.g createdAt and updatedAt are strings in the domain because of the database
     const now = new Date().toISOString() 
+    const { description, ...rest } = input
     return {
-      ...input,
+      ...rest,
+      id: input.id ?? crypto.randomUUID(),
+      currentVersionId: input.currentVersionId ?? crypto.randomUUID(),
       createdAt: input.createdAt ?? now,
       updatedAt: now,
-      tags: input.tags ?? []
+      tags: input.tags ?? [],
+      description: description ?? undefined
     } as SerializedDocument
   }
 
@@ -115,15 +120,23 @@ export class DocumentWorkflow {
                      message: `Document with id '${dto.documentId}' not found`
                    })
                  ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError | DocumentNotFoundError, never>
-               : pipe(option.value.serialized(),E.flatMap((serialized: SerializedDocument) =>
-                     DocumentSchemaEntity.create({
-                       ...serialized,
-                       status: "published",
-                       updatedAt: new Date().toISOString()
-                     })
-                   ),
-                   E.flatMap((updated) => this.documentRepository.save(updated))
-                 )
+              : pipe(E.sync(() => {
+                  const doc = option.value;
+                  return {
+                    id: doc.id,
+                    ownerId: doc.ownerId,
+                    title: doc.title,
+                    description: O.getOrUndefined(doc.description),
+                    tags: O.getOrUndefined(doc.tags),
+                    currentVersionId: doc.currentVersionId,
+                    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+                    updatedAt: new Date().toISOString(),
+                    status: "published"
+                  } as SerializedDocument;
+                }),
+                E.flatMap((serialized) => DocumentSchemaEntity.create(serialized)),
+                E.flatMap((updated) => this.documentRepository.save(updated))
+              )
            ))
         )
       )
