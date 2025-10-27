@@ -11,7 +11,7 @@ import { Effect, Option, pipe, Schema as S } from "effect"
 
 import { AccessPolicyDrizzleRepository } from "@/app/infrastructure/repositories/implementations/access-policy.repository"
 import { setupTestDatabase, teardownTestDatabase, cleanupDatabase } from "../setup/database.setup"
-import { createTestUserEntity } from "../factories/user.factory-test"
+import { createTestUserEntity } from "../factories/domain-factory/user.factory-test"
 import { createTestDocumentEntity } from "../factories/document.factory-test"
 import {
   createAccessPolicyEntity,

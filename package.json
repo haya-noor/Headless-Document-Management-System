@@ -9,6 +9,7 @@
     "db:studio": "bun x drizzle-kit studio",
     "test": "bun test",
     "test:all": "bun test tests/",
+    "test:integration": "bun test tests/integration",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix"
   },
@@ -39,6 +40,7 @@
     "jsonwebtoken": "^9.0.2",
     "mime-types": "^2.1.35",
     "pg": "^8.16.3",
+    "pino": "^10.1.0",
     "postgres": "^3.4.3",
     "reflect-metadata": "^0.2.2",
     "tsyringe": "^4.10.0",

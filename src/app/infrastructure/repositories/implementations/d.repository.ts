@@ -81,9 +81,9 @@ export class DocumentDrizzleRepository {
       id: row.id,
       ownerId: row.uploadedBy ?? row.id,  // DB uploadedBy -> Domain ownerId
       title: row.filename,  // DB filename -> Domain title
-      description: null,
+      description: undefined,  // TODO: Add description column to database
       tags: row.tags,
-      currentVersionId: `${row.id}-v${row.currentVersion}`,  // Generate version ID
+      currentVersionId: row.id,  // Use document ID as currentVersionId for now
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt
     }

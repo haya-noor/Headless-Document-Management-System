@@ -1,6 +1,7 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { Effect as E, pipe, Schema as S } from "effect"
+import crypto from "crypto"
 import { TOKENS } from "@/app/infrastructure/di/container"
 import { AccessPolicyRepository } from "@/app/domain/access-policy/repository"
 import { GrantAccessDTOSchema, GrantAccessDTOEncoded } from "@/app/application/dtos/access-policy/grant-access.dto"
@@ -48,9 +49,26 @@ export class AccessPolicyWorkflow {
   grantAccess(input: GrantAccessDTOEncoded) {
     return pipe(
       S.decodeUnknown(GrantAccessDTOSchema)(input),
-      E.flatMap((dto) =>
-        AccessPolicyEntity.create(dto).pipe(E.flatMap((policy) => this.accessRepo.save(policy)))
-      )
+      E.flatMap((dto) => {
+        const now = new Date().toISOString();
+        const policyData = {
+          id: crypto.randomUUID(),
+          name: `Access to document ${dto.documentId}`,
+          description: `Granted by ${dto.grantedBy} to ${dto.grantedTo}`,
+          subjectType: "user" as const,
+          subjectId: dto.grantedTo,
+          resourceType: "document" as const,
+          resourceId: dto.documentId,
+          actions: dto.actions,
+          isActive: true,
+          priority: dto.priority,
+          createdAt: now,
+          updatedAt: now
+        };
+        return AccessPolicyEntity.create(policyData).pipe(
+          E.flatMap((policy) => this.accessRepo.save(policy))
+        );
+      })
     )
   }
 
