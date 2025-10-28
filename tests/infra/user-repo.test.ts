@@ -17,7 +17,7 @@ import {
   createAdminUser,
   createRegularUser,
   createInactiveUser,
-} from "../factories/user.factory-test"
+} from "../factories/domain-factory/user.factory-test"
 import { UserEntity } from "@/app/domain/user/entity"
 import { DatabaseError, ValidationError } from "@/app/domain/shared/base.errors"
 import { UserAlreadyExistsError } from "@/app/domain/user/errors"

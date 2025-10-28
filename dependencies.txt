@@ -1,0 +1,69 @@
+
+   cp env.example .env
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   bun install
+   ```
+
+3. **Start the server:**
+   ```bash
+   bun run src/index.ts
+   ```
+
+4. **Access the API:**
+   - **API Documentation:** http://localhost:3000/swagger
+   - **Health Check:** http://localhost:3000/health
+   - **API Endpoints:** http://localhost:3000/api/v1/
+
+### **Example API Usage:**
+
+```bash
+# Create document (requires JWT token)
+curl -X POST http://localhost:3000/api/v1/documents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "My Document", "description": "Test document"}'
+
+# Get documents
+curl -X GET http://localhost:3000/api/v1/documents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+Your project now has a **complete, production-ready HTTP API**
+with proper authentication, access control, logging, and 
+audit trails! 🚀
+
+
+start the server
+   bun run src/index.ts
+
+
+Access the API:
+API Documentation: http://localhost:3000/swagger
+Health Check: http://localhost:3000/health
+API Endpoints: http://localhost:3000/api/v1/
+
+
+Example API Usage:
+# Create document (requires JWT token)
+curl -X POST http://localhost:3000/api/v1/documents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "My Document", "description": "Test document"}'
+
+# Get documents
+curl -X GET http://localhost:3000/api/v1/documents \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+
+Available endpoints:
+POST /api/v1/documents - Create document
+GET /api/v1/documents/:id - Get document by ID
+PUT /api/v1/documents/:id - Update document
+POST /api/v1/documents/:id/publish - Publish document
+GET /api/v1/documents - Query documents
+POST /api/v1/access-policy/grant - Grant access
+POST /api/v1/access-policy/revoke - Revoke access
+POST /api/v1/access-policy/check - Check access

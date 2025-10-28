@@ -16,11 +16,17 @@ npm test tests/infra/storage.test.ts
 npm test tests/infra/d-token-repo.test.ts
 npm test tests/infra/access-policy-repo.test.ts
 
-# Run E2E tests
-npm test tests/document.e2e.test.ts
 
 # Run Document workflow test (document create -> upload -> publish -> grant access 
 -> validate if published  -> token generation -> download)
-bun test tests/integration/document.workflow.test.ts
+
+docker compose up -d
+bun run db:migrate
+npm test ./tests/integration/doc.workflow.test.ts
+
+npm test ./tests/integration/document.e2e.test.ts
+
+npm test ./tests/integration/performance.test.ts
+
 
 

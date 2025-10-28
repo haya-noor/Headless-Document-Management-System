@@ -9,6 +9,7 @@
     "db:studio": "bun x drizzle-kit studio",
     "test": "bun test",
     "test:all": "bun test tests/",
+    "test:integration": "bun test tests/integration",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix"
   },
@@ -24,6 +25,7 @@
   "dependencies": {
     "@effect/core": "^0.0.16",
     "@effect/io": "^0.41.2",
+    "@effect/rpc": "^0.71.1",
     "@effect/schema": "^0.75.5",
     "@elysiajs/cookie": "^0.8.0",
     "@elysiajs/cors": "^1.4.0",
@@ -39,6 +41,7 @@
     "jsonwebtoken": "^9.0.2",
     "mime-types": "^2.1.35",
     "pg": "^8.16.3",
+    "pino": "^10.1.0",
     "postgres": "^3.4.3",
     "reflect-metadata": "^0.2.2",
     "tsyringe": "^4.10.0",

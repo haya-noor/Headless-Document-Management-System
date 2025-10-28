@@ -1,5 +1,5 @@
 import { DocumentFields } from "@/app/domain/document/schema"
-import { PaginationOptions } from "@/app/domain/shared"
+import { PaginationOptions } from "@/app/domain/shared/pagination"
 import { Schema as S } from "effect"
 
 /*
