@@ -24,9 +24,9 @@ docker compose up -d
 bun run db:migrate
 npm test ./tests/integration/doc.workflow.test.ts
 
-npm test tests/document.e2e.test.ts
+npm test ./tests/integration/document.e2e.test.ts
 
-npm test tests/performance.test.ts
+npm test ./tests/integration/performance.test.ts
 
 
 

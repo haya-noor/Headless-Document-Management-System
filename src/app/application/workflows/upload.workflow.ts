@@ -6,10 +6,11 @@ import { InitiateUploadDTOSchema, InitiateUploadDTOEncoded } from "@/app/applica
 import { ConfirmUploadDTOSchema, ConfirmUploadDTOEncoded } from "@/app/application/dtos/upload/confirm-upload.dto"
 import { DocumentVersionRepository } from "@/app/domain/d-version/repository"
 import { StorageServiceFactory } from "@/app/infrastructure/storage/storage.factory"
-import { TOKENS } from "@/app/infrastructure/di/container"
+import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { DocumentRepository } from "@/app/domain/document/repository"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionAlreadyExistsError } from "@/app/domain/d-version/errors"
+import { UserContext } from "@/app/presentation/http/middleware/auth.middleware"
 
 @injectable()
 export class UploadWorkflow {
@@ -27,7 +28,7 @@ export class UploadWorkflow {
    * download a file from storage without neddeding authentication, it expires after a
    *  certain time)
    */
-  initiateUpload(input: InitiateUploadDTOEncoded) {
+  initiateUpload(input: InitiateUploadDTOEncoded, user: UserContext) {
     return pipe(
       S.decodeUnknown(InitiateUploadDTOSchema)(input),
       E.flatMap((dto) =>
@@ -46,7 +47,7 @@ export class UploadWorkflow {
    * fetchByChecksum: fetches a version by its checksum(a unique identifier for the version)
    * doesn't allow duplicate versions to be created 
    */
-  confirmUpload(input: ConfirmUploadDTOEncoded) {
+  confirmUpload(input: ConfirmUploadDTOEncoded, user: UserContext) {
     return pipe(
       // validate incoming data against the schema
       S.decodeUnknown(ConfirmUploadDTOSchema)(input),
