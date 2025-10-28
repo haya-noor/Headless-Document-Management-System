@@ -1,14 +1,16 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { Effect as E, Option as O, pipe, Schema as S } from "effect"
+import crypto from "crypto"
 import { InitiateUploadDTOSchema, InitiateUploadDTOEncoded } from "@/app/application/dtos/upload/initiate-upload.dto"
 import { ConfirmUploadDTOSchema, ConfirmUploadDTOEncoded } from "@/app/application/dtos/upload/confirm-upload.dto"
 import { DocumentVersionRepository } from "@/app/domain/d-version/repository"
 import { StorageServiceFactory } from "@/app/infrastructure/storage/storage.factory"
-import { TOKENS } from "@/app/infrastructure/di/container"
+import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { DocumentRepository } from "@/app/domain/document/repository"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionAlreadyExistsError } from "@/app/domain/d-version/errors"
+import { UserContext } from "@/app/presentation/http/middleware/auth.middleware"
 
 @injectable()
 export class UploadWorkflow {
@@ -26,7 +28,7 @@ export class UploadWorkflow {
    * download a file from storage without neddeding authentication, it expires after a
    *  certain time)
    */
-  initiateUpload(input: InitiateUploadDTOEncoded) {
+  initiateUpload(input: InitiateUploadDTOEncoded, user: UserContext) {
     return pipe(
       S.decodeUnknown(InitiateUploadDTOSchema)(input),
       E.flatMap((dto) =>
@@ -45,25 +47,30 @@ export class UploadWorkflow {
    * fetchByChecksum: fetches a version by its checksum(a unique identifier for the version)
    * doesn't allow duplicate versions to be created 
    */
-  confirmUpload(input: ConfirmUploadDTOEncoded) {
+  confirmUpload(input: ConfirmUploadDTOEncoded, user: UserContext) {
     return pipe(
       // validate incoming data against the schema
       S.decodeUnknown(ConfirmUploadDTOSchema)(input),
       // check if file data already exists in storage
       E.flatMap((dto) =>
-        this.versionRepo.fetchByChecksum(dto.checksum).pipe(
+        this.versionRepo.fetchByChecksum(dto.checksum as string).pipe(
           // if exists, return an error(prevents duplicate uploads)
           E.flatMap(O.match({
             onSome: () => E.fail(DocumentVersionAlreadyExistsError.forField("checksum", dto.checksum)),
             // if not exists, create a new version entity and save it to the repository
             onNone: () =>
               DocumentVersionEntity.create({
+                id: crypto.randomUUID(),
                 documentId: dto.documentId,
+                version: 1, // Start with version 1
+                filename: dto.storageKey.split('/').pop() || 'unknown',
                 checksum: dto.checksum,
                 storageKey: dto.storageKey,
+                storageProvider: "local",
                 mimeType: dto.mimeType,
                 size: dto.size,
-                createdAt: new Date()
+                uploadedBy: dto.userId,
+                createdAt: new Date().toISOString()
               }).pipe(E.flatMap((v) => this.versionRepo.save(v)))
           }))
         )

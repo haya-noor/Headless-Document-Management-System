@@ -1,19 +1,21 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { DateTime, Effect as E, Effect, Option as O, pipe, Schema as S, ParseResult } from "effect"
+import crypto from "crypto"
 
 import { DocumentSchema, SerializedDocument } from "@/app/domain/document/schema"
 import { DocumentRepository } from "@/app/domain/document/repository"
 import { DocumentSchemaEntity } from "@/app/domain/document/entity"
 import { DocumentNotFoundError, DocumentValidationError } from "@/app/domain/document/errors"
-import { ConflictError, DatabaseError } from "@/app/domain/shared/base.errors"
+import { ConflictError, DatabaseError, BusinessRuleViolationError } from "@/app/domain/shared/base.errors"
 import { CreateDocumentDTOSchema, CreateDocumentDTOEncoded } from "@/app/application/dtos/document/create-doc.dto"
 import { UpdateDocumentDTOSchema, UpdateDocumentDTOEncoded } from "@/app/application/dtos/document/update-doc.dto"
 import { PublishDocumentDTOSchema, PublishDocumentDTOEncoded } from "@/app/application/dtos/document/publish-doc.dto"
 import { QueryDocumentsDTOSchema, QueryDocumentsDTOEncoded } from "@/app/application/dtos/document/query-doc.dto"
-import { TOKENS } from "@/app/infrastructure/di/container"
+import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { Uuid, UserId, DocumentId } from "@/app/domain/refined/uuid"
 import { PaginationOptions, PaginatedResponse } from "@/app/domain/shared/pagination"
+import { UserContext } from "@/presentation/http/middleware/auth.middleware"
 
 
 // partial: means that the object is not required to be filled out completely, 
@@ -30,11 +32,15 @@ export class DocumentWorkflow {
     // toISOString is used to convert the date to a string, becasue all domain treat 
     // dates as strings e.g createdAt and updatedAt are strings in the domain because of the database
     const now = new Date().toISOString() 
+    const { description, ...rest } = input
     return {
-      ...input,
+      ...rest,
+      id: input.id ?? crypto.randomUUID(),
+      currentVersionId: input.currentVersionId ?? crypto.randomUUID(),
       createdAt: input.createdAt ?? now,
       updatedAt: now,
-      tags: input.tags ?? []
+      tags: input.tags ?? [],
+      description: description ?? undefined
     } as SerializedDocument
   }
 
@@ -42,19 +48,24 @@ export class DocumentWorkflow {
    * Create a new document
    */
   createDocument(
-    input: CreateDocumentDTOEncoded
+    input: CreateDocumentDTOEncoded,
+    user: UserContext
   ): E.Effect<DocumentSchemaEntity, DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError> {
     return pipe(
       S.decodeUnknown(CreateDocumentDTOSchema)(input),
       E.flatMap((dto) =>
-        DocumentSchemaEntity.create(this.initializeDocumentData(dto))
+        DocumentSchemaEntity.create(this.initializeDocumentData({
+          ...dto,
+          ownerId: user.userId // Set owner from user context
+        }))
       ),
       E.flatMap((entity) => this.documentRepository.save(entity))
     )
   }
 
   updateDocument(
-    input: UpdateDocumentDTOEncoded
+    input: UpdateDocumentDTOEncoded,
+    user: UserContext
   ):E.Effect<
     DocumentSchemaEntity,
     DocumentValidationError | DocumentNotFoundError | ParseResult.ParseError | ConflictError | DatabaseError
@@ -100,7 +111,8 @@ export class DocumentWorkflow {
    * Publish a document (status transition)
    */
   publishDocument(
-    input: PublishDocumentDTOEncoded
+    input: PublishDocumentDTOEncoded,
+    user: UserContext
   ): E.Effect<
     DocumentSchemaEntity,
     DocumentNotFoundError | DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError
@@ -115,15 +127,23 @@ export class DocumentWorkflow {
                      message: `Document with id '${dto.documentId}' not found`
                    })
                  ) as E.Effect<DocumentSchemaEntity, DocumentValidationError | ParseResult.ParseError | ConflictError | DatabaseError | DocumentNotFoundError, never>
-               : pipe(option.value.serialized(),E.flatMap((serialized: SerializedDocument) =>
-                     DocumentSchemaEntity.create({
-                       ...serialized,
-                       status: "published",
-                       updatedAt: new Date().toISOString()
-                     })
-                   ),
-                   E.flatMap((updated) => this.documentRepository.save(updated))
-                 )
+              : pipe(E.sync(() => {
+                  const doc = option.value;
+                  return {
+                    id: doc.id,
+                    ownerId: doc.ownerId,
+                    title: doc.title,
+                    description: O.getOrUndefined(doc.description),
+                    tags: O.getOrUndefined(doc.tags),
+                    currentVersionId: doc.currentVersionId,
+                    createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+                    updatedAt: new Date().toISOString(),
+                    status: "published"
+                  } as SerializedDocument;
+                }),
+                E.flatMap((serialized) => DocumentSchemaEntity.create(serialized)),
+                E.flatMap((updated) => this.documentRepository.save(updated))
+              )
            ))
         )
       )
@@ -135,18 +155,20 @@ export class DocumentWorkflow {
    * Query documents with optional filters and pagination
    */
   queryDocuments(
-    input: QueryDocumentsDTOEncoded
+    input: QueryDocumentsDTOEncoded,
+    user: UserContext
   ): E.Effect<PaginatedResponse<DocumentSchemaEntity>, ParseResult.ParseError | DatabaseError | DocumentValidationError, never> {
     return pipe(
       S.decodeUnknown(QueryDocumentsDTOSchema)(input),
       E.flatMap((dto) =>
          S.decodeUnknown(PaginationOptions)({
-           page: dto.pageNum ?? 1,
-           limit: dto.pageSize ?? 10
+           page: dto.page ?? 1,
+           limit: dto.limit ?? 10
          }).pipe(
           E.flatMap((pagination) => {
-            const filter: { ownerId?: UserId; tags?: string[] } = {
-              tags: dto.tag ? [dto.tag] : undefined
+            const filter: { ownerId?: UserId; tags?: string[]; workspaceId?: string } = {
+              tags: dto.tag ? [dto.tag] : undefined,
+              workspaceId: user.workspaceId // Filter by user's workspace
             }
 
             if (dto.ownerId) {
@@ -165,5 +187,30 @@ export class DocumentWorkflow {
         )
       )
     ) as E.Effect<PaginatedResponse<DocumentSchemaEntity>, ParseResult.ParseError | DatabaseError | DocumentValidationError, never>
+  }
+
+  /**
+   * Get document by ID
+   */
+  getDocumentById(
+    id: string,
+    user: UserContext
+  ): E.Effect<DocumentSchemaEntity, DocumentNotFoundError | ParseResult.ParseError | DatabaseError> {
+    return pipe(
+      S.decodeUnknown(DocumentId)(id),
+      E.flatMap((documentId) =>
+        this.documentRepository.findById(documentId).pipe(
+          E.flatMap((option) =>
+            O.isNone(option)
+              ? E.fail(new DocumentNotFoundError({
+                  resource: "Document",
+                  id: id,
+                  message: `Document with id '${id}' not found`
+                }))
+              : E.succeed(option.value)
+          )
+        )
+      )
+    )
   }
 }

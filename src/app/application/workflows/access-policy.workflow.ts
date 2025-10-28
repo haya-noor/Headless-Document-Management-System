@@ -1,13 +1,15 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
 import { Effect as E, pipe, Schema as S } from "effect"
-import { TOKENS } from "@/app/infrastructure/di/container"
+import crypto from "crypto"
+import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { AccessPolicyRepository } from "@/app/domain/access-policy/repository"
 import { GrantAccessDTOSchema, GrantAccessDTOEncoded } from "@/app/application/dtos/access-policy/grant-access.dto"
 import { RevokeAccessDTOSchema, RevokeAccessDTOEncoded } from "@/app/application/dtos/access-policy/revoke-access.dto"
 import { CheckAccessDTOSchema, CheckAccessDTOEncoded } from "@/app/application/dtos/access-policy/check-access.dto"
 import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
+import { UserContext } from "@/presentation/http/middleware/auth.middleware"
 
 
 /*
@@ -45,23 +47,40 @@ export class AccessPolicyWorkflow {
     private readonly accessRepo: AccessPolicyRepository
   ) {}
 
-  grantAccess(input: GrantAccessDTOEncoded) {
+  grantAccess(input: GrantAccessDTOEncoded, user: UserContext) {
     return pipe(
       S.decodeUnknown(GrantAccessDTOSchema)(input),
-      E.flatMap((dto) =>
-        AccessPolicyEntity.create(dto).pipe(E.flatMap((policy) => this.accessRepo.save(policy)))
-      )
+      E.flatMap((dto) => {
+        const now = new Date().toISOString();
+        const policyData = {
+          id: crypto.randomUUID(),
+          name: `Access to document ${dto.documentId}`,
+          description: `Granted by ${user.userId} to ${dto.grantedTo}`,
+          subjectType: "user" as const,
+          subjectId: dto.grantedTo,
+          resourceType: "document" as const,
+          resourceId: dto.documentId,
+          actions: dto.actions,
+          isActive: true,
+          priority: dto.priority,
+          createdAt: now,
+          updatedAt: now
+        };
+        return AccessPolicyEntity.create(policyData).pipe(
+          E.flatMap((policy) => this.accessRepo.save(policy))
+        );
+      })
     )
   }
 
-  revokeAccess(input: RevokeAccessDTOEncoded) {
+  revokeAccess(input: RevokeAccessDTOEncoded, user: UserContext) {
     return pipe(
       S.decodeUnknown(RevokeAccessDTOSchema)(input),
       E.flatMap((dto) => this.accessRepo.remove(dto.documentId, dto.revokedFrom))
     )
   }
 
-  checkAccess(input: CheckAccessDTOEncoded) {
+  checkAccess(input: CheckAccessDTOEncoded, user: UserContext) {
     return pipe(
       S.decodeUnknown(CheckAccessDTOSchema)(input),
       E.flatMap((dto) =>

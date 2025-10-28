@@ -80,3 +80,5 @@ export class StorageServiceFactory {
  * Use this throughout the application for consistency
  */
 export const storageService = StorageServiceFactory.getInstance();
+
+export const createStorageService = StorageServiceFactory.createStorageService;
