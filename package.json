@@ -25,6 +25,7 @@
   "dependencies": {
     "@effect/core": "^0.0.16",
     "@effect/io": "^0.41.2",
+    "@effect/rpc": "^0.71.1",
     "@effect/schema": "^0.75.5",
     "@elysiajs/cookie": "^0.8.0",
     "@elysiajs/cors": "^1.4.0",
