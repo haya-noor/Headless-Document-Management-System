@@ -30,7 +30,7 @@ export class AccessPolicyEntity extends BaseEntity<AccessPolicyId, AccessPolicyV
   readonly subjectId!: UserId
   readonly resourceType!: "document" | "user"
   readonly resourceId!: Option.Option<DocumentId>
-  readonly actions!: ("read" | "write" | "delete" | "manage")[]
+  readonly actions!: ("read" | "write" | "update" | "delete" | "manage")[]
   readonly isActive!: boolean
   readonly priority!: number
 

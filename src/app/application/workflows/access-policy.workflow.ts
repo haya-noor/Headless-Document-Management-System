@@ -1,14 +1,20 @@
 import "reflect-metadata"
 import { inject, injectable } from "tsyringe"
-import { Effect as E, pipe, Schema as S } from "effect"
+import { Effect as E, pipe, Schema as S, Option as O } from "effect"
 import crypto from "crypto"
 import { TOKENS } from "@/app/infrastructure/di/container"
 import { AccessPolicyRepository } from "@/app/domain/access-policy/repository"
+import { DocumentRepository } from "@/app/domain/document/repository"
 import { GrantAccessDTOSchema, GrantAccessDTOEncoded } from "@/app/application/dtos/access-policy/grant-access.dto"
 import { RevokeAccessDTOSchema, RevokeAccessDTOEncoded } from "@/app/application/dtos/access-policy/revoke-access.dto"
 import { CheckAccessDTOSchema, CheckAccessDTOEncoded } from "@/app/application/dtos/access-policy/check-access.dto"
 import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
+import { DocumentNotFoundError } from "@/app/domain/document/errors"
+import { BusinessRuleViolationError } from "@/app/domain/shared/base.errors"
+import { GrantAccessBuilder } from "@/app/application/dtos/access-policy/grant-access-builder"
+import { AccessPolicyGuards } from "@/app/domain/access-policy/guards"
+import type { UserContext } from "@/app/application/services/access-control.service"
 
 
 /*
@@ -43,31 +49,122 @@ DI (dependency injection) (accessPolicyRepository) in the constructor.
 export class AccessPolicyWorkflow {
   constructor(
     @inject(TOKENS.ACCESS_POLICY_REPOSITORY)
-    private readonly accessRepo: AccessPolicyRepository
+    private readonly accessRepo: AccessPolicyRepository,
+    @inject(TOKENS.DOCUMENT_REPOSITORY)
+    private readonly documentRepo: DocumentRepository
   ) {}
 
-  grantAccess(input: GrantAccessDTOEncoded) {
+  /**
+   * Grant access using builder pattern
+   * Owner can grant update permission to users
+   */
+  grantAccessWithBuilder(
+    builder: GrantAccessBuilder,
+    owner: UserContext
+  ): E.Effect<AccessPolicyEntity, AccessPolicyValidationError | DocumentNotFoundError | BusinessRuleViolationError> {
+    const dto = builder.build()
+    
+    return pipe(
+      // Verify document exists
+      this.documentRepo.findById(dto.documentId),
+      E.flatMap((option) =>
+        O.match(option, {
+          onNone: () => E.fail(new DocumentNotFoundError({
+            resource: "Document",
+            id: String(dto.documentId),
+            message: `Document ${dto.documentId} not found`
+          })),
+          onSome: (doc) => {
+            // Verify owner has permission to grant access
+            if (doc.ownerId !== owner.userId && !owner.roles.includes("admin")) {
+              return E.fail(new BusinessRuleViolationError({
+                message: "Only document owner or admin can grant access",
+                code: "ACCESS_DENIED",
+                context: { documentId: dto.documentId, ownerId: owner.userId }
+              }))
+            }
+
+            // Normalize actions (convert "update" to "write" for storage)
+            const normalizedActions = AccessPolicyGuards.normalizeActions(dto.actions as any)
+            const now = new Date().toISOString()
+            
+            const policyData = {
+              id: crypto.randomUUID(),
+              name: `Access to document ${dto.documentId}`,
+              description: `Granted by ${owner.userId} to ${dto.grantedTo}`,
+              subjectType: "user" as const,
+              subjectId: dto.grantedTo,
+              resourceType: "document" as const,
+              resourceId: dto.documentId,
+              actions: normalizedActions,
+              isActive: true,
+              priority: dto.priority,
+              createdAt: now,
+              updatedAt: now
+            }
+
+            return AccessPolicyEntity.create(policyData).pipe(
+              E.flatMap((policy) => this.accessRepo.save(policy))
+            )
+          }
+        })
+      )
+    )
+  }
+
+  /**
+   * Grant access (original method - kept for backward compatibility)
+   * Enhanced to support owner verification and "update" permission
+   */
+  grantAccess(input: GrantAccessDTOEncoded, owner: UserContext): E.Effect<AccessPolicyEntity, AccessPolicyValidationError | DocumentNotFoundError | BusinessRuleViolationError | ParseResult.ParseError, never> {
     return pipe(
       S.decodeUnknown(GrantAccessDTOSchema)(input),
-      E.flatMap((dto) => {
-        const now = new Date().toISOString();
-        const policyData = {
-          id: crypto.randomUUID(),
-          name: `Access to document ${dto.documentId}`,
-          description: `Granted by ${dto.grantedBy} to ${dto.grantedTo}`,
-          subjectType: "user" as const,
-          subjectId: dto.grantedTo,
-          resourceType: "document" as const,
-          resourceId: dto.documentId,
-          actions: dto.actions,
-          isActive: true,
-          priority: dto.priority,
-          createdAt: now,
-          updatedAt: now
-        };
-        return AccessPolicyEntity.create(policyData).pipe(
-          E.flatMap((policy) => this.accessRepo.save(policy))
-        );
+      E.flatMap((dto: any) => {
+        // Verify document exists and owner can grant
+        return this.documentRepo.findById(dto.documentId).pipe(
+          E.flatMap((option) =>
+            O.match(option, {
+              onNone: () => E.fail(new DocumentNotFoundError({
+                resource: "Document",
+                id: String(dto.documentId),
+                message: `Document ${dto.documentId} not found`
+              })),
+              onSome: (doc) => {
+                // Verify owner has permission to grant access
+                if (doc.ownerId !== owner.userId && !owner.roles.includes("admin")) {
+                  return E.fail(new BusinessRuleViolationError({
+                    message: "Only document owner or admin can grant access",
+                    code: "ACCESS_DENIED",
+                    context: { documentId: dto.documentId, ownerId: owner.userId }
+                  }))
+                }
+
+                // Normalize actions (convert "update" to "write" for storage)
+                const normalizedActions = AccessPolicyGuards.normalizeActions(dto.actions as any)
+                const now = new Date().toISOString()
+                
+                const policyData = {
+                  id: crypto.randomUUID(),
+                  name: `Access to document ${dto.documentId}`,
+                  description: `Granted by ${owner.userId} to ${dto.grantedTo}`,
+                  subjectType: "user" as const,
+                  subjectId: dto.grantedTo,
+                  resourceType: "document" as const,
+                  resourceId: dto.documentId,
+                  actions: normalizedActions,
+                  isActive: true,
+                  priority: dto.priority,
+                  createdAt: now,
+                  updatedAt: now
+                }
+
+                return AccessPolicyEntity.create(policyData).pipe(
+                  E.flatMap((policy) => this.accessRepo.save(policy))
+                )
+              }
+            })
+          )
+        )
       })
     )
   }

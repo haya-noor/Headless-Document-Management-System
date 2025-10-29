@@ -12,17 +12,42 @@ import { Optional } from "@/app/domain/shared/validation.utils"
  * 
  * Controls access permissions: who (subject) can perform what (actions) on which resource.
  */
-export const AccessPolicyFields = S.Struct({
+/**
+ * Effect Schema Composition Pattern
+ * 
+ * Uses S.extend() and S.pipe() to compose schemas for better reusability.
+ * Breaks down complex schemas into logical groups.
+ */
+const BaseAccessPolicyFields = S.Struct({
   name: AccessPolicyGuards.ValidName,
   description: AccessPolicyGuards.ValidDescription,
+})
+
+const SubjectFields = S.Struct({
   subjectType: S.Literal("user", "role"),
   subjectId: UserId,
+})
+
+const ResourceFields = S.Struct({
   resourceType: S.Literal("document", "user"),
   resourceId: Optional(DocumentId),
+})
+
+const PermissionFields = S.Struct({
   actions: AccessPolicyGuards.ValidActions,
   isActive: S.Boolean,
-  priority: AccessPolicyGuards.ValidPriority
-});
+  priority: AccessPolicyGuards.ValidPriority,
+})
+
+/**
+ * Composed AccessPolicy fields using Effect Schema composition
+ * Combines base, subject, resource, and permission fields
+ */
+export const AccessPolicyFields = BaseAccessPolicyFields.pipe(
+  S.extend(SubjectFields),
+  S.extend(ResourceFields),
+  S.extend(PermissionFields)
+)
 
 export const AccessPolicySchema = S.extend(
   BaseEntitySchema(AccessPolicyId),

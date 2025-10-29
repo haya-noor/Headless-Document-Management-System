@@ -23,7 +23,7 @@ import {
 import { Effect, Option } from "effect"
 
 import type { UserId, DocumentId } from "@/app/domain/refined/uuid"
-import { createTestDocumentEntity } from "../factories/document.factory-test"
+import { createTestDocumentEntity } from "../factories/domain-factory/document.factory-test"
 
 // Regex pattern to validate UUID v4 format
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
