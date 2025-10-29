@@ -1,80 +1,156 @@
-import "reflect-metadata"
+import "reflect-metadata"  // used by DI (dependency injection)
 import { inject, injectable } from "tsyringe"
 import { Effect as E, Option as O, pipe, Schema as S } from "effect"
 import crypto from "crypto"
+
 import { InitiateUploadDTOSchema, InitiateUploadDTOEncoded } from "@/app/application/dtos/upload/initiate-upload.dto"
 import { ConfirmUploadDTOSchema, ConfirmUploadDTOEncoded } from "@/app/application/dtos/upload/confirm-upload.dto"
+
 import { DocumentVersionRepository } from "@/app/domain/d-version/repository"
-import { StorageServiceFactory } from "@/app/infrastructure/storage/storage.factory"
-import { TOKENS } from "@/app/infrastructure/di/tokens"
-import { DocumentRepository } from "@/app/domain/document/repository"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionAlreadyExistsError } from "@/app/domain/d-version/errors"
-import { UserContext } from "@/app/presentation/http/middleware/auth.middleware"
+import { DocumentRepository } from "@/app/domain/document/repository"
+import { TOKENS } from "@/app/infrastructure/di/tokens"
+import { StorageServiceFactory } from "@/app/infrastructure/storage/storage.factory"
+
+import { AccessControlService } from "@/app/application/services/access-control.service"
+import { AuditLoggerService } from "@/app/application/services/audit-logger.service"
+
+import { UserContext } from "@/presentation/http/orpc/auth"
+import { withTiming } from "@/app/application/utils/timed-logger" 
 
 @injectable()
 export class UploadWorkflow {
   constructor(
     @inject(TOKENS.DOCUMENT_REPOSITORY)
     private readonly documentRepo: DocumentRepository,
+
     @inject(TOKENS.DOCUMENT_VERSION_REPOSITORY)
     private readonly versionRepo: DocumentVersionRepository,
+
     @inject(TOKENS.STORAGE_SERVICE)
-    private readonly storage: StorageServiceFactory
+    private readonly storage: StorageServiceFactory,
+
+    @inject(TOKENS.ACCESS_CONTROL_SERVICE)
+    private readonly accessControl: AccessControlService,
+
+    @inject(TOKENS.AUDIT_LOGGER_SERVICE)
+    private readonly auditLogger: AuditLoggerService
   ) {}
 
   /**
-   * Initiate Upload - return presigned URL(a temporary url that allows user to upload or 
-   * download a file from storage without neddeding authentication, it expires after a
-   *  certain time)
+   * Initiate Upload - returns a presigned URL
    */
-  initiateUpload(input: InitiateUploadDTOEncoded, user: UserContext) {
-    return pipe(
-      S.decodeUnknown(InitiateUploadDTOSchema)(input),
-      E.flatMap((dto) =>
-        E.promise(() => StorageServiceFactory.getInstance().createPresignedUrl(
-          `${dto.documentId}/${dto.filename}`,
-          dto.mimeType
-        ))
+  initiateUpload(
+    input: InitiateUploadDTOEncoded,
+    user: UserContext
+  ) {
+    return withTiming("Upload:initiateUpload", {
+      correlationId: user.correlationId,
+      userId: user.userId,
+      workspaceId: user.workspaceId,
+    }, async () => {
+      return pipe(
+        // validate input against schema
+        S.decodeUnknown(InitiateUploadDTOSchema)(input),
+        E.flatMap((dto) =>
+          // enforce access control for upload on document resource 
+          this.accessControl.enforceAccess(user, "document", "upload", {
+            workspaceId: user.workspaceId
+          }).pipe(
+            E.flatMap(() =>
+              E.promise(() =>
+                // create presigned URL for the file
+                StorageServiceFactory.getInstance().createPresignedUrl(
+                  // unique storage key for the file
+                  `${dto.documentId}/${dto.filename}`,
+                  dto.mimeType
+                )
+              )
+            )
+          )
+        )
       )
-    )
+    })
   }
 
   /**
-   * Confirm Upload - idempotent( means that the operation can be performed multiple times without 
-   * changing the result) persistence of version
-   * 
-   * fetchByChecksum: fetches a version by its checksum(a unique identifier for the version)
-   * doesn't allow duplicate versions to be created 
+   * Confirm Upload - persist uploaded file as document version
    */
-  confirmUpload(input: ConfirmUploadDTOEncoded, user: UserContext) {
-    return pipe(
-      // validate incoming data against the schema
-      S.decodeUnknown(ConfirmUploadDTOSchema)(input),
-      // check if file data already exists in storage
-      E.flatMap((dto) =>
-        this.versionRepo.fetchByChecksum(dto.checksum as string).pipe(
-          // if exists, return an error(prevents duplicate uploads)
-          E.flatMap(O.match({
-            onSome: () => E.fail(DocumentVersionAlreadyExistsError.forField("checksum", dto.checksum)),
-            // if not exists, create a new version entity and save it to the repository
-            onNone: () =>
-              DocumentVersionEntity.create({
-                id: crypto.randomUUID(),
-                documentId: dto.documentId,
-                version: 1, // Start with version 1
-                filename: dto.storageKey.split('/').pop() || 'unknown',
-                checksum: dto.checksum,
-                storageKey: dto.storageKey,
-                storageProvider: "local",
-                mimeType: dto.mimeType,
-                size: dto.size,
-                uploadedBy: dto.userId,
-                createdAt: new Date().toISOString()
-              }).pipe(E.flatMap((v) => this.versionRepo.save(v)))
-          }))
+  confirmUpload(
+    input: ConfirmUploadDTOEncoded,
+    user: UserContext
+  ) {
+    return withTiming("Upload:confirmUpload", {
+      correlationId: user.correlationId,
+      userId: user.userId,
+      workspaceId: user.workspaceId,
+    }, async () => {
+      return pipe(
+        S.decodeUnknown(ConfirmUploadDTOSchema)(input),
+        E.flatMap((dto) =>
+          // enforce access control  
+          this.accessControl.enforceAccess(user, "document", "upload", {
+            workspaceId: user.workspaceId
+          }).pipe(
+            E.flatMap(() =>
+              // check if a version with the same checksum already exists
+              this.versionRepo.fetchByChecksum(dto.checksum as string).pipe(
+                E.flatMap(
+                  O.match({
+                    onSome: () =>
+                      // if a version with the same checksum already exists, return an error
+                      E.fail(
+                        DocumentVersionAlreadyExistsError.forField("checksum", dto.checksum)
+                      ),
+                    onNone: () =>
+                      // if a version with the same checksum does not exist, create a new version
+                      DocumentVersionEntity.create({
+                        id: crypto.randomUUID(),
+                        documentId: dto.documentId,
+                        version: 1,
+                        
+                        filename: dto.storageKey.split("/").pop() || "unknown",
+                        checksum: dto.checksum,
+                        storageKey: dto.storageKey,
+                        storageProvider: "local",
+                        mimeType: dto.mimeType,
+                        size: dto.size,
+                        uploadedBy: dto.userId,
+                        createdAt: new Date().toISOString()
+                      }).pipe(
+                        E.flatMap((v) => this.versionRepo.save(v)),
+                        // Audit success
+                        E.tap((saved) =>
+                          this.auditLogger.logDocumentOperation(
+                            "document_version_created",
+                            saved.documentId,
+                            "upload",
+                            user,
+                            "success",
+                            { versionId: saved.id }
+                          )
+                        ),
+                        // Audit failure if any error occurs while creating the version
+                        E.tapError((err) =>
+                          this.auditLogger.logDocumentOperation(
+                            "document_version_create_failed",
+                            dto.documentId,
+                            "upload",
+                            user,
+                            "failure",
+                            undefined,
+                            String(err)
+                          )
+                        )
+                      )
+                  })
+                )
+              )
+            )
+          )
         )
       )
-    )
+    })
   }
 }

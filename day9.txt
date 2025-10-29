@@ -1,0 +1,44 @@
+1. Authentication Middleware for JWT Validation and Workspace Context Extraction
+Location: src/presentation/http/orpc/auth.ts
+Features:
+Complete JWT validation with proper error handling
+Workspace context extraction from JWT or x-workspace-id header
+Correlation ID generation for observability
+Clean RPCContext interface with actorId, workspaceId, roles, rawPayload, and correlationId
+Proper error mapping for authentication failures
+
+
+2. RBAC Enforcement in Use Cases
+Location: src/app/application/services/access-control.service.ts
+Features:
+Role-based permissions system (admin, editor, viewer)
+Resource-action-scope based access control
+Enforcement at use case level in all workflows
+Proper 403 error handling for unauthorized operations
+
+3. Structured Logging with Correlation Tracking and Performance Metrics
+Location:
+src/app/application/utils/logger.ts - Structured logging with sensitive data redaction
+src/app/application/utils/timed-logger.ts - Performance metrics
+Features:
+JSON-structured logs with correlation IDs
+Performance timing for all operations
+Sensitive data redaction (passwords, tokens, etc.)
+Color-coded development output
+
+4. Audit Logging for Critical Operations
+Location: src/app/application/services/audit-logger.service.ts
+Features:
+Document operation audit logging
+Access control change audit logging
+Security event logging
+Structured audit events with correlation tracking
+Success/failure outcome tracking
+
+5. Security Practices
+Location: src/presentation/http/orpc/error-mapping.ts
+Features:
+Sanitized error responses (no internal details exposed)
+Sensitive data redaction in logs
+Proper HTTP status code mapping
+Database errors don't expose internal details

@@ -11,7 +11,8 @@
     "test:all": "bun test tests/",
     "test:integration": "bun test tests/integration",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint:fix": "eslint src --ext .ts --fix",
+     "dev": "bun run src/index.ts"
   },
   "keywords": [
     "document-management",
