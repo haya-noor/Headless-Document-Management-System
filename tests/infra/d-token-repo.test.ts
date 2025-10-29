@@ -24,7 +24,7 @@ import {
   createUnusedToken,
   createUsedToken,
   createExpiredToken,
-} from "../factories/download-token.factory-test";
+} from "../factories/domain-factory/download-token.factory-test";
 import {
   makeDownloadTokenIdSync,
   makeDocumentIdSync,
