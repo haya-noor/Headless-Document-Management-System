@@ -39,7 +39,7 @@ export abstract class DomainError extends Error {
       message: this.message,
       code: this.code,
       context: this.context,
-      ...(this.cause && { cause: String(this.cause) })
+      ...(this.cause ? { cause: String(this.cause) } : {})
     }
   }
 }
@@ -156,7 +156,7 @@ export class ConflictError extends Data.TaggedError("ConflictError")<{
 // ---------------------------------------------------------------------------
 
 /**
- * BusinessRuleViolationError - For business logic violations
+ * BusinessRuleViolationError - For business logic violations (access control, validation, etc.)
  */
 export class BusinessRuleViolationError extends Data.TaggedError("BusinessRuleViolationError")<{
   readonly code: string
@@ -265,7 +265,7 @@ export const getErrorMessage = (error: unknown): string => {
   return String(error)
 }
 
-export const toDomainError = (error: unknown): DomainError => {
+export const toDomainError = (error: unknown): ValidationError | DomainError => {
   if (isDomainError(error)) return error
   
   if (error instanceof Error) {

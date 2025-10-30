@@ -18,7 +18,7 @@ import {
   createExpiringSoonToken,
   createTestDownloadTokenEntity,
   downloadTokenArbitrary,
-} from "../factories/download-token.factory-test"
+} from "../factories/domain-factory/download-token.factory-test"
 import { DownloadTokenEntity } from "@/app/domain/download-token/entity"
 import { DownloadTokenValidationError } from "@/app/domain/download-token/errors"
 import { BusinessRuleViolationError } from "@/app/domain/shared/base.errors"

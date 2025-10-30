@@ -20,8 +20,8 @@ import {
 
 import { DocumentVersionDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d-version.repository"
 import { DocumentDrizzleRepository } from "@/app/infrastructure/repositories/implementations/d.repository"
-import { createTestDocumentVersionEntity } from "./factories/d-version.factory-test"
-import { createTestDocumentEntity } from "./factories/document.factory-test"
+import { createTestDocumentVersionEntity } from "./factories/domain-factory/d-version.factory-test"
+import { createTestDocumentEntity } from "./factories/domain-factory/document.factory-test"
 import type { DocumentId, DocumentVersionId, UserId } from "@/app/domain/refined/uuid"
 import type { Sha256 } from "@/app/domain/refined/checksum"
 
