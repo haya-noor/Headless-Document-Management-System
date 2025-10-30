@@ -52,25 +52,55 @@ export class UploadWorkflow {
       S.decodeUnknown(ConfirmUploadDTOSchema)(input),
       // check if file data already exists in storage
       E.flatMap((dto) =>
+        // Step 1: prevent duplicates by checksum
         this.versionRepo.fetchByChecksum(dto.checksum as string).pipe(
-          // if exists, return an error(prevents duplicate uploads)
           E.flatMap(O.match({
             onSome: () => E.fail(DocumentVersionAlreadyExistsError.forField("checksum", dto.checksum)),
-            // if not exists, create a new version entity and save it to the repository
             onNone: () =>
-              DocumentVersionEntity.create({
-                id: crypto.randomUUID(),
-                documentId: dto.documentId,
-                version: 1, // Start with version 1
-                filename: dto.storageKey.split('/').pop() || 'unknown',
-                checksum: dto.checksum,
-                storageKey: dto.storageKey,
-                storageProvider: "local",
-                mimeType: dto.mimeType,
-                size: dto.size,
-                uploadedBy: dto.userId,
-                createdAt: new Date().toISOString()
-              }).pipe(E.flatMap((v) => this.versionRepo.save(v)))
+              // Step 2: ensure document exists and compute next version number
+              this.documentRepo.findById(dto.documentId).pipe(
+                E.flatMap(O.match({
+                  onNone: () => E.fail(new Error(`Document ${String(dto.documentId)} not found`)),
+                  onSome: (document) =>
+                    this.versionRepo.getNextVersionNumber(dto.documentId).pipe(
+                      E.flatMap((nextVersion) =>
+                        // Step 3: create and persist the new immutable version
+                        DocumentVersionEntity.create({
+                          id: crypto.randomUUID(),
+                          documentId: dto.documentId,
+                          version: nextVersion,
+                          filename: dto.storageKey.split('/').pop() || 'unknown',
+                          checksum: dto.checksum,
+                          storageKey: dto.storageKey,
+                          storageProvider: "local",
+                          mimeType: dto.mimeType,
+                          size: dto.size,
+                          uploadedBy: dto.userId,
+                          createdAt: new Date().toISOString()
+                        }).pipe(
+                          E.flatMap((versionEntity) =>
+                            this.versionRepo.save(versionEntity).pipe(
+                              // Step 4: update document's currentVersionId to the new version (aggregate coordination)
+                              E.flatMap((savedVersion) =>
+                                document.serialized().pipe(
+                                  E.flatMap((serializedDoc) =>
+                                    DocumentSchemaEntity.create({
+                                      ...serializedDoc,
+                                      currentVersionId: savedVersion.id,
+                                      updatedAt: new Date().toISOString()
+                                    })
+                                  ),
+                                  E.flatMap((updatedDoc) => this.documentRepo.save(updatedDoc)),
+                                  E.map(() => savedVersion)
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                }))
+              )
           }))
         )
       )
