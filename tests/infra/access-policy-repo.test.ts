@@ -12,14 +12,14 @@ import { Effect, Option, pipe, Schema as S } from "effect"
 import { AccessPolicyDrizzleRepository } from "@/app/infrastructure/repositories/implementations/access-policy.repository"
 import { setupTestDatabase, teardownTestDatabase, cleanupDatabase } from "../setup/database.setup"
 import { createTestUserEntity } from "../factories/domain-factory/user.factory-test"
-import { createTestDocumentEntity } from "../factories/document.factory-test"
+import { createTestDocumentEntity } from "../factories/domain-factory/document.factory-test"
 import {
   createAccessPolicyEntity,
   createUserReadPolicy,
   createUserWritePolicy,
   createUserAdminPolicy,
   createRolePolicy,
-} from "../factories/access-policy.factory-test"
+} from "../factories/domain-factory/access-policy.factory-test"
 import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
 import { DatabaseError, NotFoundError } from "@/app/domain/shared/base.errors"
 

@@ -16,7 +16,7 @@ import {
   createLargeFileVersion,
   createTestDocumentVersionEntity,
   documentVersionArbitrary,
-} from "../factories/d-version.factory-test"
+} from "../factories/domain-factory/d-version.factory-test"
 import { DocumentVersionEntity } from "@/app/domain/d-version/entity"
 import { DocumentVersionValidationError } from "@/app/domain/d-version/errors"
 import * as fc from "fast-check"

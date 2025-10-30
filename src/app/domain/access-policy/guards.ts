@@ -13,30 +13,15 @@ export class AccessPolicyGuards {
     S.filter((n) => n >= 1 && n <= 1000, { message: () => "Priority must be between 1 and 1000" })
   )
 
-  /**
-   * Standard document actions
-   * - read: View/access document
-   * - write/update: Modify document (synonyms - both accepted)
-   * - delete: Remove document
-   * - manage: Full control (grant/revoke permissions, delete, etc.)
-   */
-  static readonly ValidActions = S.Array(S.Literal("read", "write", "update", "delete", "manage")).pipe(
-    S.filter((arr) => arr.length > 0 && arr.length <= 5, {
-      message: () => "Actions must contain 1–5 valid permissions"
+  static readonly ValidActions = S.Array(S.Literal("read", "write", "delete", "manage")).pipe(
+    S.filter((arr) => arr.length > 0 && arr.length <= 4, {
+      message: () => "Actions must contain 1–4 valid permissions"
     })
   )
 
   static isValidActions(actions: string[]): boolean {
-    const valid = ["read", "write", "update", "delete", "manage"]
-    return Array.isArray(actions) && actions.length > 0 && actions.length <= 5 && actions.every((a) => valid.includes(a))
-  }
-  
-  /**
-   * Normalize actions - converts "update" to "write" for consistency
-   * Both are treated as equivalent
-   */
-  static normalizeActions(actions: ("read" | "write" | "update" | "delete" | "manage")[]): ("read" | "write" | "delete" | "manage")[] {
-    return actions.map(a => a === "update" ? "write" : a) as ("read" | "write" | "delete" | "manage")[]
+    const valid = ["read", "write", "delete", "manage"]
+    return Array.isArray(actions) && actions.length > 0 && actions.length <= 4 && actions.every((a) => valid.includes(a))
   }
 
   static isValidPriority(priority: number): boolean {

@@ -1,112 +1,117 @@
-import { Effect as E } from "effect"
-import { BusinessRuleViolationError } from "@/app/domain/shared/base.errors"
-import { Permissions, hasPermission, type DocumentAction } from "@/app/domain/shared/permissions"
 
-/**
- * User Context interface for access control
- */
-export interface UserContext {
-  readonly userId: string
-  readonly workspaceId: string
-  readonly roles: readonly ("admin" | "user")[]
-  readonly correlationId: string
+// RBAC (Role base access control)
+import { Effect as E } from 'effect';
+import { UserContext } from '@/presentation/http/orpc/auth';
+import { BusinessRuleViolationError } from '@/app/domain/shared/base.errors';
+import { logger } from '@/app/application/utils/logger';
+
+export interface Permission {
+  // permission applied to resource document, user
+  resource: string;
+  // operation allowed on the resource read, write,create etc 
+  action: string;
+  scope?: 'own' | 'workspace' | 'global';
 }
 
-/**
- * Access Control Service - RBAC enforcement
- * 
- * Standard permissions:
- * - read: View/access document
- * - write/update: Modify document (synonyms)
- * - delete: Remove document
- * - manage: Full control (grant/revoke permissions)
- */
+// RBAC is enforced using AccessControlService 
 export class AccessControlService {
-  /**
-   * Check if user can perform action on resource
-   */
+  private readonly rolePermissions: Record<string, Permission[]> = {
+    admin: [
+      { resource: 'document', action: '*', scope: 'global' },
+      { resource: 'user', action: '*', scope: 'global' },
+      { resource: 'workspace', action: '*', scope: 'global' }
+    ],
+    editor: [
+      { resource: 'document', action: 'create', scope: 'workspace' },
+      { resource: 'document', action: 'read', scope: 'workspace' },
+      { resource: 'document', action: 'update', scope: 'own' },
+      { resource: 'document', action: 'publish', scope: 'own' }
+    ],
+    viewer: [
+      { resource: 'document', action: 'read', scope: 'workspace' }
+    ]
+  };
+
   can(
-    user: UserContext,
-    resource: string,
-    action: string,
+    user: UserContext, 
+    resource: string, 
+    action: string, 
     context?: { resourceOwnerId?: string; workspaceId?: string }
   ): boolean {
-    // Admin has all permissions
-    if (user.roles.includes("admin")) {
-      return true
-    }
-
-    // Map action to document action
-    const documentAction = this.mapActionToDocumentAction(action)
+    // gather all permissions granted by all of the user's role 
+    const permissions = this.getUserPermissions(user);
     
-    // Check if user owns the resource (owners have full access)
-    if (context?.resourceOwnerId && context.resourceOwnerId === user.userId) {
-      return true
-    }
-
-    // Check workspace-level permissions
-    if (context?.workspaceId && context.workspaceId === user.workspaceId) {
-      // Workspace members have read by default
-      if (documentAction === Permissions.READ) {
-        return true
+    return permissions.some(permission => {
+      // Check wildcard permissions
+      if (permission.action === '*') {
+        return this.checkScope(permission, user, context);
       }
-    }
-
-    // Map roles to permissions
-    const rolePermissions: Record<string, DocumentAction[]> = {
-      admin: [Permissions.READ, Permissions.WRITE, Permissions.UPDATE, Permissions.DELETE, Permissions.MANAGE],
-      editor: [Permissions.READ, Permissions.WRITE, Permissions.UPDATE],
-      viewer: [Permissions.READ],
-    }
-
-    const userPermissions: DocumentAction[] = []
-    user.roles.forEach((role: string) => {
-      const permissions = rolePermissions[role as keyof typeof rolePermissions] || []
-      userPermissions.push(...permissions)
-    })
-
-    return hasPermission(userPermissions, documentAction)
+      
+      // Check specific action
+      if (permission.resource === resource && permission.action === action) {
+        return this.checkScope(permission, user, context);
+      }
+      
+      return false;
+    });
   }
 
+  private getUserPermissions(user: UserContext): Permission[] {
+    return user.roles.flatMap(role => this.rolePermissions[role] || []);
+  }
+
+   /**
+   * Enforces the scope dimension of a permission.
+   * - 'global'    → always true (permission applies to all workspaces/resources)
+   * - 'workspace' → (currently) assumes the user is already context-validated for the workspace
+   * - 'own'       → only if the resource owner equals the user
+   */
+  private checkScope(
+    permission: Permission, 
+    user: UserContext, 
+    context?: { resourceOwnerId?: string; workspaceId?: string }
+  ): boolean {
+    switch (permission.scope) {
+      case 'global':
+        return true;
+      case 'workspace':
+        return true; // User is already in the workspace context
+      case 'own':
+        return context?.resourceOwnerId === user.userId;
+      default:
+        return true;
+    }
+  }
   /**
-   * Enforce access control - throws error if access denied
+   * Effectful guard that either succeeds (void) if access is allowed,
+   * or fails with a BusinessRuleViolationError(ACCESS_DENIED) if denied.
+   *
+   * This lets workflows compose access checks within Effect pipelines.
    */
   enforceAccess(
-    user: UserContext,
-    resource: string,
-    action: string,
+    user: UserContext, 
+    resource: string, 
+    action: string, 
     context?: { resourceOwnerId?: string; workspaceId?: string }
   ): E.Effect<void, BusinessRuleViolationError> {
     if (this.can(user, resource, action, context)) {
-      return E.succeed(void 0)
+      return E.succeed(undefined);
     }
+
+    logger.warn({
+      userId: user.userId,
+      workspaceId: user.workspaceId,
+      resource,
+      action,
+      context
+    }, 'Access denied');
 
     return E.fail(
-      new BusinessRuleViolationError({
-        message: `Access denied: User ${user.userId} cannot ${action} ${resource}`,
-        code: "ACCESS_DENIED",
-        context: { userId: user.userId, resource, action, workspaceId: user.workspaceId }
-      })
-    )
-  }
-
-  /**
-   * Map generic action to document action
-   */
-  private mapActionToDocumentAction(action: string): DocumentAction {
-    const actionMap: Record<string, DocumentAction> = {
-      "read": Permissions.READ,
-      "view": Permissions.READ,
-      "get": Permissions.READ,
-      "write": Permissions.WRITE,
-      "update": Permissions.UPDATE,
-      "edit": Permissions.UPDATE,
-      "delete": Permissions.DELETE,
-      "remove": Permissions.DELETE,
-      "manage": Permissions.MANAGE,
-      "create": Permissions.WRITE,
-      "publish": Permissions.WRITE,
-    }
-    return actionMap[action.toLowerCase()] || Permissions.READ
+      BusinessRuleViolationError.withContext(
+        'ACCESS_DENIED',
+        `User does not have permission to ${action} ${resource}`,
+        { userId: user.userId, resource, action }
+      )
+    );
   }
 }

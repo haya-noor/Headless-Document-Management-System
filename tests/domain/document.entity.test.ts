@@ -14,7 +14,7 @@ import {
   createDocumentWithTags,
   createTestDocumentEntity,
   documentArbitrary,
-} from "../factories/document.factory-test"
+} from "../factories/domain-factory/document.factory-test"
 import { DocumentSchemaEntity } from "@/app/domain/document/entity"
 import { DocumentValidationError } from "@/app/domain/document/errors"
 import * as fc from "fast-check"

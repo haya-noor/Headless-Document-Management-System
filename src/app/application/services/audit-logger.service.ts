@@ -1,206 +1,201 @@
-import { Effect as E } from "effect"
-import { inject, injectable } from "tsyringe"
-import logger from '../utils/logger'
-import { AuditLogRepository } from "@/app/domain/audit-log/repository"
-import { AuditLogBuilder } from "./audit-logger-builder"
-// UserContext type for audit logging
-export interface UserContext {
-  readonly userId: string
-  readonly workspaceId: string
-  readonly roles: readonly ("admin" | "user")[]
-  readonly correlationId: string
-}
+// src/app/application/services/audit-logger.service.ts
 
-// RPCContext type for audit logging
-export interface RPCContext {
-  readonly actorId: string
-  readonly workspaceId: { _tag: "Some" | "None"; value?: string }
-  readonly roles: readonly ("admin" | "user")[]
-  readonly correlationId: string
+import { Effect as E, Option } from "effect"
+import { logger } from "../utils/logger"
+import type { RPCContext, UserContext } from "@/presentation/http/orpc/auth"
+
+/*
+ Defines the structure of a standardized audit event
+eventType: Type of event (e.g., "UPLOAD", "LOGIN")
+resource: Category of resource involved (e.g., "document", "security")
+resourceId: Unique identifier of the resource
+action:Action performed (e.g., "create", "read")
+userId: User who performed the action
+workspaceId: Workspace context of the action
+correlationId: Request-level trace ID for observability
+timestamp: ISO timestamp of when the action occurred
+metadata: Optional extra data
+outcome: Whether the action was successful
+errorMessage: Optional error message for failed actions
+
+
+*/
+export interface AuditEvent {
+  eventType: string
+  resource: string
+  resourceId: string
+  action: string
+  userId: string
+  workspaceId: string
+  correlationId?: string
+  timestamp: string
+  metadata?: Record<string, unknown>
+  outcome: "success" | "failure"
+  errorMessage?: string
 }
-import { TOKENS } from "@/app/infrastructure/di/container"
 
 /**
- * Audit Logger Service
- * 
- * Provides persistent audit logging for compliance and debugging.
- * Logs are stored in database AND logged to console for immediate visibility.
- */
-@injectable()
-export class AuditLoggerService {
-  constructor(
-    @inject(TOKENS.AUDIT_LOG_REPOSITORY)
-    private readonly auditRepo: AuditLogRepository
-  ) {}
+Internal method to write audit events to the logger using the specified level.
 
-  /**
-   * Log document operation using builder pattern
-   * Example usage:
-   *   AuditLogBuilder.create()
-   *     .withEventType("document_created")
-   *     .forResource("document", documentId)
-   *     .withAction("create")
-   *     .byUser(user)
-   *     .withStatus("success")
-   *     .log(this.auditRepo)
+correlationId is a unique identifier used to trace and link related actions or logs within a single
+request, job, or workflow.
+Purpose:
+It helps track a full chain of events triggered by one user action (e.g. uploading a document).
+
+Suppose a user uploads a document:
+A request hits your API.
+The API calls a database and storage service.
+Each service logs actions.
+Using a correlationId, you can trace all logs across systems that happened due to that single
+upload action.
+
+*/
+export class AuditLoggerService {
+  private log(level: "info" | "warn", auditEvent: AuditEvent, message: string) {
+    logger[level](
+      {
+        correlationId: auditEvent.correlationId,
+        userId: auditEvent.userId,
+        workspaceId: auditEvent.workspaceId,
+        eventType: auditEvent.eventType,
+        resource: auditEvent.resource,
+        action: auditEvent.action,
+        outcome: auditEvent.outcome,
+      },
+      message
+    )
+  }
+/*
+ctx.actorId exists only on an RPCContext object.
+It tells us:
+This request is coming from a remote service (RPC- Remote Procedure Call) rather than a direct 
+user session.
+The action is being performed on behalf of a user (actorId), but not by the user directly.
+Why useful?
+In RPC (Remote Procedure Call) scenarios:
+Backend service A may call backend service B "as" the user.
+You still want to attribute the action to the correct user.
+actorId = the user for whom the service is acting.
+*/
+
+  private extractContextInfo(ctx: RPCContext | UserContext): {
+    userId: string
+    workspaceId: string
+    correlationId: string
+  } {
+    if ("actorId" in ctx) {
+      // RPCContext
+      return {
+        userId: ctx.actorId,
+        workspaceId: Option.getOrElse(ctx.workspaceId, () => "unknown"),
+        correlationId: ctx.correlationId,
+      }
+    } else {
+      // UserContext
+      return {
+        userId: ctx.userId,
+        workspaceId: ctx.workspaceId,
+        correlationId: ctx.correlationId,
+      }
+    }
+  }
+ /**
+Logs operations related to documents (e.g., uploads, updates).
+ctx: RPCContext | UserContext?
+This means the ctx parameter can be either one of two types:
+UserContext:
+Used when the user is directly interacting with the system (e.g. via UI or API).
+Example fields: { userId, workspaceId, correlationId }
+RPCContext:
+Used when an internal service is acting on behalf of a user (e.g. background job, system automation).
+Example fields: { actorId, workspaceId (Option), correlationId }
    */
   logDocumentOperation(
     eventType: string,
     resourceId: string,
     action: string,
-    user: UserContext | RPCContext,
-    status: "success" | "failure" = "success",
+    ctx: RPCContext | UserContext,
+    outcome: "success" | "failure",
     metadata?: Record<string, unknown>,
     errorMessage?: string
   ): E.Effect<void, never> {
-    // Extract user info with proper type narrowing
-    let userId: string
-    let workspaceId: string
-    
-    if ("userId" in user) {
-      // UserContext
-      userId = user.userId
-      workspaceId = user.workspaceId
-    } else {
-      // RPCContext
-      userId = user.actorId
-      workspaceId = (user.workspaceId._tag === "Some" && user.workspaceId.value) 
-        ? user.workspaceId.value 
-        : "unknown"
-    }
-    
-    // Console log for immediate visibility
-    logger.info({
-      event: eventType,
-      resourceType: "document",
+    const { userId, workspaceId, correlationId } = this.extractContextInfo(ctx)
+    const auditEvent: AuditEvent = {
+      eventType,
+      resource: "document",
       resourceId,
       action,
       userId,
       workspaceId,
-      correlationId: user.correlationId,
-      status,
-      metadata: metadata || {},
-      errorMessage: errorMessage || undefined,
-    }, 'Audit log: Document operation')
+      correlationId,
+      timestamp: new Date().toISOString(),
+      metadata,
+      outcome,
+      errorMessage,
+    }
 
-    // Persist to database
-    const builder = AuditLogBuilder.create()
-      .withEventType(eventType)
-      .forResource("document", resourceId)
-      .withAction(action)
-      .byUser(user)
-      .withStatus(status)
-    
-    if (metadata) {
-      builder.withMetadata(metadata)
-    }
-    if (errorMessage) {
-      builder.withError(errorMessage)
-    }
-    
-    return builder.log(this.auditRepo)
+    this.log("info", auditEvent, "Audit log: Document operation")
+    return E.succeed(undefined)
   }
-
   /**
-   * Log access control change
+   * Logs changes to access control (e.g., permission grants or revocations).
+   * Includes the target user affected as part of metadata.
    */
   logAccessControlChange(
     eventType: string,
     resourceId: string,
     action: string,
-    user: UserContext | RPCContext,
+    ctx: RPCContext | UserContext,
     targetUserId: string,
-    status: "success" | "failure" = "success",
+    outcome: "success" | "failure",
     metadata?: Record<string, unknown>,
     errorMessage?: string
   ): E.Effect<void, never> {
-    logger.info({
-      event: eventType,
-      resourceType: "access_policy",
+    const { userId, workspaceId, correlationId } = this.extractContextInfo(ctx)
+    const auditEvent: AuditEvent = {
+      eventType,
+      resource: "access_control",
       resourceId,
       action,
-      userId: "userId" in user ? user.userId : user.actorId,
-      targetUserId,
-      status,
-      metadata: metadata || {},
-      errorMessage: errorMessage || undefined,
-    }, 'Audit log: Access control change')
-
-    const builder = AuditLogBuilder.create()
-      .withEventType(eventType)
-      .forResource("access_policy", resourceId)
-      .withAction(action)
-      .byUser(user)
-      .withStatus(status)
-      .withMetadata({ ...(metadata || {}), targetUserId })
-    
-    if (errorMessage) {
-      builder.withError(errorMessage)
+      userId,
+      workspaceId,
+      correlationId,
+      timestamp: new Date().toISOString(),
+      metadata: { ...metadata, targetUserId },
+      outcome,
+      errorMessage,
     }
-    
-    return builder.log(this.auditRepo)
-  }
 
+    this.log("info", auditEvent, "Audit log: Access control change")
+    return E.succeed(undefined)
+  }
   /**
-   * Log security event
+   * Logs security-related events (e.g., login attempts, password changes).
+   * Uses "warn" level to signal the importance of the event.
    */
   logSecurityEvent(
     eventType: string,
-    user: UserContext | RPCContext,
-    status: "success" | "failure" = "success",
+    ctx: RPCContext | UserContext,
+    outcome: "success" | "failure",
     metadata?: Record<string, unknown>,
     errorMessage?: string
   ): E.Effect<void, never> {
-    logger.info({
-      event: eventType,
-      resourceType: "security",
-      action: "security_event",
-      userId: "userId" in user ? user.userId : user.actorId,
-      status,
-      metadata: metadata || {},
-      errorMessage: errorMessage || undefined,
-    }, 'Audit log: Security event')
+    const { userId, workspaceId, correlationId } = this.extractContextInfo(ctx)
+    const auditEvent: AuditEvent = {
+      eventType,
+      resource: "security",
+      resourceId: "system",
+      action: eventType,
+      userId,
+      workspaceId,
+      correlationId,
+      timestamp: new Date().toISOString(),
+      metadata,
+      outcome,
+      errorMessage,
+    }
 
-    const builder = AuditLogBuilder.create()
-      .withEventType(eventType)
-      .forResource("security")
-      .withAction("security_event")
-      .byUser(user)
-      .withStatus(status)
-    
-    if (metadata) {
-      builder.withMetadata(metadata)
-    }
-    if (errorMessage) {
-      builder.withError(errorMessage)
-    }
-    
-    return builder.log(this.auditRepo)
-  }
-
-  /**
-   * Legacy method for backward compatibility
-   */
-  log(event: string, data: Record<string, any>): void {
-    logger.info({ event, ...data }, 'Audit log')
-    
-    // Also persist if user context available
-    if (data.userId && data.correlationId) {
-      E.runPromise(
-        AuditLogBuilder.create()
-          .withEventType(event)
-          .forResource(data.resourceType || "system")
-          .withAction(data.action || "unknown")
-          .byUser({
-            userId: data.userId,
-            workspaceId: data.workspaceId || "unknown",
-            roles: data.roles || [],
-            correlationId: data.correlationId,
-          })
-          .withStatus(data.status || "success")
-          .withMetadata(data)
-          .log(this.auditRepo)
-      ).catch(() => {}) // Fail silently
-    }
+    this.log("warn", auditEvent, "Audit log: Security event")
+    return E.succeed(undefined)
   }
 }
