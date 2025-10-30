@@ -9,7 +9,7 @@ import { runEffect } from "../setup"
 import {
   createAccessPolicyEntity,
   generateAccessPolicy,
-} from "../factories/access-policy.factory-test"
+} from "../factories/domain-factory/access-policy.factory-test"
 import { AccessPolicyEntity } from "@/app/domain/access-policy/entity"
 import { AccessPolicyValidationError } from "@/app/domain/access-policy/errors"
 

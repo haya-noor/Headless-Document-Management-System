@@ -187,11 +187,20 @@ export function mapToORPCError(error: unknown): ORPCError {
     })
   }
 
-  // BusinessRuleViolationError - map to BAD_REQUEST
+  // BusinessRuleViolationError - map to BAD_REQUEST or FORBIDDEN based on code
   if (error instanceof BusinessRuleViolationError) {
+    // Check if it's an access denied error - should return 403
+    if (error.code === "ACCESS_DENIED") {
+      return new ORPCError("FORBIDDEN", 403, {
+        message: error.message,
+        code: error.code,
+        details: error.context
+      })
+    }
+    
     return new ORPCError("BAD_REQUEST", 400, {
       message: error.message,
-      code: error._tag,
+      code: error.code,
       details: error.context
     })
   }

@@ -1,12 +1,14 @@
 
 // RBAC (Role base access control)
 import { Effect as E } from 'effect';
-import { UserContext } from '@/presentation/http/middleware/auth.middleware';
+import { UserContext } from '@/presentation/http/orpc/auth';
 import { BusinessRuleViolationError } from '@/app/domain/shared/base.errors';
-import logger from '@/presentation/utils/logger';
+import { logger } from '@/app/application/utils/logger';
 
 export interface Permission {
+  // permission applied to resource document, user
   resource: string;
+  // operation allowed on the resource read, write,create etc 
   action: string;
   scope?: 'own' | 'workspace' | 'global';
 }
@@ -30,7 +32,13 @@ export class AccessControlService {
     ]
   };
 
-  can(user: UserContext, resource: string, action: string, context?: { resourceOwnerId?: string }): boolean {
+  can(
+    user: UserContext, 
+    resource: string, 
+    action: string, 
+    context?: { resourceOwnerId?: string; workspaceId?: string }
+  ): boolean {
+    // gather all permissions granted by all of the user's role 
     const permissions = this.getUserPermissions(user);
     
     return permissions.some(permission => {
@@ -52,7 +60,17 @@ export class AccessControlService {
     return user.roles.flatMap(role => this.rolePermissions[role] || []);
   }
 
-  private checkScope(permission: Permission, user: UserContext, context?: { resourceOwnerId?: string }): boolean {
+   /**
+   * Enforces the scope dimension of a permission.
+   * - 'global'    → always true (permission applies to all workspaces/resources)
+   * - 'workspace' → (currently) assumes the user is already context-validated for the workspace
+   * - 'own'       → only if the resource owner equals the user
+   */
+  private checkScope(
+    permission: Permission, 
+    user: UserContext, 
+    context?: { resourceOwnerId?: string; workspaceId?: string }
+  ): boolean {
     switch (permission.scope) {
       case 'global':
         return true;
@@ -64,12 +82,17 @@ export class AccessControlService {
         return true;
     }
   }
-
+  /**
+   * Effectful guard that either succeeds (void) if access is allowed,
+   * or fails with a BusinessRuleViolationError(ACCESS_DENIED) if denied.
+   *
+   * This lets workflows compose access checks within Effect pipelines.
+   */
   enforceAccess(
     user: UserContext, 
     resource: string, 
     action: string, 
-    context?: { resourceOwnerId?: string }
+    context?: { resourceOwnerId?: string; workspaceId?: string }
   ): E.Effect<void, BusinessRuleViolationError> {
     if (this.can(user, resource, action, context)) {
       return E.succeed(undefined);

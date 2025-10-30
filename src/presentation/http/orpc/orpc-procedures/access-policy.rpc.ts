@@ -6,7 +6,16 @@ import { CheckAccessDTOSchema } from "@/app/application/dtos/access-policy/check
 import type { AccessPolicyWorkflow } from "@/app/application/workflows/access-policy.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
-import { runEffect, enrichWithContext } from "./shared"
+import { runEffect, createAuthenticatedContext, enrichDTOWithContext } from "./shared"
+
+
+/*
+Rpc.make(...)	Defines schema-based APIs for remote procedure calls
+RpcGroup.make(...)	Groups related RPCs together for structured access
+accessPolicyHandlers	Provides actual resolver logic for RPC calls using the domain workflow layer
+runEffect(...)	Converts Effect return values into standard promises / outputs for ORPC
+*/ 
+
 
 // Define RPC procedures
 export const grantAccessRpc = Rpc.make("grantAccess", {
@@ -47,22 +56,18 @@ export const AccessPolicyRPC = RpcGroup.make(
 
 // Define handlers
 export const accessPolicyHandlers = {
-  grantAccess: async (payload: S.Schema.Type<typeof GrantAccessDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  grantAccess: async (payload: S.Schema.Type<typeof GrantAccessDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<AccessPolicyWorkflow>(TOKENS.ACCESS_POLICY_WORKFLOW)
-    return runEffect(workflow.grantAccess(enrichWithContext(payload, context), context))
+    const effect = await workflow.grantAccess(enrichDTOWithContext(payload, user), user)
+    return runEffect(effect)
   },
 
-  revokeAccess: async (payload: S.Schema.Type<typeof RevokeAccessDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  revokeAccess: async (payload: S.Schema.Type<typeof RevokeAccessDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<AccessPolicyWorkflow>(TOKENS.ACCESS_POLICY_WORKFLOW)
-    await runEffect(workflow.revokeAccess(enrichWithContext(payload, context), context))
+    const effect = await workflow.revokeAccess(enrichDTOWithContext(payload, user), user)
+    await runEffect(effect)
     
     return {
       success: true,
@@ -71,13 +76,11 @@ export const accessPolicyHandlers = {
     }
   },
 
-  checkAccess: async (payload: S.Schema.Type<typeof CheckAccessDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  checkAccess: async (payload: S.Schema.Type<typeof CheckAccessDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<AccessPolicyWorkflow>(TOKENS.ACCESS_POLICY_WORKFLOW)
-    await runEffect(workflow.checkAccess(enrichWithContext(payload, context), context))
+    const effect = await workflow.checkAccess(enrichDTOWithContext(payload, user), user)
+    await runEffect(effect)
     
     return { allowed: true }
   }

@@ -42,7 +42,7 @@ export const setupRpcServer = () => {
         )
       )
 
-      // Simple RPC handler - you'll need to implement the actual RPC logic here
+      // Simple RPC handler
       // For now, return a basic response
       return {
         success: true,

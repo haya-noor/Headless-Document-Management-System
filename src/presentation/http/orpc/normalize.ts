@@ -1,12 +1,26 @@
 import { Option } from "effect"
 
 /**
- * Presentation Layer Utilities
- * 
- * Shared helper functions for normalizing workflow responses to RPC format.
- * These utilities handle common transformations between application layer
- * (Effect with Options, branded types) and presentation layer (plain JSON).
- */
+normalization used in handlers returning entities with Option types:
+document.rpc.ts:
+updateDocument — normalizes description and tags
+publishDocument — normalizes document response
+listDocuments — normalizes each document in the paginated array
+
+download-token.rpc.ts:
+createDownloadToken — normalizes usedAt: Option<Date> → ISO string
+Enhanced normalizeDownloadTokenResponse() to handle Date objects
+
+These helpers convert:
+- `Option<T>` → `T | null` or `T | undefined`
+- `Date` → ISO string
+- `readonly` arrays → mutable arrays
+- nested optional fields → cleaned and flattened
+
+mutable arrays are needed for JSON serialization, because readonly arrays are not serializable by default.
+mutable arrays aligns with DTOs, most DTOs expect mutable arrays like string[] instead of 
+readonly string[].
+*/
 
 /**
  * Normalize Option<T> to T | null for JSON serialization
@@ -139,9 +153,10 @@ export function normalizeUserResponse<T extends {
 
 /**
  * Normalize download token response
+ * Handles usedAt which can be Date (from entity) or string (from serialization) or Option
  */
 export function normalizeDownloadTokenResponse<T extends {
-  usedAt?: Option.Option<string> | string | null | undefined;
+  usedAt?: Option.Option<string> | Option.Option<Date> | string | Date | null | undefined;
   updatedAt?: string | null | undefined;
 }>(
   result: T
@@ -149,11 +164,25 @@ export function normalizeDownloadTokenResponse<T extends {
   usedAt?: string | undefined;
   updatedAt?: string | undefined;
 } {
-  const usedAt = result.usedAt
-    ? (Option.isOption(result.usedAt)
-        ? normalizeOptionToUndefined(result.usedAt)
-        : result.usedAt ?? undefined)
-    : undefined
+  let usedAt: string | undefined = undefined
+  
+  if (result.usedAt) {
+    if (Option.isOption(result.usedAt)) {
+      const value = Option.match(result.usedAt as Option.Option<string | Date>, {
+        onNone: () => undefined,
+        onSome: (val) => val
+      })
+      if (value instanceof Date) {
+        usedAt = value.toISOString()
+      } else if (typeof value === "string") {
+        usedAt = value
+      }
+    } else if (result.usedAt instanceof Date) {
+      usedAt = result.usedAt.toISOString()
+    } else if (typeof result.usedAt === "string") {
+      usedAt = result.usedAt
+    }
+  }
 
   return {
     ...result,
