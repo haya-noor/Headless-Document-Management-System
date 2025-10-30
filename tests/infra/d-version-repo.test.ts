@@ -21,7 +21,7 @@ import {
 import {
   createTestDocumentVersionEntity,
   generateTestDocumentVersion,
-} from "../factories/d-version.factory-test";
+} from "../factories/domain-factory/d-version.factory-test";
 import {
   makeDocumentIdSync,
   makeDocumentVersionIdSync,

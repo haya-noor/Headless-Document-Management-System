@@ -1,0 +1,33 @@
+Example Postman calls (after server is running)
+Authorization: add header Authorization: Bearer <JWT> matching authPlugin expectations (payload should include sub, workspaceId, roles).
+POST http://localhost:3002/documents
+Body (JSON):
+{
+"ownerId": "e1a68dd2-2e9f-44b6-8c4f-22d191d1d720",
+"title": "Dilemma",
+"description": "prolonged dilemma",
+"tags": ["Never assume","Great person saying"]
+}
+PUT http://localhost:3002/documents
+Body:
+{ "id": "<documentId>", "title": "Updated title" }
+POST http://localhost:3002/documents/publish
+Body:
+{ "documentId": "<uuid>" }
+GET http://localhost:3002/documents/query?pageNum=1&pageSize=10&ownerId=<uuid>&tag=foo
+POST http://localhost:3002/uploads/initiate
+Body:
+{ "documentId": "<uuid>", "filename": "file.txt", "mimeType": "text/plain" }
+POST http://localhost:3002/uploads/confirm
+Body:
+{
+"documentId": "<uuid>",
+"storageKey": "doc-id/file.txt",
+"mimeType": "text/plain",
+"size": 123,
+"checksum": "<sha256>",
+"userId": "<uuid>"
+}
+Note: Your current confirmUpload sets version: 1 and doesn’t 
+update the document’s currentVersionId. For realistic flows, increment version 
+and atomically update the document pointer in the same request.

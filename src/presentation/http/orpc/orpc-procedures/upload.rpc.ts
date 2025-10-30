@@ -5,7 +5,16 @@ import { ConfirmUploadDTOSchema } from "@/app/application/dtos/upload/confirm-up
 import type { UploadWorkflow } from "@/app/application/workflows/upload.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
-import { runEffect, enrichWithContext } from "./shared"
+import { runEffect, createAuthenticatedContext, enrichDTOWithContext } from "./shared"
+
+
+/*
+Rpc.make(...)	Defines schema-based APIs for remote procedure calls
+RpcGroup.make(...)	Groups related RPCs together for structured access
+accessPolicyHandlers	Provides actual resolver logic for RPC calls using the domain workflow layer
+runEffect(...)	Converts Effect return values into standard promises / outputs for ORPC
+*/ 
+
 
 // Define RPC procedures
 export const initiateUploadRpc = Rpc.make("initiateUpload", {
@@ -38,21 +47,17 @@ export const UploadRPC = RpcGroup.make(
 
 // Define handlers
 export const uploadHandlers = {
-  initiateUpload: async (payload: S.Schema.Type<typeof InitiateUploadDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  initiateUpload: async (payload: S.Schema.Type<typeof InitiateUploadDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<UploadWorkflow>(TOKENS.UPLOAD_WORKFLOW)
-    return runEffect(workflow.initiateUpload(enrichWithContext(payload, context), context))
+    const effect = await workflow.initiateUpload(enrichDTOWithContext(payload, user), user)
+    return runEffect(effect)
   },
 
-  confirmUpload: async (payload: S.Schema.Type<typeof ConfirmUploadDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  confirmUpload: async (payload: S.Schema.Type<typeof ConfirmUploadDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<UploadWorkflow>(TOKENS.UPLOAD_WORKFLOW)
-    return runEffect(workflow.confirmUpload(enrichWithContext(payload, context), context))
+    const effect = await workflow.confirmUpload(enrichDTOWithContext(payload, user), user)
+    return runEffect(effect)
   }
 }

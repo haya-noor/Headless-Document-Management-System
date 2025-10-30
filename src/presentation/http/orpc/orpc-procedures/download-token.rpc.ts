@@ -5,7 +5,17 @@ import { ValidateDownloadTokenDTOSchema } from "@/app/application/dtos/download-
 import type { DownloadTokenWorkflow } from "@/app/application/workflows/download-token.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
-import { runEffect, enrichWithContext } from "./shared"
+import { runEffect, createAuthenticatedContext, enrichDTOWithContext } from "./shared"
+import { normalizeDownloadTokenResponse } from "../normalize"
+
+
+/*
+Rpc.make(...)	Defines schema-based APIs for remote procedure calls
+RpcGroup.make(...)	Groups related RPCs together for structured access
+accessPolicyHandlers	Provides actual resolver logic for RPC calls using the domain workflow layer
+runEffect(...)	Converts Effect return values into standard promises / outputs for ORPC
+*/ 
+
 
 // Define RPC procedures
 export const createDownloadTokenRpc = Rpc.make("createDownloadToken", {
@@ -40,22 +50,20 @@ export const DownloadTokenRPC = RpcGroup.make(
 
 // Define handlers
 export const downloadTokenHandlers = {
-  createDownloadToken: async (payload: S.Schema.Type<typeof CreateDownloadTokenDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  createDownloadToken: async (payload: S.Schema.Type<typeof CreateDownloadTokenDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<DownloadTokenWorkflow>(TOKENS.DOWNLOAD_TOKEN_WORKFLOW)
-    return runEffect(workflow.createToken(enrichWithContext(payload, context)))
+    const effect = await workflow.createToken(enrichDTOWithContext(payload, user), user)
+    const result = await runEffect(effect)
+    const serialized = await runEffect(result.serialized())
+    return normalizeDownloadTokenResponse(serialized)
   },
 
-  validateDownloadToken: async (payload: S.Schema.Type<typeof ValidateDownloadTokenDTOSchema>, options: { headers: any }) => {
-    const context = {
-      userId: options.headers.get("x-user-id") || "guest",
-      workspaceId: options.headers.get("x-workspace-id") || "default"
-    }
+  validateDownloadToken: async (payload: S.Schema.Type<typeof ValidateDownloadTokenDTOSchema>, options: { headers: Headers }) => {
+    const user = await createAuthenticatedContext(options.headers)
     const workflow = container.resolve<DownloadTokenWorkflow>(TOKENS.DOWNLOAD_TOKEN_WORKFLOW)
-    const token = await runEffect(workflow.validateToken(enrichWithContext(payload, context)))
+    const effect = await workflow.validateToken(enrichDTOWithContext(payload, user), user)
+    const token = await runEffect(effect)
     
     return {
       success: true,

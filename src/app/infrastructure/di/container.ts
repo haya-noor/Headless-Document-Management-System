@@ -25,7 +25,8 @@ import { AccessPolicyWorkflow } from "@/app/application/workflows/access-policy.
 import { DownloadTokenWorkflow } from "@/app/application/workflows/download-token.workflow"
 
 // Re-export TOKENS for convenience
-export { TOKENS }
+// Re-export TOKENS for convenience
+export { TOKENS, container }
 
 // Register repositories
 container.register(TOKENS.DOCUMENT_REPOSITORY, { useClass: DocumentDrizzleRepository })
