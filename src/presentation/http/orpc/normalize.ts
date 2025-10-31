@@ -215,3 +215,116 @@ export function normalizePaginatedResponse<T>(
     }
   }
 }
+
+/**
+ * Normalize presigned URL response
+ * Converts PreSignedUrlResponse (with expiresAt Date) to InitiateUploadResponse (with expiresIn number)
+ */
+export function normalizeInitiateUploadResponse(
+  result: { url: string; expiresAt: Date }
+): { url: string; expiresIn: number } {
+  const now = Date.now()
+  const expiresAt = result.expiresAt.getTime()
+  const expiresIn = Math.max(0, Math.floor((expiresAt - now) / 1000)) // Convert to seconds
+  
+  return {
+    url: result.url,
+    expiresIn
+  }
+}
+
+/**
+ * Normalize document version response
+ * Handles Option types for checksum, tags, metadata and converts Date to ISO string
+ * This is the comprehensive function for all document version responses
+ */
+export function normalizeDocumentVersionResponse(result: {
+  id: string;
+  documentId: string;
+  version?: number;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  storageKey: string;
+  storageProvider?: string;
+  checksum?: Option.Option<string> | string | null | undefined;
+  tags?: Option.Option<string[]> | Option.Option<readonly string[]> | string[] | readonly string[] | null | undefined;
+  metadata?: Option.Option<Record<string, unknown>> | Record<string, unknown> | null | undefined;
+  uploadedBy: string;
+  createdAt: Date | string;
+}) {
+  // Handle checksum - can be Option, string, or undefined
+  let checksum: string | undefined = undefined
+  if (result.checksum) {
+    if (Option.isOption(result.checksum)) {
+      checksum = normalizeOptionToUndefined(result.checksum) ?? undefined
+    } else if (typeof result.checksum === "string") {
+      checksum = result.checksum
+    }
+  }
+
+  // Handle tags - can be Option, array, or undefined
+  let tags: string[] | undefined = undefined
+  if (result.tags) {
+    if (Option.isOption(result.tags)) {
+      const tagsValue = normalizeOptionToUndefined(result.tags)
+      tags = Array.isArray(tagsValue) ? [...tagsValue] : undefined
+    } else if (Array.isArray(result.tags)) {
+      tags = [...result.tags] // Convert readonly array to mutable array
+    }
+  }
+
+  // Handle metadata - can be Option, object, or undefined
+  let metadata: Record<string, unknown> | undefined = undefined
+  if (result.metadata) {
+    if (Option.isOption(result.metadata)) {
+      metadata = normalizeOptionToUndefined(result.metadata) ?? undefined
+    } else if (typeof result.metadata === "object" && result.metadata !== null) {
+      metadata = result.metadata as Record<string, unknown>
+    }
+  }
+  
+  // Handle createdAt - can be Date or string
+  const createdAt = result.createdAt instanceof Date 
+    ? result.createdAt.toISOString() 
+    : result.createdAt
+
+  return {
+    id: result.id,
+    documentId: result.documentId,
+    ...(result.version !== undefined && { version: result.version }),
+    ...(result.filename !== undefined && { filename: result.filename }),
+    ...(result.mimeType !== undefined && { mimeType: result.mimeType }),
+    ...(result.size !== undefined && { size: result.size }),
+    storageKey: result.storageKey,
+    ...(result.storageProvider !== undefined && { storageProvider: result.storageProvider }),
+    ...(checksum !== undefined && { checksum }),
+    ...(tags !== undefined && { tags }),
+    ...(metadata !== undefined && { metadata }),
+    uploadedBy: result.uploadedBy,
+    createdAt
+  }
+}
+
+/**
+ * Normalize document version response for upload confirmation
+ * Extracts required fields from DocumentVersionEntity or serialized version
+ * Uses the comprehensive normalizeDocumentVersionResponse function
+ */
+export function normalizeConfirmUploadResponse(result: {
+  id: string;
+  documentId: string;
+  storageKey?: string;
+  checksum?: Option.Option<string> | string | null | undefined;
+  uploadedBy: string;
+  createdAt: Date | string;
+}) {
+  return normalizeDocumentVersionResponse({
+    id: result.id,
+    documentId: result.documentId,
+    storageKey: result.storageKey ?? "",
+    checksum: result.checksum,
+    uploadedBy: result.uploadedBy,
+    createdAt: result.createdAt
+  })
+}

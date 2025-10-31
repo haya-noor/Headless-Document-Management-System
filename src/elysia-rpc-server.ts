@@ -4,9 +4,10 @@
 import { Elysia } from "elysia"
 import { cors } from "@elysiajs/cors"
 import { Effect } from "effect"
-import { AppRPC } from "./orpc/orpc-procedures/app-rpc"
-import { createSimpleContext } from "./orpc/auth"
-import { mapError } from "./orpc/error-mapping"
+import { AppRPC } from "@/presentation/http/orpc/orpc-procedures/app-rpc"
+import { createSimpleContext } from "@/presentation/http/orpc/auth"
+import { mapError } from "@/presentation/http/orpc/presentation-error"
+
 
 export const setupRpcServer = () => {
   const app = new Elysia()

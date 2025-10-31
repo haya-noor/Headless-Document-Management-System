@@ -2,6 +2,8 @@ import { Rpc, RpcGroup } from "@effect/rpc"
 import { Schema as S } from "effect"
 import { CreateDownloadTokenDTOSchema } from "@/app/application/dtos/download-token/create-token.dto"
 import { ValidateDownloadTokenDTOSchema } from "@/app/application/dtos/download-token/validate-token.dto"
+import { CreateDownloadTokenResponseSchema } from "@/app/application/dtos/download-token/create-token-response.dto"
+import { ValidateDownloadTokenResponseSchema } from "@/app/application/dtos/download-token/validate-token-response.dto"
 import type { DownloadTokenWorkflow } from "@/app/application/workflows/download-token.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
@@ -20,25 +22,13 @@ runEffect(...)	Converts Effect return values into standard promises / outputs fo
 // Define RPC procedures
 export const createDownloadTokenRpc = Rpc.make("createDownloadToken", {
   payload: CreateDownloadTokenDTOSchema,
-  success: S.Struct({
-    id: S.String,
-    token: S.String,
-    documentId: S.String,
-    issuedTo: S.String,
-    expiresAt: S.DateFromSelf,
-    createdAt: S.String,
-    updatedAt: S.String
-  }),
+  success: CreateDownloadTokenResponseSchema,
   error: S.String
 })
 
 export const validateDownloadTokenRpc = Rpc.make("validateDownloadToken", {
   payload: ValidateDownloadTokenDTOSchema,
-  success: S.Struct({
-    success: S.Literal(true),
-    tokenId: S.String,
-    validatedAt: S.String
-  }),
+  success: ValidateDownloadTokenResponseSchema,
   error: S.String
 })
 

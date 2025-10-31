@@ -13,15 +13,15 @@ export class AccessPolicyGuards {
     S.filter((n) => n >= 1 && n <= 1000, { message: () => "Priority must be between 1 and 1000" })
   )
 
-  static readonly ValidActions = S.Array(S.Literal("read", "write", "delete", "manage")).pipe(
-    S.filter((arr) => arr.length > 0 && arr.length <= 4, {
+  static readonly ValidActions = S.Array(S.Literal("read", "write", "update", "delete", "manage")).pipe(
+    S.filter((arr) => arr.length > 0 && arr.length <= 5, {
       message: () => "Actions must contain 1–4 valid permissions"
     })
   )
 
   static isValidActions(actions: string[]): boolean {
-    const valid = ["read", "write", "delete", "manage"]
-    return Array.isArray(actions) && actions.length > 0 && actions.length <= 4 && actions.every((a) => valid.includes(a))
+    const valid = ["read", "write", "update", "delete", "manage"]
+    return Array.isArray(actions) && actions.length > 0 && actions.length <= 5 && actions.every((a) => valid.includes(a))
   }
 
   static isValidPriority(priority: number): boolean {

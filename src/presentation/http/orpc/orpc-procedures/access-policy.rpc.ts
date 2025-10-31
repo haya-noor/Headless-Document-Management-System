@@ -3,6 +3,9 @@ import { Schema as S } from "effect"
 import { GrantAccessDTOSchema } from "@/app/application/dtos/access-policy/grant-access.dto"
 import { RevokeAccessDTOSchema } from "@/app/application/dtos/access-policy/revoke-access.dto"
 import { CheckAccessDTOSchema } from "@/app/application/dtos/access-policy/check-access.dto"
+import { GrantAccessResponseSchema } from "@/app/application/dtos/access-policy/grant-access-response.dto"
+import { RevokeAccessResponseSchema } from "@/app/application/dtos/access-policy/revoke-access-response.dto"
+import { CheckAccessResponseSchema } from "@/app/application/dtos/access-policy/check-access-response.dto"
 import type { AccessPolicyWorkflow } from "@/app/application/workflows/access-policy.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
@@ -20,30 +23,19 @@ runEffect(...)	Converts Effect return values into standard promises / outputs fo
 // Define RPC procedures
 export const grantAccessRpc = Rpc.make("grantAccess", {
   payload: GrantAccessDTOSchema,
-  success: S.Struct({
-    id: S.String,
-    subjectId: S.String,
-    resourceId: S.String,
-    actions: S.Array(S.String),
-    createdAt: S.String,
-    updatedAt: S.String
-  }),
+  success: GrantAccessResponseSchema,
   error: S.String
 })
 
 export const revokeAccessRpc = Rpc.make("revokeAccess", {
   payload: RevokeAccessDTOSchema,
-  success: S.Struct({
-    success: S.Boolean,
-    documentId: S.String,
-    revokedFrom: S.String
-  }),
+  success: RevokeAccessResponseSchema,
   error: S.String
 })
 
 export const checkAccessRpc = Rpc.make("checkAccess", {
   payload: CheckAccessDTOSchema,
-  success: S.Struct({ allowed: S.Boolean }),
+  success: CheckAccessResponseSchema,
   error: S.String
 })
 

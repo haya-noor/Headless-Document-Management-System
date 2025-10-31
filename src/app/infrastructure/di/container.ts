@@ -21,6 +21,7 @@ import { AuditLoggerService } from "@/app/application/services/audit-logger.serv
 // Application workflows
 import { DocumentWorkflow } from "@/app/application/workflows/doc.workflow"
 import { UploadWorkflow } from "@/app/application/workflows/upload.workflow"
+import { DocumentVersionWorkflow } from "@/app/application/workflows/document-version.workflow"
 import { AccessPolicyWorkflow } from "@/app/application/workflows/access-policy.workflow"
 import { DownloadTokenWorkflow } from "@/app/application/workflows/download-token.workflow"
 
@@ -42,5 +43,6 @@ container.register(TOKENS.AUDIT_LOGGER_SERVICE, { useClass: AuditLoggerService }
 // Register workflows
 container.register(TOKENS.DOCUMENT_WORKFLOW, { useClass: DocumentWorkflow })
 container.register(TOKENS.UPLOAD_WORKFLOW, { useClass: UploadWorkflow })
+container.register(TOKENS.DOCUMENT_VERSION_WORKFLOW, { useClass: DocumentVersionWorkflow })
 container.register(TOKENS.ACCESS_POLICY_WORKFLOW, { useClass: AccessPolicyWorkflow })
 container.register(TOKENS.DOWNLOAD_TOKEN_WORKFLOW, { useClass: DownloadTokenWorkflow })

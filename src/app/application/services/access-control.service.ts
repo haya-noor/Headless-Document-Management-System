@@ -1,117 +1,92 @@
 
-// RBAC (Role base access control)
 import { Effect as E } from 'effect';
+import { inject, injectable } from 'tsyringe'
+import { Schema as S } from 'effect'
+import { DocumentId, UserId } from '@/app/domain/refined/uuid'
 import { UserContext } from '@/presentation/http/orpc/auth';
 import { BusinessRuleViolationError } from '@/app/domain/shared/base.errors';
 import { logger } from '@/app/application/utils/logger';
+import { AccessPolicyRepository } from '@/app/domain/access-policy/repository'
+import { TOKENS } from '@/app/infrastructure/di/tokens'
 
-export interface Permission {
-  // permission applied to resource document, user
-  resource: string;
-  // operation allowed on the resource read, write,create etc 
-  action: string;
-  scope?: 'own' | 'workspace' | 'global';
-}
-
-// RBAC is enforced using AccessControlService 
+@injectable()
 export class AccessControlService {
-  private readonly rolePermissions: Record<string, Permission[]> = {
-    admin: [
-      { resource: 'document', action: '*', scope: 'global' },
-      { resource: 'user', action: '*', scope: 'global' },
-      { resource: 'workspace', action: '*', scope: 'global' }
-    ],
-    editor: [
-      { resource: 'document', action: 'create', scope: 'workspace' },
-      { resource: 'document', action: 'read', scope: 'workspace' },
-      { resource: 'document', action: 'update', scope: 'own' },
-      { resource: 'document', action: 'publish', scope: 'own' }
-    ],
-    viewer: [
-      { resource: 'document', action: 'read', scope: 'workspace' }
-    ]
-  };
+  constructor(
+    @inject(TOKENS.ACCESS_POLICY_REPOSITORY)
+    private readonly accessRepo: AccessPolicyRepository
+  ) {}
 
-  can(
-    user: UserContext, 
-    resource: string, 
-    action: string, 
-    context?: { resourceOwnerId?: string; workspaceId?: string }
-  ): boolean {
-    // gather all permissions granted by all of the user's role 
-    const permissions = this.getUserPermissions(user);
-    
-    return permissions.some(permission => {
-      // Check wildcard permissions
-      if (permission.action === '*') {
-        return this.checkScope(permission, user, context);
-      }
-      
-      // Check specific action
-      if (permission.resource === resource && permission.action === action) {
-        return this.checkScope(permission, user, context);
-      }
-      
-      return false;
-    });
-  }
-
-  private getUserPermissions(user: UserContext): Permission[] {
-    return user.roles.flatMap(role => this.rolePermissions[role] || []);
-  }
-
-   /**
-   * Enforces the scope dimension of a permission.
-   * - 'global'    → always true (permission applies to all workspaces/resources)
-   * - 'workspace' → (currently) assumes the user is already context-validated for the workspace
-   * - 'own'       → only if the resource owner equals the user
-   */
-  private checkScope(
-    permission: Permission, 
-    user: UserContext, 
-    context?: { resourceOwnerId?: string; workspaceId?: string }
-  ): boolean {
-    switch (permission.scope) {
-      case 'global':
-        return true;
-      case 'workspace':
-        return true; // User is already in the workspace context
-      case 'own':
-        return context?.resourceOwnerId === user.userId;
-      default:
-        return true;
+  private isOwnerAllowed(resource: string, action: string): boolean {
+    if (resource === 'document') {
+      const ownerAllowed = ['create', 'read', 'write', 'update', 'delete', 'manage', 'publish', 'upload', 'grant', 'revoke']
+      return ownerAllowed.includes(action)
     }
+    if (resource === 'accessPolicy' && (action === 'grant' || action === 'revoke')) return true
+    return false
   }
   /**
-   * Effectful guard that either succeeds (void) if access is allowed,
-   * or fails with a BusinessRuleViolationError(ACCESS_DENIED) if denied.
-   *
-   * This lets workflows compose access checks within Effect pipelines.
+   * requirePermission: succeed if the caller has permission; otherwise fail.
+   * Designed for composition in Effect pipelines.
    */
-  enforceAccess(
+  requirePermission(
     user: UserContext, 
     resource: string, 
     action: string, 
-    context?: { resourceOwnerId?: string; workspaceId?: string }
+    context?: { resourceOwnerId?: string; resourceId?: string }
   ): E.Effect<void, BusinessRuleViolationError> {
-    if (this.can(user, resource, action, context)) {
-      return E.succeed(undefined);
+    // Owner override - if user is the owner, they have all allowed actions
+    if (context?.resourceOwnerId === user.userId && this.isOwnerAllowed(resource, action)) {
+      return E.succeed(undefined)
     }
 
-    logger.warn({
-      userId: user.userId,
-      workspaceId: user.workspaceId,
-      resource,
-      action,
-      context
-    }, 'Access denied');
-
+    // Policy-based grants for documents - check if user has permission via access policy
+    // This applies even if resourceOwnerId is provided (user might not be owner but has policy-based access)
+    if (resource === 'document' && context?.resourceId) {
+      return S.decodeUnknown(DocumentId)(context.resourceId).pipe(
+        E.mapError(() =>
+          BusinessRuleViolationError.withContext(
+            'ACCESS_DENIED',
+            `User does not have permission to ${action} ${resource}`,
+            { userId: user.userId, resource, action }
+          )
+        ),
+        E.flatMap((docId) => S.decodeUnknown(UserId)(user.userId).pipe(
+          E.mapError(() =>
+            BusinessRuleViolationError.withContext(
+              'ACCESS_DENIED',
+              `User does not have permission to ${action} ${resource}`,
+              { userId: user.userId, resource, action }
+            )
+          ),
+          E.flatMap((uid) => this.accessRepo.hasPermission(docId, uid, action)),
+          E.mapError(() =>
+            BusinessRuleViolationError.withContext(
+              'ACCESS_DENIED',
+              `User does not have permission to ${action} ${resource}`,
+              { userId: user.userId, resource, action }
+            )
+          ),
+          E.flatMap((allowed) =>
+            allowed
+              ? E.succeed(undefined)
+              : E.fail(
+                  BusinessRuleViolationError.withContext(
+                    'ACCESS_DENIED',
+                    `User does not have permission to ${action} ${resource}`,
+                    { userId: user.userId, resource, action }
+                  )
+                )
+          )
+        ))
+      )
+    }
+    logger.warn({ userId: user.userId, resource, action, context }, 'Access denied')
     return E.fail(
       BusinessRuleViolationError.withContext(
         'ACCESS_DENIED',
         `User does not have permission to ${action} ${resource}`,
         { userId: user.userId, resource, action }
       )
-    );
+    )
   }
 }

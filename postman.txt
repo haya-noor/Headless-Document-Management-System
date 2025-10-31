@@ -1,3 +1,65 @@
+How to test document upload in Postman (ORPC over /rpc)
+URL: http://localhost:3002/rpc
+Method: POST
+Headers:
+Authorization: Bearer <JWT>
+x-workspace-id: <workspace-id>
+Content-Type: application/json
+
+
+1) Initiate upload (get presigned URL)
+Body:
+{
+  "method": "initiateUpload",
+  "payload": {
+    "documentId": "e1a68dd2-2e9f-44b6-8c4f-22d191d1d720",
+    "filename": "file.txt",
+    "mimeType": "text/plain",
+    "size": 123,
+    "userId": "a1250b26-5a1c-40a5-8024-f30634d7caea"
+  }
+}
+
+Expected success shape (from initiateUploadRpc):
+{ "url": "https://...", "expiresIn": 900 }
+
+Client uploads the file bytes directly to the returned url.
+2) Confirm upload (persist version and update currentVersionId)
+Body:
+{
+  "method": "confirmUpload",
+  "payload": {
+    "documentId": "<uuid>",
+    "storageKey": "<documentId>/file.txt",
+    "mimeType": "text/plain",
+    "size": 123,
+    "checksum": "<sha256-hex>",
+    "userId": "<uuid>"
+  }
+}
+
+Expected success shape (from confirmUploadRpc):
+{
+  "id": "<version-id>",
+  "documentId": "<uuid>",
+  "storageKey": "<documentId>/file.txt",
+  "checksum": "<sha256-hex>",
+  "uploadedBy": "<uuid>",
+  "createdAt": "<iso>"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 Example Postman calls (after server is running)
 Authorization: add header Authorization: Bearer <JWT> matching authPlugin expectations (payload should include sub, workspaceId, roles).
 POST http://localhost:3002/documents

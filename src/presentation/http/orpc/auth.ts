@@ -17,7 +17,7 @@ UserContext is used to pass the context to the workflows.
 
 import { Effect, Option } from "effect"
 import { verify } from "jsonwebtoken"
-import { ORPCError } from "./error-mapping"
+import { ORPCError } from "./presentation-error"
 import {
   JWT_CONFIG,
   type JWTPayload,

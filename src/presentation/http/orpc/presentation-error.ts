@@ -187,14 +187,21 @@ export function mapToORPCError(error: unknown): ORPCError {
     })
   }
 
-  // BusinessRuleViolationError - map to BAD_REQUEST or FORBIDDEN based on code
+  // BusinessRuleViolationError - map to appropriate status by code
   if (error instanceof BusinessRuleViolationError) {
-    // Check if it's an access denied error - should return 403
+    // ACCESS_DENIED → forbidden
     if (error.code === "ACCESS_DENIED") {
       return new ORPCError("FORBIDDEN", 403, {
         message: error.message,
         code: error.code,
         details: error.context
+      })
+    }
+    // APPLICATION_ERROR → generic server failure (boundary collapsed unknown/infra)
+    if (error.code === "APPLICATION_ERROR") {
+      return new ORPCError("INTERNAL_SERVER_ERROR", 500, {
+        message: "An internal error occurred",
+        code: error.code
       })
     }
     
@@ -255,7 +262,7 @@ export function mapToORPCError(error: unknown): ORPCError {
     })
   }
 
-  // DatabaseError
+  // DatabaseError → never expose DB internals (query/cause/operation)
   if (error instanceof DatabaseError) {
     // Don't expose internal database details to clients for security
     return new ORPCError("INTERNAL_SERVER_ERROR", 500, {

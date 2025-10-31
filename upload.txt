@@ -1,0 +1,56 @@
+Document Creation and Upload Flow
+
+1. createDocument — Creates the document metadata entity
+Creates a DocumentSchemaEntity with metadata (title, description, tags, ownerId, etc.)
+No file yet — just a record
+Stores metadata in the database
+
+
+2. initiateUpload — Generates a presigned upload URL
+Checks the document exists and user has permission
+Generates a presigned URL from the storage service (LocalStorage, etc.)
+Returns the URL to the client
+Client uploads the file directly to storage using this URL
+
+
+3. confirmUpload — Confirms upload and creates the version record
+Assumes the file has been uploaded to storage (client used the presigned URL)
+
+
+Creates a DocumentVersionEntity with metadata about the uploaded file:
+Version number (1, 2, 3...)
+Storage key/path
+File metadata (size, mimeType, checksum)
+Links to the document
+Updates the document's currentVersionId to point to this version
+Does not upload the file; it records that it was uploaded
+
+
+Why create the document first?
+Permission check: verify ownership before allowing upload
+Organization: link versions to a document
+Metadata first: capture document info before file upload
+Async upload: allows generating presigned URLs for client-side upload
+
+Key points about entities
+Entities in the database store:
+Metadata: title, description, tags, owner, timestamps
+Relationships: references to other entities
+Identity: unique IDs for referencing
+Ownership: who created/modified what
+The actual content (files, images) is stored separately in storage and linked via references.
+
+
+1. Create Document Entity (metadata)
+   → id: "doc-123"
+   → title: "contract.pdf"
+   → ownerId: "user-456"
+
+2. Upload File to Storage
+   → Storage: "doc-123/contract.pdf"
+   
+3. Create Version Entity (links metadata to file)
+   → documentId: "doc-123"
+   → storageKey: "doc-123/contract.pdf"
+
+   

@@ -1,4 +1,5 @@
 import { Schema as S, Effect, ParseResult } from "effect"
+import crypto from "crypto"
 
 /**
  * Optional helper - wraps a schema to make it optional (undefined allowed)
@@ -91,5 +92,31 @@ export const serializeWith = <A, I>(
   entity: A
 ): Effect.Effect<S.Schema.Encoded<S.Schema<A, I, never>>, ParseResult.ParseError> => {
   return S.encode(schema)(entity)
+}
+
+/**
+ * Initialize entity defaults
+ * 
+ * Provides common initialization values for entity creation:
+ * - Generates a new UUID for the id field
+ * - Sets createdAt and updatedAt to current timestamp (ISO string)
+ * 
+ * @param additionalFields - Optional additional fields to include (e.g., { currentVersionId: crypto.randomUUID() })
+ * @returns Object with id, createdAt, and updatedAt fields
+ * 
+ * @example
+ * ```typescript
+ * const defaults = initializeEntityDefaults({ currentVersionId: crypto.randomUUID() })
+ * // Returns: { id: "...", createdAt: "...", updatedAt: "...", currentVersionId: "..." }
+ * ```
+ */
+export const initializeEntityDefaults = (additionalFields: Record<string, unknown> = {}) => {
+  const now = new Date().toISOString()
+  return {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    ...additionalFields
+  }
 }
 

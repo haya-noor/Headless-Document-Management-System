@@ -1,4 +1,4 @@
-import { Effect as E } from "effect"
+import { Effect as E, pipe } from "effect"
 import { AuditLogRepository } from "@/app/domain/audit-log/repository"
 import { UserId } from "@/app/domain/refined/uuid"
 // UserContext and RPCContext types
@@ -67,14 +67,14 @@ export class AuditLogBuilder {
   byUser(user: UserContext | RPCContext): this {
     if ("actorId" in user) {
       // RPCContext
-      this.userId = user.actorId
-      this.workspaceId = user.workspaceId._tag === "Some" && user.workspaceId.value 
-        ? user.workspaceId.value 
+      this.userId = user.actorId as UserId
+      this.workspaceId = user.workspaceId._tag === "Some" && user.workspaceId.value
+        ? user.workspaceId.value as string
         : "unknown"
     } else {
       // UserContext
-      this.userId = user.userId
-      this.workspaceId = user.workspaceId
+      this.userId = user.userId as UserId
+      this.workspaceId = user.workspaceId as string
     }
     this.correlationId = user.correlationId
     return this

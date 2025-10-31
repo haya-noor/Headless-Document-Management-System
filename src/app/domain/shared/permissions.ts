@@ -2,8 +2,7 @@ import { Schema as S } from "effect"
 
 /**
  * Standard Permissions for the Document Management System
- * 
- * Default permissions available across the system:
+ *
  * - read: View/access document
  * - write/update: Modify document content and metadata
  * - delete: Remove document
@@ -47,23 +46,17 @@ export const PermissionAliases = {
 } as const
 
 /**
- * Default role permissions
+ * Simplified model: Ownership-based permissions
+ * - The document owner implicitly has all document actions
+ * - Non-owners receive permissions via AccessPolicy grants
  */
-export const DefaultRolePermissions = {
-  admin: {
-    document: [Permissions.READ, Permissions.WRITE, Permissions.UPDATE, Permissions.DELETE, Permissions.MANAGE],
-    workspace: [Permissions.MANAGE],
-    global: [Permissions.MANAGE],
-  },
-  editor: {
-    document: [Permissions.READ, Permissions.WRITE, Permissions.UPDATE],
-    workspace: [Permissions.READ],
-  },
-  viewer: {
-    document: [Permissions.READ],
-    workspace: [Permissions.READ],
-  },
-} as const
+export const OwnerDocumentPermissions = [
+  Permissions.READ,
+  Permissions.WRITE,
+  Permissions.UPDATE,
+  Permissions.DELETE,
+  Permissions.MANAGE
+] as const
 
 /**
  * Check if an action is allowed by permission list

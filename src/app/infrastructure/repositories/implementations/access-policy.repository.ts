@@ -13,9 +13,8 @@ import {
   AccessPolicyValidationError,
 } from "@/app/domain/access-policy/errors"
 import { AccessPolicyFilter } from "@/app/domain/access-policy/repository"
-import {
-  DatabaseError,
-} from "@/app/domain/shared/base.errors"
+import { DatabaseError } from "@/app/domain/shared/base.errors"
+import { PermissionAliases } from "@/app/domain/shared/permissions"
 import {
   calculateOffset,
   buildPaginatedResponse,
@@ -382,9 +381,35 @@ hasPermission(
           )
         )
     ),
-    E.map((results) =>
-      results.some((row) => row.actions.includes(action))
-    )
+    E.map((results) => {
+      // If no results, user has no permission
+      if (results.length === 0) {
+        return false
+      }
+      const aliases = (PermissionAliases as any)[action] as readonly string[] | undefined
+      return results.some((row) => {
+        // Ensure actions is an array (Drizzle JSONB should already parse it, but handle edge cases)
+        let actions: string[] = []
+        if (Array.isArray(row.actions)) {
+          actions = row.actions
+        } else if (typeof row.actions === 'string') {
+          try {
+            actions = JSON.parse(row.actions)
+          } catch {
+            actions = []
+          }
+        }
+        // Check if the action is directly in the actions array
+        if (actions.includes(action)) {
+          return true
+        }
+        // Check if any alias of the action is in the actions array
+        if (aliases && aliases.some((a) => actions.includes(a))) {
+          return true
+        }
+        return false
+      })
+    })
   )
 }
 

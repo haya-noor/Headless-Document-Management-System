@@ -58,9 +58,9 @@ npm test -- tests/infra/access-policy-repo.test.ts
 
 npm test ./tests/integration/doc.workflow.test.ts
 
-npm test ./tests/integration/document.e2e.test.ts
+npm test ./tests/document.e2e.test.ts
 
-npm test ./tests/integration/performance.test.ts
+npm test ./tests/performance.test.ts
 
 OR
 
@@ -68,10 +68,10 @@ OR
 npm test -- tests/integration/doc.workflow.test.ts
 
 # Test E2E document operations
-npm test -- tests/integration/document.e2e.test.ts
+npm test -- tests/document.e2e.test.ts
 
 # Performance tests
-npm test -- tests/integration/performance.test.ts
+npm test -- tests/performance.test.ts
 
 
 

@@ -4,6 +4,10 @@ import { CreateDocumentDTOSchema } from "@/app/application/dtos/document/create-
 import { UpdateDocumentDTOSchema } from "@/app/application/dtos/document/update-doc.dto"
 import { PublishDocumentDTOSchema } from "@/app/application/dtos/document/publish-doc.dto"
 import { QueryDocumentsDTOSchema } from "@/app/application/dtos/document/query-doc.dto"
+import { CreateDocumentResponseSchema } from "@/app/application/dtos/document/create-doc-response.dto"
+import { UpdateDocumentResponseSchema } from "@/app/application/dtos/document/update-doc-response.dto"
+import { PublishDocumentResponseSchema } from "@/app/application/dtos/document/publish-doc-response.dto"
+import { ListDocumentsResponseSchema } from "@/app/application/dtos/document/list-docs-response.dto"
 import type { DocumentWorkflow } from "@/app/application/workflows/doc.workflow"
 import { TOKENS } from "@/app/infrastructure/di/tokens"
 import { container } from "@/app/infrastructure/di/container"
@@ -22,54 +26,25 @@ runEffect(...)	Converts Effect return values into standard promises / outputs fo
 // Define RPC procedures
 export const createDocumentRpc = Rpc.make("createDocument", {
   payload: CreateDocumentDTOSchema,
-  success: S.Struct({
-    id: S.String,
-    title: S.String,
-    description: S.optional(S.String),
-    tags: S.Array(S.String),
-    createdAt: S.String,
-    updatedAt: S.String
-  }),
+  success: CreateDocumentResponseSchema,
   error: S.String
 })
 
 export const updateDocumentRpc = Rpc.make("updateDocument", {
   payload: UpdateDocumentDTOSchema,
-  success: S.Struct({
-    id: S.String,
-    updatedAt: S.String
-  }),
+  success: UpdateDocumentResponseSchema,
   error: S.String
 })
 
 export const publishDocumentRpc = Rpc.make("publishDocument", {
   payload: PublishDocumentDTOSchema,
-  success: S.Struct({
-    id: S.String,
-    publishStatus: S.String,
-    updatedAt: S.String
-  }),
+  success: PublishDocumentResponseSchema,
   error: S.String
 })
 
 export const listDocumentsRpc = Rpc.make("listDocuments", {
   payload: QueryDocumentsDTOSchema,
-  success: S.Struct({
-    data: S.Array(
-      S.Struct({
-        id: S.String,
-        title: S.String,
-        createdAt: S.String,
-        updatedAt: S.String
-      })
-    ),
-    pagination: S.Struct({
-      page: S.Number,
-      limit: S.Number,
-      total: S.Number,
-      totalPages: S.Number
-    })
-  }),
+  success: ListDocumentsResponseSchema,
   error: S.String
 })
 

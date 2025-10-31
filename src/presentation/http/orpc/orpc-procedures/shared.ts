@@ -1,5 +1,5 @@
 import { Effect as E } from "effect"
-import { mapError } from "../error-mapping"
+import { mapError } from "../presentation-error"
 import { createContext, toUserContext, type UserContext } from "../auth"
 
 /**
@@ -17,6 +17,11 @@ export const runEffect = <T>(eff: E.Effect<T, unknown, never>): Promise<T> =>
 export async function createAuthenticatedContext(headers: Headers): Promise<UserContext> {
   const rpcContext = await runEffect(createContext(headers))
   return toUserContext(rpcContext)
+}
+
+export interface RpcHandlerOptions {
+  headers: Headers
+  request?: Request
 }
 
 /**

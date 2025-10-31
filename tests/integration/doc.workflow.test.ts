@@ -23,8 +23,7 @@ import { AccessPolicyWorkflow } from "@/app/application/workflows/access-policy.
 import { DownloadTokenWorkflow } from "@/app/application/workflows/download-token.workflow";
 
 // Dependency Injection container and tokens
-import { container } from "tsyringe";
-import { TOKENS } from "@/app/infrastructure/di/container";
+import { container, TOKENS } from "@/app/infrastructure/di/container";
 
 // Repository interfaces
 import { DocumentRepository } from "@/app/domain/document/repository";
@@ -34,15 +33,18 @@ import { DocumentVersionRepository } from "@/app/domain/d-version/repository";
 
 // DTO types (schema-encoded)
 import { CreateDocumentDTOEncoded } from "@/app/application/dtos/document/create-doc.dto";
+import { InitiateUploadDTOEncoded } from "@/app/application/dtos/upload/initiate-upload.dto";
 import { ConfirmUploadDTOEncoded } from "@/app/application/dtos/upload/confirm-upload.dto";
 import { PublishDocumentDTOEncoded } from "@/app/application/dtos/document/publish-doc.dto";
 import { GrantAccessDTOEncoded } from "@/app/application/dtos/access-policy/grant-access.dto";
 import { CheckAccessDTOEncoded } from "@/app/application/dtos/access-policy/check-access.dto";
 import { CreateDownloadTokenDTOEncoded } from "@/app/application/dtos/download-token/create-token.dto";
 import { ValidateDownloadTokenDTOEncoded } from "@/app/application/dtos/download-token/validate-token.dto";
+import type { UserContext } from "@/presentation/http/orpc/auth";
 
 // Storage factory for resolving runtime implementation
 import { createStorageService } from "@/app/infrastructure/storage/storage.factory";
+import { StorageServiceFactory } from "@/app/infrastructure/storage/storage.factory";
 import { Effect as E, Option } from "effect";
 
 // These will be initialized in beforeEach after database setup
@@ -55,155 +57,218 @@ let uploadWorkflow: UploadWorkflow;
 let workflow: DocumentWorkflow;
 let accessWorkflow: AccessPolicyWorkflow;
 let tokenWorkflow: DownloadTokenWorkflow;
+let ownerCtx: UserContext;   // the document owner
+let otherCtx: UserContext;   // another user in the same workspace (grantee)
 
 
-
+// Test 1: Document Owner creates a document, uploads a file, publishes it,
+//  and grants access to another user (grantee).
 describe("Document Workflow Integration", () => {
   let db: Awaited<ReturnType<typeof setupTestDatabase>>;
   let testUser: any;
+  let otherUser: any; // Store the other user so we can reuse it
+  // Shared document created in test 1, reused in test 2
+  let sharedDocument: any;  
+  let dbInitialized = false;
 
   beforeEach(async () => {
     db = await setupTestDatabase();
     // Initialize the database service with the client
     databaseService.init(db.client);
-    await cleanupDatabase();
-    testUser = await createTestUser(db.db);
+    // Only cleanup database once before the first test - subsequent tests share data
+    if (!dbInitialized) {
+      await cleanupDatabase();
+      testUser = await createTestUser(db.db);
+      otherUser = await createTestUser(db.db); // Create other user once
+      dbInitialized = true;
+    }
+    // testUser and otherUser are already created, don't recreate them
     
     // Initialize dependencies after database is set up
     documentRepo = container.resolve<DocumentRepository>(TOKENS.DOCUMENT_REPOSITORY);
     accessPolicyRepo = container.resolve<AccessPolicyRepository>(TOKENS.ACCESS_POLICY_REPOSITORY);
     tokenRepo = container.resolve<DownloadTokenRepository>(TOKENS.DOWNLOAD_TOKEN_REPOSITORY);
     versionRepo = container.resolve<DocumentVersionRepository>(TOKENS.DOCUMENT_VERSION_REPOSITORY);
+    // storage service used by upload workflow (local storage for now)
     storageService = createStorageService();
     
     // Instantiate workflows with resolved dependencies
-    uploadWorkflow = new UploadWorkflow(documentRepo, versionRepo, storageService);
-    workflow = new DocumentWorkflow(documentRepo);
-    accessWorkflow = new AccessPolicyWorkflow(accessPolicyRepo);
-    tokenWorkflow = new DownloadTokenWorkflow(tokenRepo);
+    uploadWorkflow = container.resolve<UploadWorkflow>(TOKENS.UPLOAD_WORKFLOW);
+    workflow = container.resolve<DocumentWorkflow>(TOKENS.DOCUMENT_WORKFLOW);
+    accessWorkflow = container.resolve<AccessPolicyWorkflow>(TOKENS.ACCESS_POLICY_WORKFLOW);
+    tokenWorkflow = container.resolve<DownloadTokenWorkflow>(TOKENS.DOWNLOAD_TOKEN_WORKFLOW);
+
+    // create a user context for the document owner
+    ownerCtx = {
+      userId: testUser.id,
+      workspaceId: (testUser.workspaceId ?? "00000000-0000-0000-0000-000000000000") as any,
+      roles: ["user"],
+      correlationId: "test-corr-owner"
+    } as UserContext
+
+    // create a second user context using the stored otherUser
+    otherCtx = {
+      userId: otherUser.id,
+      workspaceId: (otherUser.workspaceId ?? ownerCtx.workspaceId) as any,
+      roles: ["user"],
+      correlationId: "test-corr-other"
+    } as UserContext
   });
 
   it("should create → upload → publish a document successfully", async () => {
+/*
+1. createDocument:   create a document as the owner
+createDocument — Creates the document metadata entity
+Creates a DocumentSchemaEntity with metadata (title, description, tags, ownerId, etc.)
+No file yet — just a record
+Stores metadata in the database
+*/
     const createInput: CreateDocumentDTOEncoded = {
       ownerId: testUser.id,
       title: "contract.pdf",
       tags: ["legal"]
     };
 
-    const created = await workflow.createDocument(createInput).pipe(E.runPromise);
+       // Act: call the document creation workflow
+    const createdEff = await workflow.createDocument(createInput, ownerCtx);
+    // Assert: verify the document was created successfully
+    const created = await E.runPromise(createdEff);
 
+  
     expect(created.id).toBeDefined();
     expect(created.ownerId).toEqual(testUser.id);
     expect(created.title).toEqual("contract.pdf");
     expect(created.description).toEqual(Option.none());
 
-    const uploadInput: ConfirmUploadDTOEncoded = {
+    // Step 2: Initiate upload - get presigned URL (or in test, prepare for upload)
+    const initiateInput: InitiateUploadDTOEncoded = {
+      documentId: created.id,
+      userId: testUser.id,
+      filename: "contract.pdf",
+      mimeType: "application/pdf",
+      size: 4096
+    };
+
+    const initiateEff = await uploadWorkflow.initiateUpload(initiateInput, ownerCtx);
+    const presignedUrl = await E.runPromise(initiateEff);
+    expect(presignedUrl.url).toBeDefined();
+
+    // Step 3: Actually upload the file to storage
+    // In production, client uploads file using presigned URL
+    // In test, we directly upload to storage using storage service
+    const fileContent = Buffer.from("This is a test PDF file content");
+    const storageService = StorageServiceFactory.getInstance();
+    const uploadResult = await storageService.uploadFile(
+      {
+        buffer: fileContent,
+        originalname: "contract.pdf",
+        mimetype: "application/pdf",
+        size: fileContent.length
+      },
+      `${created.id}/contract.pdf`,
+      {
+        contentType: "application/pdf"
+      }
+    );
+
+    expect(uploadResult.key).toBeDefined();
+    expect(uploadResult.checksum).toBeDefined();
+
+
+    // Step 4: Confirm the upload - create document version record
+    const confirmInput: ConfirmUploadDTOEncoded = {
       documentId: created.id,
       userId: testUser.id,
       mimeType: "application/pdf",
-      size: 4096,
-      storageKey: "contract.pdf",
-      checksum: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+      size: fileContent.length,
+      storageKey: uploadResult.key,
+      checksum: uploadResult.checksum
     };
 
-    const uploaded = await uploadWorkflow.confirmUpload(uploadInput).pipe(E.runPromise);
+    const uploadedEff = await uploadWorkflow.confirmUpload(confirmInput, ownerCtx);
+    const uploaded = await E.runPromise(uploadedEff);
     expect(uploaded).toBeDefined();
+    expect(uploaded.documentId).toEqual(created.id);
 
+
+    // Step 5: Publish the document - make it publicly accessible just for the owner 
     const publishInput: PublishDocumentDTOEncoded = {
       documentId: created.id,
       userId: testUser.id
     };
 
-    const published = await workflow.publishDocument(publishInput).pipe(E.runPromise);
+    const publishedEff = await workflow.publishDocument(publishInput, ownerCtx);
+    const published = await E.runPromise(publishedEff);
     expect(published).toBeDefined();
+
+    // Store the published document for reuse in test 2
+    sharedDocument = published;
   });
 
+
+  // Test 2: Document Owner grants access to another user (grantee).
+  // Reuses the document created in test 1
+  
   it("should grant-access → validate-access successfully", async () => {
-    const doc = await workflow.createDocument({
-      ownerId: testUser.id,
-      title: "report.pdf",
-      description: "Confidential report",
-      tags: ["confidential"]
-    }).pipe(E.runPromise);
+    // Use the document created and published in test 1
+    expect(sharedDocument).toBeDefined();
+    expect(sharedDocument.id).toBeDefined();
 
-    await uploadWorkflow.confirmUpload({
-      documentId: doc.id,
-      userId: testUser.id,
-      mimeType: "application/pdf",
-      size: 2048,
-      storageKey: "document.pdf",
-      checksum: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
-    }).pipe(E.runPromise);
-
-    await workflow.publishDocument({
-      documentId: doc.id,
-      userId: testUser.id
-    }).pipe(E.runPromise);
-
+    // Grant access to the other user
     const accessInput: GrantAccessDTOEncoded = {
-      documentId: doc.id,
-      grantedTo: testUser.id,
+      documentId: sharedDocument.id,
+      /*
+      why is the userId as any? 
+      because the userId is a string, and the otherCtx.userId is a string,
+      so we need to cast it to any to avoid type errors.
+      */
+      grantedTo: otherCtx.userId,
       grantedBy: testUser.id,
-      actions: ["read"],
+      actions: ["read", "update"],
       priority: 1
     };
-    await accessWorkflow.grantAccess(accessInput).pipe(E.runPromise);
+    const grantEff = await accessWorkflow.grantAccess(accessInput, ownerCtx);
+    await E.runPromise(grantEff);
 
+    // Validate that the other user now has access
     const validateInput: CheckAccessDTOEncoded = {
-      documentId: doc.id,
-      userId: testUser.id,
+      documentId: sharedDocument.id,
+      userId: otherCtx.userId,  
       action: "read",
       actions: ["read"]
     };
 
-    // const validationResult = await accessWorkflow.validateAccess(validateInput).pipe(E.runPromise);
-    // expect(validationResult).toEqual(true);
+    // Act: check if the other user has access (must use otherCtx, not ownerCtx)
+    // checkAccess checks permissions for dto.userId, so we use otherCtx
+    const checkEff = await accessWorkflow.checkAccess(validateInput, otherCtx);
+    const allowed = await E.runPromise(checkEff);
+    expect(allowed).toBeTruthy();
   });
 
+  // Test 3: Token generation and validation
+  // Reuses the document from test 1 (access already granted in test 2)
   it("should generate-token → validate-token → allow download access", async () => {
-    const doc = await workflow.createDocument({
-      ownerId: testUser.id,
-      title: "invoice.pdf",
-      description: "Finance invoice",
-      tags: ["finance"]
-    }).pipe(E.runPromise);
+    // Use the document from test 1 (access already granted in test 2)
+    expect(sharedDocument).toBeDefined();
+    expect(sharedDocument.id).toBeDefined();
 
-    await uploadWorkflow.confirmUpload({
-      documentId: doc.id,
-      userId: testUser.id,
-      mimeType: "application/pdf",
-      size: 2048,
-      storageKey: "document.pdf",
-      checksum: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
-    }).pipe(E.runPromise);
-
-    await workflow.publishDocument({
-      documentId: doc.id,
-      userId: testUser.id
-    }).pipe(E.runPromise);
-
-    const accessInput: GrantAccessDTOEncoded = {
-      documentId: doc.id,
-      grantedTo: testUser.id,
-      grantedBy: testUser.id,
-      actions: ["read"],
-      priority: 1
-    };
-    await accessWorkflow.grantAccess(accessInput).pipe(E.runPromise);
-
-    const token = await tokenWorkflow.createToken({
-      documentId: doc.id,
-      issuedTo: testUser.id,
+    // Test 2 already granted access with ["read", "update"], which includes "read" needed for tokens
+    // So we can directly create a token
+    const tokenEff = await tokenWorkflow.createToken({
+      documentId: sharedDocument.id,
+      issuedTo: otherCtx.userId,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000)
-    } satisfies CreateDownloadTokenDTOEncoded).pipe(E.runPromise);
+    } as CreateDownloadTokenDTOEncoded, otherCtx);
+    const token = await E.runPromise(tokenEff);
 
     expect(token).toBeDefined();
 
-    const validationResult = await tokenWorkflow.validateToken({
+    const valEff = await tokenWorkflow.validateToken({
       tokenId: token.id,
-      userId: testUser.id,
-      issuedTo: testUser.id
-    } satisfies ValidateDownloadTokenDTOEncoded).pipe(E.runPromise);
+      userId: otherCtx.userId,
+      issuedTo: otherCtx.userId
+    } as ValidateDownloadTokenDTOEncoded, otherCtx);
+    const validationResult = await E.runPromise(valEff);
 
     expect(validationResult).toBeDefined();
   });

@@ -63,13 +63,23 @@ export class DocumentSchemaEntity extends BaseEntity<DocumentId, DocumentValidat
    * Serialize entity using Effect Schema encoding
    * 
    * Automatically handles:
-   * - Option types → T | undefined
+   * - Option types → T | undefined (manually unwrapped before encoding)
    * - Branded types → primitives
    * - Date objects → kept as Date for database operations
+   * 
+   * Note: S.encode does not automatically unwrap Option types, so we manually
+   * unwrap them before encoding to ensure proper serialization.
    * 
    * @returns Effect with serialized document data
    */
   serialized(): Effect.Effect<SerializedDocument, ParseResult.ParseError> {
-    return serializeWith(DocumentSchema, this as unknown as DocumentType)
+    // Manually unwrap Option types before encoding
+    // S.encode doesn't unwrap Option types when entity has Option fields
+    const dataForEncoding = {
+      ...(this as unknown as DocumentType),
+      description: Option.getOrUndefined(this.description),
+      tags: Option.getOrUndefined(this.tags)
+    }
+    return serializeWith(DocumentSchema, dataForEncoding as DocumentType)
   }
 }

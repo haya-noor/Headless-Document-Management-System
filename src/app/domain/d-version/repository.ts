@@ -4,7 +4,7 @@ import { DocumentVersionId, DocumentId, UserId } from "@/app/domain/refined/uuid
 import { DatabaseError, ConflictError } from "@/app/domain/shared/base.errors"
 import { DocumentVersionValidationError, DocumentVersionNotFoundError } from "./errors"
 import { BaseRepository } from "@/app/domain/shared/base.repository"
-import { PaginatedResponse, PaginationParams } from "../shared"
+import { PaginatedResponse, PaginationParams } from "../shared/pagination"
 
 /**
  * DocumentVersion-specific filter for repository queries

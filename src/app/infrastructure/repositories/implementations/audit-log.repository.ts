@@ -81,6 +81,12 @@ export class AuditLogDrizzleRepository extends AuditLogRepository {
     )
   }
 
+  /*
+  A correlation ID is a unique identifier (usually a UUID) attached to a single request or 
+  workflow execution. Every log, audit record, and call made while serving that request carries
+ the same ID. That lets you “stitch” together everything that happened for that one request 
+ across services, jobs, and retries.
+  */
   findByCorrelationId(correlationId: string): Effect.Effect<AuditLogEntry[], DatabaseError, never> {
     return pipe(
       Effect.tryPromise({
